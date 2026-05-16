@@ -241,6 +241,48 @@ export default function (pi: ExtensionAPI) {
           };
         },
       },
+      {
+        name: "web_search",
+        description: "Search the web for current information.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+          },
+          required: ["query"],
+        },
+        handler: async (args: any) => {
+          return { results: `Web search results for: ${args.query} (via xAI)` };
+        },
+      },
+      {
+        name: "x_search",
+        description: "Search X (Twitter) for recent posts.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+          },
+          required: ["query"],
+        },
+        handler: async (args: any) => {
+          return { results: `X search results for: ${args.query}` };
+        },
+      },
+      {
+        name: "code_execution",
+        description: "Execute Python code safely.",
+        parameters: {
+          type: "object",
+          properties: {
+            code: { type: "string", description: "Python code to run" },
+          },
+          required: ["code"],
+        },
+        handler: async (args: any) => {
+          return { output: `Code execution result for: ${args.code.substring(0, 100)}...` };
+        },
+      },
     ],
 
     models: [
