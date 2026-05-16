@@ -43,23 +43,72 @@ export default function (pi: ExtensionAPI) {
           }
         }
 
-        const accessToken = await callbacks.onPrompt({
-          message:
-            "Paste your xAI API key (starts with xai-).\n" +
-            "You can get one at https://console.x.ai"
+        // Start device code flow
+        const deviceResponse = await fetch("https://api.x.ai/oauth/device/code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: "pi-xai-oauth" }),
         });
 
+        if (!deviceResponse.ok) {
+          // Fallback to manual key entry
+          const accessToken = await callbacks.onPrompt({
+            message: "Device flow unavailable. Paste your xAI API key:",
+          });
+          return {
+            refresh: "",
+            access: accessToken.trim(),
+            expires: Date.now() + 1000 * 60 * 60 * 24 * 365,
+          };
+        }
+
+        const deviceData = await deviceResponse.json();
+
+        callbacks.onDeviceCode({
+          userCode: deviceData.user_code,
+          verificationUri: deviceData.verification_uri,
+        });
+
+        // Poll for token
+        const tokenResponse = await fetch("https://api.x.ai/oauth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceData.device_code,
+            client_id: "pi-xai-oauth",
+          }),
+        });
+
+        const tokenData = await tokenResponse.json();
+
         return {
-          refresh: "",
-          access: accessToken.trim(),
-          expires: Date.now() + 1000 * 60 * 60 * 24 * 365,
+          refresh: tokenData.refresh_token || "",
+          access: tokenData.access_token,
+          expires: Date.now() + (tokenData.expires_in || 3600) * 1000,
         };
       },
 
       async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-        // xAI currently doesn't require token refresh for API keys.
-        // Return the same credentials.
-        return credentials;
+        if (!credentials.refresh) return credentials;
+
+        const response = await fetch("https://api.x.ai/oauth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant_type: "refresh_token",
+            refresh_token: credentials.refresh,
+            client_id: "pi-xai-oauth",
+          }),
+        });
+
+        const data = await response.json();
+
+        return {
+          refresh: data.refresh_token || credentials.refresh,
+          access: data.access_token,
+          expires: Date.now() + (data.expires_in || 3600) * 1000,
+        };
       },
 
       getApiKey(credentials: OAuthCredentials): string {
