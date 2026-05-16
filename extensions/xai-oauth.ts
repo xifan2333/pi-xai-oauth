@@ -150,11 +150,42 @@ export default function (pi: ExtensionAPI) {
           },
           required: ["prompt"],
         },
-        handler: async (args: any) => {
-          // This is a placeholder - real implementation would call the Responses API
+        handler: async (args: any, context: any) => {
+          const apiKey = context?.apiKey || process.env.XAI_API_KEY;
+
+          if (!apiKey) {
+            return { error: "No xAI API key available" };
+          }
+
+          const body: any = {
+            model: args.model || "grok-4",
+            input: args.prompt,
+            reasoning: { effort: args.reasoning_effort || "medium" },
+          };
+
+          if (args.response_format === "json") {
+            body.response_format = { type: "json_object" };
+          }
+
+          if (args.previous_response_id) {
+            body.previous_response_id = args.previous_response_id;
+          }
+
+          const response = await fetch("https://api.x.ai/v1/responses", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(body),
+          });
+
+          const data = await response.json();
+
           return {
-            content: "Tool executed (implementation coming soon)",
-            reasoning: "Reasoning would appear here with real Responses API calls",
+            content: data.output?.[0]?.content?.[0]?.text || JSON.stringify(data),
+            reasoning: data.reasoning?.content?.[0]?.text || "",
+            response_id: data.id,
           };
         },
       },
