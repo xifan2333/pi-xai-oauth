@@ -8,7 +8,7 @@
 - [x] Create new branch `feature/improved-agent-scaffolding`
 - [x] Run parallel agents (scout + researcher) for context and best practices
 - [x] Generate AGENTS.md in project root
-- [ ] Create `.scaffold/` directory with persistent state files
+- [x] Create `.scaffold/` directory with persistent state files
 
 ## Phase 2: Persistent State Harness
 - [ ] Create `.scaffold/constraints.md` — Hard MUST/MUST NOT rules
@@ -17,12 +17,12 @@
 - [ ] Update AGENTS.md to reference these files
 
 ## Phase 3: Improved Setup / Init Script
-- [ ] Enhance `bin/setup.js` to:
+- [x] Enhance `bin/setup.js` to:
   - Auto-generate full `.scaffold/` structure on first run
   - Seed AGENTS.md if missing
   - Set sensible pi defaults + agentic settings
   - Add support for `--scaffold` flag for new projects
-- [ ] Add npm script: `"scaffold": "node bin/setup.js --scaffold"`
+- [x] Add npm script: `"scaffold": "node bin/setup.js --scaffold"`
 
 ## Phase 4: Structure & Organization
 - [ ] Recommend (and optionally enforce) vertical feature slices in future packages
@@ -38,10 +38,10 @@
 - [ ] Add reviewer step in the workflow
 
 ## Phase 6: Validation & Polish
-- [ ] Run `reviewer` agent on all changes
-- [ ] Test full setup flow on clean machine
-- [ ] Update README.md with new scaffolding features
-- [ ] Commit with clear message referencing this plan
+- [x] Run `reviewer` agent on all changes
+- [x] Test full setup flow on clean machine
+- [x] Update README.md with new scaffolding features
+- [x] Commit with clear message referencing this plan
 
 ## Success Metrics
 - New projects initialize with AGENTS.md + .scaffold/ in < 30 seconds

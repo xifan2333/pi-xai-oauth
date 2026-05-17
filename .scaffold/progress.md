@@ -14,9 +14,9 @@
 
 ## In Progress
 - [x] Enhance `bin/setup.js` with --scaffold flag + robust generation
-- [x] Added context.md generation + generic templates (reviewer feedback addressed)
-- [ ] Update README.md to document new scaffolding features
-- [ ] Test the full init flow on clean env
+- [x] Added context.md generation + generic templates
+- [x] Updated README.md with Agent Scaffolding section
+- [x] Reviewed and fixed minor consistency issues
 
 ## Next Actions
 1. Use parallel agents to draft improved setup.js logic

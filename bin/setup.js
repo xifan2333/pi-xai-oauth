@@ -147,7 +147,12 @@ function generateScaffold(nonInteractive = false) {
   const scaffoldDir = path.join(process.cwd(), ".scaffold");
   const date = new Date().toISOString().split("T")[0];
   const branch = process.env.GIT_BRANCH || "feature/your-task";
-  const projectName = "pi-xai-oauth"; // fallback, can be read from package.json
+  let projectName = "pi-package";
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
+    if (pkg.name) projectName = pkg.name;
+  } catch {}
+  // projectName now dynamic from package.json
 
   const templates = {
     "plan.md": `# Implementation Plan: Enhanced Agent Scaffolding
@@ -189,8 +194,8 @@ This harness follows 2026 best practices for reliable agentic work.`,
     
     "progress.md": `# Execution Progress
 
-**Project:** Enhanced pi Agent Scaffolding
-**Branch:** feature/improved-agent-scaffolding
+**Project:** ${projectName}
+**Branch:** ${branch}
 **Started:** ${date}
 
 ## Completed
