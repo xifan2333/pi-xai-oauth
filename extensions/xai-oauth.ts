@@ -453,158 +453,209 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ====================== CUSTOM TOOLS ======================
+  // These tools use the xai_ prefix to reduce collision risk.
+  // IMPORTANT: Install this package via ONE method only (npm OR git) to avoid
+  // "Tool conflicts with ..." errors between the npm global path and
+  // ~/.pi/agent/git/... clone.
 
-  pi.registerTool({
-    name: "xai_generate_text",
-    label: "xAI Generate Text",
-    description: "Generate text using Grok with full reasoning, structured output, and stateful conversations.",
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: { type: "string", description: "The prompt or question" },
-        model: { type: "string", description: "Model to use", default: "grok-4.3" },
-        reasoning_effort: { type: "string", enum: ["low", "medium", "high"], default: "medium" },
-        response_format: { type: "string", description: "Set to 'json' for JSON output" },
-        previous_response_id: { type: "string", description: "Continue conversation" },
+  // Guard to avoid re-registering tools if the module is evaluated multiple times
+  // in the same process (does not protect against separate extension sources).
+  let toolsRegistered = false;
+
+  function registerXaiTools() {
+    if (toolsRegistered) return;
+    toolsRegistered = true;
+
+    pi.registerTool({
+      name: "xai_generate_text",
+      label: "xAI Generate Text",
+      description: "Generate text using Grok with full reasoning, structured output, and stateful conversations.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "The prompt or question" },
+          model: { type: "string", description: "Model to use", default: "grok-4.3" },
+          reasoning_effort: { type: "string", enum: ["low", "medium", "high"], default: "medium" },
+          response_format: { type: "string", description: "Set to 'json' for JSON output" },
+          previous_response_id: { type: "string", description: "Continue conversation" },
+        },
+        required: ["prompt"],
       },
-      required: ["prompt"],
-    },
-    execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
-      const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
-      if (!apiKey) {
-        return {
-          content: [{ type: "text", text: "Error: No xAI API key available" }],
-          details: { reasoning: "", response_id: "" },
+      execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
+        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        if (!apiKey) {
+          return {
+            content: [{ type: "text", text: "Error: No xAI API key available" }],
+            details: { reasoning: "", response_id: "" },
+          };
+        }
+
+        const body: any = {
+          model: params.model || "grok-4.3",
+          input: params.prompt,
+          reasoning: { effort: params.reasoning_effort || "medium" },
         };
-      }
 
-      const body: any = {
-        model: params.model || "grok-4.3",
-        input: params.prompt,
-        reasoning: { effort: params.reasoning_effort || "medium" },
-      };
+        if (params.response_format === "json") {
+          body.response_format = { type: "json_object" };
+        }
+        if (params.previous_response_id) {
+          body.previous_response_id = params.previous_response_id;
+        }
 
-      if (params.response_format === "json") {
-        body.response_format = { type: "json_object" };
-      }
-      if (params.previous_response_id) {
-        body.previous_response_id = params.previous_response_id;
-      }
+        const res = await fetch("https://api.x.ai/v1/responses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
 
-      const res = await fetch("https://api.x.ai/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      });
+        const data = await res.json();
+        const text = data.output?.[0]?.content?.[0]?.text || JSON.stringify(data);
 
-      const data = await res.json();
-      const text = data.output?.[0]?.content?.[0]?.text || JSON.stringify(data);
-
-      return {
-        content: [{ type: "text", text }],
-        details: {
-          reasoning: data.reasoning?.content?.[0]?.text || "",
-          response_id: data.id,
-        },
-      };
-    },
-  });
-
-  pi.registerTool({
-    name: "xai_multi_agent",
-    label: "xAI Multi-Agent Research",
-    description: "Run deep multi-agent research using Grok.",
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Research topic" },
-        num_agents: { type: "number", enum: [4, 16], default: 4 },
-        reasoning_effort: { type: "string", enum: ["medium", "high"], default: "high" },
+        return {
+          content: [{ type: "text", text }],
+          details: {
+            reasoning: data.reasoning?.content?.[0]?.text || "",
+            response_id: data.id,
+          },
+        };
       },
-      required: ["query"],
-    },
-    execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
-      const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
-      if (!apiKey) {
+    });
+
+    pi.registerTool({
+      name: "xai_multi_agent",
+      label: "xAI Multi-Agent Research",
+      description: "Run deep multi-agent research using Grok.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Research topic" },
+          num_agents: { type: "number", enum: [4, 16], default: 4 },
+          reasoning_effort: { type: "string", enum: ["medium", "high"], default: "high" },
+        },
+        required: ["query"],
+      },
+      execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
+        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        if (!apiKey) {
+          return {
+            content: [{ type: "text", text: "Error: No xAI API key available" }],
+            details: { agents_used: 0, response_id: "" },
+          };
+        }
+
+        const prompt = `You are leading a team of ${params.num_agents} researchers. Research: ${params.query}`;
+
+        const res = await fetch("https://api.x.ai/v1/responses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "grok-4.3",
+            input: prompt,
+            reasoning: { effort: params.reasoning_effort || "high" },
+          }),
+        });
+
+        const data = await res.json();
+        const text = data.output?.[0]?.content?.[0]?.text || "Research completed";
+
         return {
-          content: [{ type: "text", text: "Error: No xAI API key available" }],
-          details: { agents_used: 0, response_id: "" },
+          content: [{ type: "text", text }],
+          details: {
+            agents_used: params.num_agents,
+            response_id: data.id,
+          },
         };
-      }
+      },
+    });
 
-      const prompt = `You are leading a team of ${params.num_agents} researchers. Research: ${params.query}`;
+    // Experimental agentic tools - use the model with targeted instructions
+    // These are not native xAI tool-calling yet but provide useful behavior.
+    pi.registerTool({
+      name: "xai_web_search",
+      label: "xAI Web Search",
+      description: "Search the web using Grok (prompts the model for current web knowledge).",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string", description: "Search query" } },
+        required: ["query"],
+      },
+      execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        if (!apiKey) {
+          return { content: [{ type: "text", text: `Error: No xAI API key for web search` }], details: { query: params?.query } };
+        }
+        const prompt = `Perform a web search for: ${params.query}. Summarize the top results with sources and key facts.`;
+        const res = await fetch("https://api.x.ai/v1/responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: "grok-4.3", input: prompt, reasoning: { effort: "medium" } }),
+        });
+        const data = await res.json();
+        const text = data.output?.[0]?.content?.[0]?.text || `No results for: ${params.query}`;
+        return { content: [{ type: "text", text }], details: { query: params.query } };
+      },
+    });
 
-      const res = await fetch("https://api.x.ai/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "grok-4.3",
-          input: prompt,
-          reasoning: { effort: params.reasoning_effort || "high" },
-        }),
-      });
+    pi.registerTool({
+      name: "xai_x_search",
+      label: "xAI X Search",
+      description: "Search X (Twitter) using Grok.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string", description: "X search query" } },
+        required: ["query"],
+      },
+      execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        if (!apiKey) {
+          return { content: [{ type: "text", text: `Error: No xAI API key for X search` }], details: { query: params?.query } };
+        }
+        const prompt = `Search X/Twitter for recent posts about: ${params.query}. Summarize key tweets, users, and sentiment.`;
+        const res = await fetch("https://api.x.ai/v1/responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: "grok-4.3", input: prompt, reasoning: { effort: "medium" } }),
+        });
+        const data = await res.json();
+        const text = data.output?.[0]?.content?.[0]?.text || `No X results for: ${params.query}`;
+        return { content: [{ type: "text", text }], details: { query: params.query } };
+      },
+    });
 
-      const data = await res.json();
-      const text = data.output?.[0]?.content?.[0]?.text || "Research completed";
+    pi.registerTool({
+      name: "xai_code_execution",
+      label: "xAI Code Execution",
+      description: "Execute Python code by asking Grok to run/analyze it (safe simulation via model).",
+      parameters: {
+        type: "object",
+        properties: { code: { type: "string", description: "Python code to execute or analyze" } },
+        required: ["code"],
+      },
+      execute: async (_toolCallId: string, params: { code?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        if (!apiKey) {
+          return { content: [{ type: "text", text: `Error: No xAI API key for code execution` }], details: { code: params?.code } };
+        }
+        const prompt = `Execute or analyze this Python code and show the result or output:\n\n${params.code}`;
+        const res = await fetch("https://api.x.ai/v1/responses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: "grok-4.3", input: prompt, reasoning: { effort: "low" } }),
+        });
+        const data = await res.json();
+        const text = data.output?.[0]?.content?.[0]?.text || `Executed: ${String(params.code).substring(0, 100)}...`;
+        return { content: [{ type: "text", text }], details: { code: params.code } };
+      },
+    });
+  }
 
-      return {
-        content: [{ type: "text", text }],
-        details: {
-          agents_used: params.num_agents,
-          response_id: data.id,
-        },
-      };
-    },
-  });
-
-  pi.registerTool({
-    name: "xai_web_search",
-    label: "xAI Web Search",
-    description: "Search the web using xAI tools.",
-    parameters: {
-      type: "object",
-      properties: { query: { type: "string" } },
-      required: ["query"],
-    },
-    execute: async (_toolCallId: string, params: { query?: string }) => ({
-      content: [{ type: "text", text: `Web search results for: ${params.query}` }],
-      details: { query: params.query },
-    }),
-  });
-
-  pi.registerTool({
-    name: "xai_x_search",
-    label: "xAI X Search",
-    description: "Search X (Twitter) using xAI tools.",
-    parameters: {
-      type: "object",
-      properties: { query: { type: "string" } },
-      required: ["query"],
-    },
-    execute: async (_toolCallId: string, params: { query?: string }) => ({
-      content: [{ type: "text", text: `X search results for: ${params.query}` }],
-      details: { query: params.query },
-    }),
-  });
-
-  pi.registerTool({
-    name: "xai_code_execution",
-    label: "xAI Code Execution",
-    description: "Execute Python code using xAI tools.",
-    parameters: {
-      type: "object",
-      properties: { code: { type: "string" } },
-      required: ["code"],
-    },
-    execute: async (_toolCallId: string, params: { code?: string }) => ({
-      content: [{ type: "text", text: `Executed: ${String(params.code).substring(0, 80)}...` }],
-      details: { code: params.code },
-    }),
-  });
+  registerXaiTools();
 }
+
