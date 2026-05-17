@@ -277,6 +277,16 @@ pi install npm:pi-xai-oauth
 
 Then run `pi /list-providers` — you should see `xai-auth` listed.
 
+### `422 "Failed to deserialize ... ModelInput"` with images
+
+This means xAI rejected a multimodal Responses `input` shape. Use the latest package version and restart pi or run `/reload`. The provider normalizes local `.png`/`.jpg` paths into `data:image/...;base64,...` URLs, adds image `detail`, moves system/developer text to top-level `instructions`, and rewrites image-bearing tool results so `function_call_output.output` stays text-only (xAI rejects arrays there).
+
+If you call `xai_generate_text` directly, `image_url` may be either:
+
+- an `http(s)://...` URL
+- a `data:image/...;base64,...` URL
+- a local `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `/Users/me/My\\ Image.png`
+
 ### "Token expired / auth failed"
 
 Tokens refresh automatically, but if something goes wrong:
