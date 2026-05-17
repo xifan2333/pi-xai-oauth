@@ -584,12 +584,12 @@ export default function (pi: ExtensionAPI) {
       },
     });
 
-    // Experimental agentic tools - use the model with targeted instructions
-    // These are not native xAI tool-calling yet but provide useful behavior.
+    // Agentic tools that leverage Grok's native capabilities (X search, web knowledge, code understanding, etc.)
+    // Targeted prompts unlock Grok's built-in real-time X/web access and reasoning.
     pi.registerTool({
       name: "xai_web_search",
       label: "xAI Web Search",
-      description: "Search the web using Grok (prompts the model for current web knowledge).",
+      description: "Search the web using Grok's native web knowledge and search capabilities.",
       parameters: {
         type: "object",
         properties: { query: { type: "string", description: "Search query" } },
@@ -600,7 +600,7 @@ export default function (pi: ExtensionAPI) {
         if (!apiKey) {
           return { content: [{ type: "text", text: `Error: No xAI API key for web search` }], details: { query: params?.query } };
         }
-        const prompt = `Perform a web search for: ${params.query}. Summarize the top results with sources and key facts.`;
+        const prompt = `You have access to current web knowledge and search capabilities. Perform a web search for: ${params.query}. Summarize the top results with sources, key facts, dates, and any recent developments. Prioritize authoritative sources.`;
         const res = await fetch("https://api.x.ai/v1/responses", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -615,7 +615,7 @@ export default function (pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_x_search",
       label: "xAI X Search",
-      description: "Search X (Twitter) using Grok.",
+      description: "Search X (Twitter) using Grok's native real-time X search and knowledge.",
       parameters: {
         type: "object",
         properties: { query: { type: "string", description: "X search query" } },
@@ -626,7 +626,15 @@ export default function (pi: ExtensionAPI) {
         if (!apiKey) {
           return { content: [{ type: "text", text: `Error: No xAI API key for X search` }], details: { query: params?.query } };
         }
-        const prompt = `Search X/Twitter for recent posts about: ${params.query}. Summarize key tweets, users, and sentiment.`;
+        const prompt = `You have native real-time access to X (Twitter) posts and trends via Grok's built-in X search. Use it to find the most relevant recent posts about: ${params.query}.
+
+Summarize:
+- Top posts with usernames, engagement (likes/reposts/views), and timestamps
+- Key quotes or main points from influential tweets
+- Overall sentiment and any emerging trends or threads
+- Notable users or conversations
+
+Be specific and cite examples where helpful.`;
         const res = await fetch("https://api.x.ai/v1/responses", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },

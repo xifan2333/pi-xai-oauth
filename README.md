@@ -203,7 +203,7 @@ Deep multi-agent research. Simulates a team of researchers collaborating on a to
 ```
 
 ### `xai_web_search`
-Search the web — powered by Grok's web knowledge.
+Search the web — powered by Grok's native web knowledge and search.
 
 ```json
 {
@@ -212,7 +212,7 @@ Search the web — powered by Grok's web knowledge.
 ```
 
 ### `xai_x_search`
-Search X/Twitter for recent posts, trends, and sentiment.
+Search X (Twitter) — powered by Grok's native real-time X search and knowledge.
 
 ```json
 {
