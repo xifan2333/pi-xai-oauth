@@ -87,10 +87,10 @@ function updateSettings() {
   }
 
   // Set recommended defaults for Grok 4.3 experience
-  if (settings.defaultProvider !== "xai-oauth") {
-    settings.defaultProvider = "xai-oauth";
+  if (settings.defaultProvider !== "xai-auth") {
+    settings.defaultProvider = "xai-auth";
     changed = true;
-    console.log(color("   + Set defaultProvider: xai-oauth", "green"));
+    console.log(color("   + Set defaultProvider: xai-auth", "green"));
   }
 
   if (settings.defaultModel !== "grok-4.3") {
@@ -144,7 +144,7 @@ function printNextSteps(nonInteractive = false) {
   if (!nonInteractive) {
     console.log("Next steps:\n");
     console.log(`   ${color("1.", "bold")} Authenticate with xAI OAuth:`);
-    console.log(`      ${color("pi /login xai-oauth", "cyan")}\n`);
+    console.log(`      ${color("pi /login xai-auth", "cyan")}\n`);
     console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.3 (already set as default)`);
     console.log(`      ${color("pi", "cyan")}\n`);
   } else {

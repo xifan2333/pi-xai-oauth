@@ -10,7 +10,7 @@ Adds full Grok 4.3 support (1M context, reasoning) with clean OAuth login.
 
 ## Features
 
-- Real OAuth login (`/login xai-oauth`) with device code flow + refresh tokens
+- Real OAuth login (`/login xai-auth`) with device code flow + refresh tokens
 - Uses the modern `openai-responses` API
 - Custom tools: `xai_generate_text`, `xai_multi_agent`
 - Agentic tools: `xai_web_search`, `xai_x_search`, `xai_code_execution` (experimental placeholders that leverage the xAI model)
@@ -38,7 +38,7 @@ pi install npm:pi-xai-oauth
 After installing, authenticate using:
 
 ```bash
-pi /login xai-oauth
+pi /login xai-auth
 ```
 
 Then select any supported Grok model with `/model` or `--model`.
@@ -66,7 +66,7 @@ All models support extended thinking with levels: `low`, `medium`, `high`.
 Run:
 
 ```bash
-pi /login xai-oauth
+pi /login xai-auth
 ```
 
 Pi displays the same xAI OAuth endpoint used by the official Grok CLI (`https://auth.x.ai/oauth2/authorize`) and listens on `127.0.0.1:56121/callback` for the redirect. Copy the shown URL into the browser/profile you want to use. After approval, it stores OAuth access/refresh tokens and refreshes them automatically.

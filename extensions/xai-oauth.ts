@@ -357,7 +357,7 @@ function credentialsFromTokenPayload(data: XaiTokenPayload, tokenEndpoint: strin
 }
 
 export default function (pi: ExtensionAPI) {
-  pi.registerProvider("xai-oauth", {
+  pi.registerProvider("xai-auth", {
     name: "xAI (OAuth)",
     baseUrl: "https://api.x.ai/v1",
     api: "openai-responses",
@@ -387,24 +387,33 @@ export default function (pi: ExtensionAPI) {
         const nonce = randomUUID().replace(/-/g, "");
         const authorizeUrl = buildAuthorizeUrl(discovery, callbackServer.redirectUri, challenge, state, nonce);
 
-        // Do not call callbacks.onAuth here: pi's login dialog always runs
-        // `open <url>`, which can launch the wrong browser/profile. Instead,
-        // show the exact OAuth URL and let the user paste it into the intended
-        // browser. The local callback server still completes automatically.
-        callbacks.onProgress?.(`Open this exact xAI OAuth URL in the browser/profile you want:\n${authorizeUrl}`);
-        callbacks.onProgress?.(`Waiting for callback on ${callbackServer.redirectUri}`);
-
-        callbacks.onPrompt({
-          message:
-            `Open this exact xAI OAuth URL in the browser/profile you want:\n${authorizeUrl}\n\n` +
-            "Paste the redirect URL/code here if the browser cannot reach localhost, or press Enter to keep waiting for the callback:",
-          allowEmpty: true,
-        }).then((input) => {
-          const manual = parseCallbackInput(input);
-          if (manual) callbackServer.resolveCallback(manual);
-        }).catch(() => {
-          // Cancellation is handled by callbacks.signal / the login dialog.
+        // Trigger automatic browser open via pi's onAuth handler.
+        // pi's login dialog runs `open <url>` on macOS / `xdg-open` on Linux,
+        // AND when usesCallbackServer:true it also shows a built-in manual input
+        // field that resolves via onManualCodeInput. We race both paths below.
+        callbacks.onAuth?.({
+          url: authorizeUrl,
+          instructions:
+            "If the automatic open uses the wrong browser/profile, copy the URL and paste it into the field below (or open it manually in your preferred browser).",
         });
+
+        callbacks.onProgress?.(`Waiting for xAI OAuth callback on ${callbackServer.redirectUri}...`);
+
+        // Race the local callback server against pi's built-in manual input
+        // (shown automatically when usesCallbackServer: true). If the HTTP
+        // callback fires first (browser reaches localhost), the manual input
+        // is simply a no-op since resolveCallback already ran.
+        const manualCodePromise = callbacks.onManualCodeInput?.();
+        if (manualCodePromise) {
+          manualCodePromise.then((input: string) => {
+            if (input) {
+              const manual = parseCallbackInput(input);
+              if (manual) callbackServer.resolveCallback(manual);
+            }
+          }).catch(() => {
+            // Cancellation is handled by callbacks.signal / the login dialog.
+          });
+        }
 
         const callback = await callbackServer.waitForCallback(callbacks.signal);
         if (callback.error) {
