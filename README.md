@@ -24,6 +24,7 @@ This package adds **Grok 4.3** as a fully-integrated provider in pi, with proper
 - [Troubleshooting](#troubleshooting)
 - [Updating](#updating)
 - [Uninstalling](#uninstalling)
+- [Agent Scaffolding](#agent-scaffolding)
 - [Development](#development)
 - [Contributing](#contributing)
 
@@ -330,6 +331,36 @@ pi remove npm:pi-xai-oauth
 ```
 
 This removes the extension from pi's package list. Your stored OAuth tokens remain in pi's credential store.
+
+---
+
+## Agent Scaffolding
+
+This package ships with a modern scaffolding system designed for AI coding agents (2026 best practices).
+
+### Bootstrap Scaffolding
+
+```bash
+npx pi-xai-oauth --scaffold
+# or
+npm run scaffold
+```
+
+Generates a full agent harness:
+- `AGENTS.md` — Dedicated operations manual for AI agents
+- `.scaffold/` with persistent state:
+  - `plan.md` — Phased implementation roadmap
+  - `constraints.md` — Hard rules and safety gates
+  - `progress.md` — Live execution tracking
+  - `context.md` — Shared context for multi-agent workflows
+
+### Benefits
+- Dramatically reduces exploratory turns and token waste
+- Enables reliable long-running agentic tasks
+- External state files allow agents to resume across sessions
+- Built-in support for PARALLEL subagent delegation
+
+Use this in any new project to get the same professional harness.
 
 ---
 

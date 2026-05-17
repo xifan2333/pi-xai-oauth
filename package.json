@@ -12,6 +12,10 @@
   "bin": {
     "pi-xai-oauth": "bin/setup.js"
   },
+  "scripts": {
+    "scaffold": "node bin/setup.js --scaffold",
+    "setup": "node bin/setup.js"
+  },
   "pi": {
     "extensions": [
       "./extensions"

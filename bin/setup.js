@@ -2,6 +2,7 @@
 
 /**
  * pi-xai-oauth — One-command installer for xAI (Grok) OAuth + Grok 4.3
+ * Enhanced with --scaffold support for 2026 agent best practices
  */
 
 const { execSync } = require("child_process");
@@ -68,12 +69,10 @@ function updateSettings() {
 
   let changed = false;
 
-  // Ensure packages array exists
   if (!Array.isArray(settings.packages)) {
     settings.packages = [];
   }
 
-  // Add the package if not already present
   const hasPackage = settings.packages.some(p => {
     if (typeof p === "string") return p === NPM_SPEC;
     if (p && typeof p === "object") return p.source === NPM_SPEC;
@@ -86,7 +85,6 @@ function updateSettings() {
     console.log(color("   + Added npm:pi-xai-oauth to packages", "green"));
   }
 
-  // Set recommended defaults for Grok 4.3 experience
   if (settings.defaultProvider !== "xai-auth") {
     settings.defaultProvider = "xai-auth";
     changed = true;
@@ -119,25 +117,6 @@ function updateSettings() {
   }
 }
 
-function main() {
-  printHeader();
-
-  const args = process.argv.slice(2);
-  const yes = args.includes("--yes") || args.includes("-y");
-
-  if (!checkPi()) {
-    console.log(color("❌ 'pi' command not found in PATH.", "red"));
-    console.log("Please install pi first → https://pi.dev\n");
-    process.exit(1);
-  }
-
-  const success = installPackage();
-  if (success) {
-    updateSettings();
-    printNextSteps(yes);
-  }
-}
-
 function printNextSteps(nonInteractive = false) {
   console.log(`\n${color("🎉  Setup complete!", "green")}\n`);
 
@@ -156,9 +135,172 @@ function printNextSteps(nonInteractive = false) {
   console.log("   • xai_generate_text     — Generate text with full reasoning");
   console.log("   • xai_multi_agent       — Multi-agent research");
   console.log("   • xai_web_search        — Web search powered by Grok");
-  console.log("   • xai_x_search          — X/Twitter search");
+  console.log("   • xai_x_search        — X/Twitter search");
   console.log("   • xai_code_execution    — Python code analysis & execution\n");
   console.log(`   Update later: ${color("pi update npm:pi-xai-oauth", "yellow")}\n`);
+}
+
+function generateScaffold(nonInteractive = false) {
+  printHeader();
+  console.log(color("🛠️  Generating enhanced agent scaffolding (2026 best practices)...", "cyan"));
+
+  const scaffoldDir = path.join(process.cwd(), ".scaffold");
+  const date = new Date().toISOString().split("T")[0];
+  const branch = process.env.GIT_BRANCH || "feature/your-task";
+  const projectName = "pi-xai-oauth"; // fallback, can be read from package.json
+
+  const templates = {
+    "plan.md": `# Implementation Plan: Enhanced Agent Scaffolding
+
+**Project:** ${projectName}
+**Branch:** ${branch}
+**Date:** ${date}
+
+## Phase 1: Foundation
+- [ ] Run setup with --scaffold
+- [ ] Customize this plan
+
+## Phase 2: Persistent State
+- [ ] Review constraints.md
+- [ ] Update progress.md after each step
+
+## Next
+Use parallel subagents and keep this plan updated.
+
+This harness follows 2026 best practices for reliable agentic work.`,
+    
+    "constraints.md": `# Constraints & Safety Rules
+
+## Hard Boundaries (MUST NOT)
+- Never commit API keys, tokens, or secrets
+- Never skip feature branches
+- Never ignore subagent failures or tool errors
+
+## MUST
+- Always read AGENTS.md before starting work
+- Update .scaffold/progress.md after every significant step
+- Prefer PARALLEL subagent mode for independent tasks
+- Use external state files for long-running work
+
+## Tool Rules
+- Specify cwd when relevant
+- Run reviewer before final merges
+- Keep context lean with vertical slices where possible`,
+    
+    "progress.md": `# Execution Progress
+
+**Project:** Enhanced pi Agent Scaffolding
+**Branch:** feature/improved-agent-scaffolding
+**Started:** ${date}
+
+## Completed
+- [x] Created new branch
+- [x] Parallel agent research + recon
+- [x] Generated AGENTS.md
+- [x] Generated .scaffold/ persistent state files
+- [x] Enhanced bin/setup.js with --scaffold support
+
+## In Progress
+- [ ] Customize templates for this project
+- [ ] Implement additional phases from plan.md
+
+## Next
+Run \`node bin/setup.js --scaffold\` in new projects to bootstrap this harness.
+
+Update this file frequently.`,
+
+    "context.md": `# Shared Agent Context
+
+**Project:** ${projectName}
+**Branch:** ${branch}
+**Date:** ${date}
+
+## Key Context
+- This project provides xAI OAuth + Grok 4.3 for pi agents.
+- Use subagent tool for delegation.
+- Persistent state lives in .scaffold/.
+
+## Current Focus
+See plan.md for active phases.
+
+Update as work progresses.`
+  };
+
+  try {
+    if (!fs.existsSync(scaffoldDir)) {
+      fs.mkdirSync(scaffoldDir, { recursive: true });
+      console.log(color("   + Created .scaffold/ directory", "green"));
+    }
+
+    Object.entries(templates).forEach(([filename, content]) => {
+      const filePath = path.join(scaffoldDir, filename);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, content, "utf8");
+        console.log(color(`   + Generated ${filename}`, "green"));
+      } else {
+        console.log(color(`   (Skipped existing ${filename})`, "yellow"));
+      }
+    });
+
+    // Generate basic AGENTS.md if missing
+    const agentsPath = path.join(process.cwd(), "AGENTS.md");
+    if (!fs.existsSync(agentsPath)) {
+      const basicAgents = `# AGENTS.md — AI Agent Operations Manual
+
+> For AI coding agents. Human docs in README.md.
+
+## Project
+pi-xai-oauth — xAI OAuth provider for pi framework.
+
+## Commands
+- Scaffold: node bin/setup.js --scaffold
+- Install: pi install npm:pi-xai-oauth
+
+## Workflow
+- Always use feature branches
+- Use subagent with PARALLEL for research/planning
+- Track everything in .scaffold/
+
+See .scaffold/plan.md for current roadmap.`;
+      fs.writeFileSync(agentsPath, basicAgents, "utf8");
+      console.log(color("   + Generated AGENTS.md", "green"));
+    }
+
+    console.log(color("\n✅ Scaffolding generation complete!", "green"));
+    console.log("   Ready for multi-agent workflows with persistent state.\n");
+
+    if (!nonInteractive) {
+      console.log("Next: Customize the generated files and start using parallel subagents.\n");
+    }
+  } catch (err) {
+    console.error(color("\n❌ Scaffolding generation failed:", "red"), err.message);
+    process.exit(1);
+  }
+}
+
+function main() {
+  printHeader();
+
+  const args = process.argv.slice(2);
+  const yes = args.includes("--yes") || args.includes("-y");
+  const scaffold = args.includes("--scaffold") || args.includes("-s");
+
+  if (!checkPi() && !scaffold) {
+    console.log(color("❌ 'pi' command not found in PATH.", "red"));
+    console.log("Please install pi first → https://pi.dev\n");
+    process.exit(1);
+  }
+
+  if (scaffold) {
+    generateScaffold(yes);
+    return;
+  }
+
+  const success = installPackage();
+  if (success) {
+    updateSettings();
+    printNextSteps(yes);
+  }
 }
 
 main();
