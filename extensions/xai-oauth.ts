@@ -728,6 +728,13 @@ export default function (pi: ExtensionAPI) {
     if (toolsRegistered) return;
     toolsRegistered = true;
 
+    function getXaiAuthToken(ctx: any): string | null {
+      if (ctx?.apiKey) return ctx.apiKey;
+      const creds = getGrokAuthCredentials();
+      if (creds?.access) return creds.access;
+      return process.env.XAI_API_KEY || null;
+    }
+
     pi.registerTool({
       name: "xai_generate_text",
       label: "xAI Generate Text",
@@ -919,9 +926,9 @@ export default function (pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: { query?: string; count?: number; since?: string; until?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        const apiKey = getXaiAuthToken(ctx);
         if (!apiKey) {
-          return { content: [{ type: "text", text: `Error: No xAI API key for X search` }], details: { query: params?.query } };
+          return { content: [{ type: "text", text: `Error: No xAI OAuth credentials found. Please run the OAuth login first.` }], details: { query: params?.query } };
         }
         let prompt = `You have native real-time access to X (Twitter) posts and trends via Grok's built-in X search. Use it to find the most relevant recent posts about: ${params.query}.
 
@@ -998,9 +1005,9 @@ Be specific and cite examples where helpful.`;
         required: ["prompt"],
       },
       execute: async (_toolCallId: string, params: { prompt?: string; size?: string; n?: number }, _signal: any, _onUpdate: any, ctx: any) => {
-        const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+        const apiKey = getXaiAuthToken(ctx);
         if (!apiKey) {
-          return { content: [{ type: "text", text: `Error: No xAI API key for image generation` }], details: { prompt: params?.prompt } };
+          return { content: [{ type: "text", text: `Error: No xAI OAuth credentials found. Please run the OAuth login first.` }], details: { prompt: params?.prompt } };
         }
         const res = await fetch("https://api.x.ai/v1/images/generations", {
           method: "POST",
