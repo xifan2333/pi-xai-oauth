@@ -83,40 +83,43 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Custom tools
+  // ====================== CUSTOM TOOLS ======================
+
   pi.registerTool({
     name: "xai_generate_text",
+    label: "xAI Generate Text",
     description: "Generate text using Grok with full reasoning, structured output, and stateful conversations.",
     parameters: {
       type: "object",
       properties: {
         prompt: { type: "string", description: "The prompt or question" },
         model: { type: "string", description: "Model to use", default: "grok-4" },
-        reasoning_effort: {
-          type: "string",
-          enum: ["low", "medium", "high"],
-          default: "medium",
-        },
+        reasoning_effort: { type: "string", enum: ["low", "medium", "high"], default: "medium" },
         response_format: { type: "string", description: "Set to 'json' for JSON output" },
         previous_response_id: { type: "string", description: "Continue conversation" },
       },
       required: ["prompt"],
     },
-    handler: async (args: any, context: any) => {
-      const apiKey = context?.apiKey || process.env.XAI_API_KEY;
-      if (!apiKey) return { error: "No xAI API key available" };
+    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) => {
+      const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+      if (!apiKey) {
+        return {
+          content: [{ type: "text", text: "Error: No xAI API key available" }],
+          details: { reasoning: "", response_id: "" },
+        };
+      }
 
       const body: any = {
-        model: args.model || "grok-4",
-        input: args.prompt,
-        reasoning: { effort: args.reasoning_effort || "medium" },
+        model: params.model || "grok-4",
+        input: params.prompt,
+        reasoning: { effort: params.reasoning_effort || "medium" },
       };
 
-      if (args.response_format === "json") {
+      if (params.response_format === "json") {
         body.response_format = { type: "json_object" };
       }
-      if (args.previous_response_id) {
-        body.previous_response_id = args.previous_response_id;
+      if (params.previous_response_id) {
+        body.previous_response_id = params.previous_response_id;
       }
 
       const res = await fetch("https://api.x.ai/v1/responses", {
@@ -129,16 +132,21 @@ export default function (pi: ExtensionAPI) {
       });
 
       const data = await res.json();
+      const text = data.output?.[0]?.content?.[0]?.text || JSON.stringify(data);
+
       return {
-        content: data.output?.[0]?.content?.[0]?.text || JSON.stringify(data),
-        reasoning: data.reasoning?.content?.[0]?.text || "",
-        response_id: data.id,
+        content: [{ type: "text", text }],
+        details: {
+          reasoning: data.reasoning?.content?.[0]?.text || "",
+          response_id: data.id,
+        },
       };
     },
   });
 
   pi.registerTool({
     name: "xai_multi_agent",
+    label: "xAI Multi-Agent Research",
     description: "Run deep multi-agent research using Grok.",
     parameters: {
       type: "object",
@@ -149,11 +157,16 @@ export default function (pi: ExtensionAPI) {
       },
       required: ["query"],
     },
-    handler: async (args: any, context: any) => {
-      const apiKey = context?.apiKey || process.env.XAI_API_KEY;
-      if (!apiKey) return { error: "No xAI API key available" };
+    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) => {
+      const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
+      if (!apiKey) {
+        return {
+          content: [{ type: "text", text: "Error: No xAI API key available" }],
+          details: { agents_used: 0, response_id: "" },
+        };
+      }
 
-      const prompt = `You are leading a team of ${args.num_agents} researchers. Research: ${args.query}`;
+      const prompt = `You are leading a team of ${params.num_agents} researchers. Research: ${params.query}`;
 
       const res = await fetch("https://api.x.ai/v1/responses", {
         method: "POST",
@@ -164,49 +177,65 @@ export default function (pi: ExtensionAPI) {
         body: JSON.stringify({
           model: "grok-4.3",
           input: prompt,
-          reasoning: { effort: args.reasoning_effort || "high" },
+          reasoning: { effort: params.reasoning_effort || "high" },
         }),
       });
 
       const data = await res.json();
+      const text = data.output?.[0]?.content?.[0]?.text || "Research completed";
+
       return {
-        research: data.output?.[0]?.content?.[0]?.text || "Research completed",
-        agents_used: args.num_agents,
-        response_id: data.id,
+        content: [{ type: "text", text }],
+        details: {
+          agents_used: params.num_agents,
+          response_id: data.id,
+        },
       };
     },
   });
 
   pi.registerTool({
     name: "web_search",
+    label: "Web Search",
     description: "Search the web.",
     parameters: {
       type: "object",
       properties: { query: { type: "string" } },
       required: ["query"],
     },
-    handler: async (args) => ({ results: `Web results for: ${args.query}` }),
+    execute: async (toolCallId: string, params: { query?: string }) => ({
+      content: [{ type: "text", text: `Web search results for: ${params.query}` }],
+      details: { query: params.query },
+    }),
   });
 
   pi.registerTool({
     name: "x_search",
+    label: "X Search",
     description: "Search X (Twitter).",
     parameters: {
       type: "object",
       properties: { query: { type: "string" } },
       required: ["query"],
     },
-    handler: async (args) => ({ results: `X results for: ${args.query}` }),
+    execute: async (toolCallId: string, params: { query?: string }) => ({
+      content: [{ type: "text", text: `X search results for: ${params.query}` }],
+      details: { query: params.query },
+    }),
   });
 
   pi.registerTool({
     name: "code_execution",
+    label: "Code Execution",
     description: "Execute Python code.",
     parameters: {
       type: "object",
       properties: { code: { type: "string" } },
       required: ["code"],
     },
-    handler: async (args) => ({ output: `Executed: ${args.code.substring(0, 80)}...` }),
+    execute: async (toolCallId: string, params: { code?: string }) => ({
+      content: [{ type: "text", text: `Executed: ${String(params.code).substring(0, 80)}...` }],
+      details: { code: params.code },
+    }),
   });
 }
