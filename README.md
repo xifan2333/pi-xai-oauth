@@ -86,16 +86,7 @@ Then optionally configure it as default:
   "defaultModel": "grok-4.3",
   "defaultThinkingLevel": "high"
 }
-```
-
-### Try without installing
-
-```bash
-pi -e npm:pi-xai-oauth --model xai-auth/grok-4.3 "What's the meaning of life?"
-```
-
-This loads the extension ephemerally — useful for testing before committing.
-
+``
 ---
 
 ## Authentication
