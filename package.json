@@ -1,6 +1,6 @@
 {
   "name": "pi-xai-oauth",
-  "version": "1.0.26",
+  "version": "1.2.1",
   "description": "One-command installer for xAI (Grok) OAuth provider + Grok 4.3 in pi",
   "keywords": [
     "pi-package",
@@ -8,6 +8,14 @@
     "grok",
     "oauth"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BlockedPath/pi-xai-oauth.git"
+  },
+  "homepage": "https://github.com/BlockedPath/pi-xai-oauth#readme",
+  "bugs": {
+    "url": "https://github.com/BlockedPath/pi-xai-oauth/issues"
+  },
   "license": "MIT",
   "bin": {
     "pi-xai-oauth": "bin/setup.js"
