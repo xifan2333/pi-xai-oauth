@@ -195,9 +195,9 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "web_search",
-    label: "Web Search",
-    description: "Search the web.",
+    name: "xai_web_search",
+    label: "xAI Web Search",
+    description: "Search the web using xAI tools.",
     parameters: {
       type: "object",
       properties: { query: { type: "string" } },
@@ -210,9 +210,9 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "x_search",
-    label: "X Search",
-    description: "Search X (Twitter).",
+    name: "xai_x_search",
+    label: "xAI X Search",
+    description: "Search X (Twitter) using xAI tools.",
     parameters: {
       type: "object",
       properties: { query: { type: "string" } },
@@ -225,9 +225,9 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "code_execution",
-    label: "Code Execution",
-    description: "Execute Python code.",
+    name: "xai_code_execution",
+    label: "xAI Code Execution",
+    description: "Execute Python code using xAI tools.",
     parameters: {
       type: "object",
       properties: { code: { type: "string" } },
