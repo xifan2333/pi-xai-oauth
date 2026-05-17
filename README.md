@@ -6,7 +6,6 @@
 [![GitHub stars](https://img.shields.io/github/stars/BlockedPath/pi-xai-oauth?style=social)](https://github.com/BlockedPath/pi-xai-oauth/stargazers)
 
 **xAI (Grok) OAuth provider for pi** — 1M context, reasoning, and custom xAI tools.
-
 ```bash
 npx pi-xai-oauth
 ```
