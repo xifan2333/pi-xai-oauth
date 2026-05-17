@@ -58,7 +58,9 @@ Run:
 pi /login xai-oauth
 ```
 
-Then paste your xAI API key from https://console.x.ai
+Pi displays the same xAI OAuth endpoint used by the official Grok CLI (`https://auth.x.ai/oauth2/authorize`) and listens on `127.0.0.1:56121/callback` for the redirect. Copy the shown URL into the browser/profile you want to use. After approval, it stores OAuth access/refresh tokens and refreshes them automatically.
+
+If official Grok CLI credentials already exist in `~/.grok/auth.json`, Pi can reuse them. This is separate from creating an `xai-...` API key in the xAI API console.
 
 ## Updating the Package
 

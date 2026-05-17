@@ -4,6 +4,10 @@ node_modules/
 dist/
 build/
 .env
-.env.local
+.env.*
 .idea/
 .vscode/
+*.pem
+*.key
+auth.json
+*.local

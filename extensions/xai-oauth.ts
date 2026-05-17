@@ -1,20 +1,359 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
-import { readFileSync, existsSync } from "fs";
+import { createHash, randomBytes, randomUUID } from "crypto";
+import { existsSync, readFileSync } from "fs";
+import { createServer, type Server } from "http";
 import { homedir } from "os";
 import { join } from "path";
 
-function getGrokAuthToken(): string | null {
+const XAI_OAUTH_ISSUER = "https://auth.x.ai";
+const XAI_OAUTH_DISCOVERY_URL = `${XAI_OAUTH_ISSUER}/.well-known/openid-configuration`;
+const XAI_OAUTH_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
+const XAI_OAUTH_SCOPE = "openid profile email offline_access grok-cli:access api:access";
+const XAI_OAUTH_REDIRECT_HOST = "127.0.0.1";
+const XAI_OAUTH_REDIRECT_PORT = 56121;
+const XAI_OAUTH_REDIRECT_PATH = "/callback";
+const XAI_OAUTH_REFRESH_SKEW_MS = 2 * 60 * 1000;
+
+type XaiDiscovery = {
+  authorization_endpoint: string;
+  token_endpoint: string;
+};
+
+type XaiTokenPayload = {
+  access_token?: string;
+  refresh_token?: string;
+  id_token?: string;
+  expires_in?: number;
+  token_type?: string;
+};
+
+type CallbackResult = {
+  code?: string;
+  state?: string;
+  error?: string;
+  error_description?: string;
+};
+
+const MODELS = [
+  {
+    id: "grok-4.3",
+    name: "Grok 4.3",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { input: 1.25, output: 2.5, cacheRead: 0.3125, cacheWrite: 0.625 },
+    contextWindow: 1_000_000,
+    maxTokens: 131_072,
+  },
+  {
+    id: "grok-4.20-0309-reasoning",
+    name: "Grok 4.2 Reasoning",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 2 },
+    contextWindow: 1_000_000,
+    maxTokens: 131_072,
+  },
+  {
+    id: "grok-4.20-0309-non-reasoning",
+    name: "Grok 4.2 Fast",
+    reasoning: false,
+    input: ["text", "image"],
+    cost: { input: 0.6, output: 1.2, cacheRead: 0.15, cacheWrite: 0.3 },
+    contextWindow: 1_000_000,
+    maxTokens: 131_072,
+  },
+];
+
+const XAI_GROK_CLI_AUTH_SCOPE_KEY = `${XAI_OAUTH_ISSUER}::${XAI_OAUTH_CLIENT_ID}`;
+const XAI_GROK_CLI_LEGACY_AUTH_SCOPE_KEY = "https://accounts.x.ai/sign-in";
+
+function parseExpiry(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return undefined;
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getGrokAuthCredentials(): OAuthCredentials | null {
   const authPath = join(homedir(), ".grok", "auth.json");
-  if (existsSync(authPath)) {
-    try {
-      const data = JSON.parse(readFileSync(authPath, "utf8"));
-      return data.access_token || data.token || null;
-    } catch {
-      return null;
+  if (!existsSync(authPath)) return null;
+
+  try {
+    const data = JSON.parse(readFileSync(authPath, "utf8"));
+
+    // Official Grok CLI stores OAuth2 credentials under
+    // "https://auth.x.ai::<client_id>" as { key, refresh_token, expires_at }.
+    const oidc = data?.[XAI_GROK_CLI_AUTH_SCOPE_KEY];
+    if (oidc && typeof oidc === "object") {
+      const access = String(oidc.key || oidc.access_token || oidc.token || "");
+      if (access) {
+        const expires = parseExpiry(oidc.expires_at) || Date.now() + 6 * 60 * 60 * 1000;
+        return {
+          refresh: String(oidc.refresh_token || oidc.refresh || ""),
+          access,
+          expires: expires - XAI_OAUTH_REFRESH_SKEW_MS,
+          tokenEndpoint: `${XAI_OAUTH_ISSUER}/oauth2/token`,
+          tokenType: "Bearer",
+        };
+      }
     }
+
+    // Older Grok builds stored a bearer at the sign-in URL scope.
+    const legacy = data?.[XAI_GROK_CLI_LEGACY_AUTH_SCOPE_KEY];
+    const legacyAccess = legacy && typeof legacy === "object" ? legacy.key || legacy.access_token || legacy.token : "";
+    if (legacyAccess) {
+      return {
+        refresh: "",
+        access: String(legacyAccess),
+        expires: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      };
+    }
+
+    // Back-compat with early pi-xai-oauth guesses.
+    const topLevelAccess = data?.access_token || data?.token;
+    if (topLevelAccess) {
+      return {
+        refresh: String(data.refresh_token || data.refresh || ""),
+        access: String(topLevelAccess),
+        expires: parseExpiry(data.expires_at || data.expires) || Date.now() + 30 * 24 * 60 * 60 * 1000,
+        tokenEndpoint: `${XAI_OAUTH_ISSUER}/oauth2/token`,
+        tokenType: String(data.token_type || "Bearer"),
+      };
+    }
+  } catch {
+    return null;
   }
+
   return null;
+}
+
+function pkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
+function validateXaiEndpoint(url: string): string {
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== "https:" || (host !== "x.ai" && !host.endsWith(".x.ai"))) {
+    throw new Error(`xAI OAuth discovery returned an unexpected endpoint: ${url}`);
+  }
+  return url;
+}
+
+async function xaiDiscovery(): Promise<XaiDiscovery> {
+  const response = await fetch(XAI_OAUTH_DISCOVERY_URL, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`xAI OAuth discovery failed: ${response.status} ${await response.text()}`);
+  }
+
+  const data = (await response.json()) as Partial<XaiDiscovery>;
+  if (!data.authorization_endpoint || !data.token_endpoint) {
+    throw new Error("xAI OAuth discovery response did not include authorization/token endpoints");
+  }
+
+  return {
+    authorization_endpoint: validateXaiEndpoint(data.authorization_endpoint),
+    token_endpoint: validateXaiEndpoint(data.token_endpoint),
+  };
+}
+
+function callbackCorsOrigin(origin: string | undefined): string | undefined {
+  return origin === "https://accounts.x.ai" || origin === "https://auth.x.ai" ? origin : undefined;
+}
+
+async function startCallbackServer(): Promise<{
+  redirectUri: string;
+  waitForCallback: (signal?: AbortSignal) => Promise<CallbackResult>;
+  resolveCallback: (result: CallbackResult) => void;
+  close: () => void;
+}> {
+  let resolveCallback!: (result: CallbackResult) => void;
+  const callbackPromise = new Promise<CallbackResult>((resolve) => {
+    resolveCallback = resolve;
+  });
+
+  const makeServer = () =>
+    createServer((req, res) => {
+      const origin = callbackCorsOrigin(req.headers.origin);
+      const writeCors = () => {
+        if (!origin) return;
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        res.setHeader("Access-Control-Allow-Private-Network", "true");
+        res.setHeader("Vary", "Origin");
+      };
+
+      if (req.method === "OPTIONS") {
+        writeCors();
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const url = new URL(req.url || "/", `http://${XAI_OAUTH_REDIRECT_HOST}`);
+      if (url.pathname !== XAI_OAUTH_REDIRECT_PATH) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Not found");
+        return;
+      }
+
+      const result: CallbackResult = {
+        code: url.searchParams.get("code") || undefined,
+        state: url.searchParams.get("state") || undefined,
+        error: url.searchParams.get("error") || undefined,
+        error_description: url.searchParams.get("error_description") || undefined,
+      };
+      resolveCallback(result);
+
+      writeCors();
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(
+        result.error
+          ? "<html><body><h1>xAI authorization failed.</h1>You can close this tab.</body></html>"
+          : "<html><body><h1>xAI authorization received.</h1>You can close this tab.</body></html>",
+      );
+    });
+
+  const listen = (port: number): Promise<Server> =>
+    new Promise((resolve, reject) => {
+      const server = makeServer();
+      server.once("error", reject);
+      server.listen(port, XAI_OAUTH_REDIRECT_HOST, () => {
+        server.removeListener("error", reject);
+        resolve(server);
+      });
+    });
+
+  let server: Server;
+  try {
+    server = await listen(XAI_OAUTH_REDIRECT_PORT);
+  } catch {
+    server = await listen(0);
+  }
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Could not determine xAI OAuth callback port");
+  }
+
+  const redirectUri = `http://${XAI_OAUTH_REDIRECT_HOST}:${address.port}${XAI_OAUTH_REDIRECT_PATH}`;
+
+  const close = () => {
+    try {
+      server.close();
+    } catch {
+      // ignore
+    }
+  };
+
+  return {
+    redirectUri,
+    close,
+    resolveCallback,
+    waitForCallback: async (signal?: AbortSignal) => {
+      let timer: NodeJS.Timeout | undefined;
+      let abortHandler: (() => void) | undefined;
+      const timeout = new Promise<CallbackResult>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Timed out waiting for xAI OAuth callback")), 180_000);
+        abortHandler = () => {
+          if (timer) clearTimeout(timer);
+          reject(new Error("xAI OAuth login was cancelled"));
+        };
+        signal?.addEventListener("abort", abortHandler, { once: true });
+      });
+
+      try {
+        return await Promise.race([callbackPromise, timeout]);
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (abortHandler) signal?.removeEventListener("abort", abortHandler);
+        close();
+      }
+    },
+  };
+}
+
+function buildAuthorizeUrl(discovery: XaiDiscovery, redirectUri: string, challenge: string, state: string, nonce: string): string {
+  // Match the official Grok CLI authorize URL. Extra query params such as
+  // `plan=generic` can change xAI's routing/branding and send users toward
+  // the API-console SSO surface instead of the Grok OAuth consent surface.
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: XAI_OAUTH_CLIENT_ID,
+    redirect_uri: redirectUri,
+    scope: XAI_OAUTH_SCOPE,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state,
+    nonce,
+  });
+  return `${discovery.authorization_endpoint}?${params.toString()}`;
+}
+
+function parseCallbackInput(input: string): CallbackResult | undefined {
+  const value = input.trim();
+  if (!value) return undefined;
+
+  try {
+    const url = value.startsWith("http")
+      ? new URL(value)
+      : new URL(`http://${XAI_OAUTH_REDIRECT_HOST}${XAI_OAUTH_REDIRECT_PATH}?${value.replace(/^\?/, "")}`);
+    return {
+      code: url.searchParams.get("code") || undefined,
+      state: url.searchParams.get("state") || undefined,
+      error: url.searchParams.get("error") || undefined,
+      error_description: url.searchParams.get("error_description") || undefined,
+    };
+  } catch {
+    if (/^[A-Za-z0-9_-]{20,}$/.test(value)) return { code: value };
+    return undefined;
+  }
+}
+
+async function exchangeXaiToken(tokenEndpoint: string, body: Record<string, string>): Promise<XaiTokenPayload> {
+  const response = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(body).toString(),
+  });
+  if (!response.ok) {
+    throw new Error(`xAI token request failed: ${response.status} ${await response.text()}`);
+  }
+  return (await response.json()) as XaiTokenPayload;
+}
+
+function credentialsFromTokenPayload(data: XaiTokenPayload, tokenEndpoint: string, fallbackRefresh = ""): OAuthCredentials {
+  if (!data.access_token) {
+    throw new Error("xAI token response did not include an access token");
+  }
+
+  const refresh = data.refresh_token || fallbackRefresh;
+  if (!refresh) {
+    throw new Error("xAI token response did not include a refresh token");
+  }
+
+  return {
+    refresh,
+    access: data.access_token,
+    expires: Date.now() + (data.expires_in || 3600) * 1000 - XAI_OAUTH_REFRESH_SKEW_MS,
+    tokenEndpoint,
+    idToken: data.id_token || "",
+    tokenType: data.token_type || "Bearer",
+  };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -22,55 +361,95 @@ export default function (pi: ExtensionAPI) {
     name: "xAI (OAuth)",
     baseUrl: "https://api.x.ai/v1",
     api: "openai-responses",
+    models: MODELS as any,
     authHeader: true,
 
     oauth: {
+      usesCallbackServer: true,
       name: "xAI (Grok)",
 
       async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-        // Open browser to xAI console for authorization
-        callbacks.onAuth({
-          url: "https://console.x.ai",
-        });
+        const existingCredentials = getGrokAuthCredentials();
+        if (existingCredentials) {
+          const useExisting = await callbacks.onPrompt({
+            message: "Found existing official Grok CLI credentials in ~/.grok/auth.json. Use them instead of opening a new xAI OAuth login? (y/n)",
+          });
+          if (useExisting.toLowerCase().startsWith("y")) {
+            return existingCredentials;
+          }
+        }
 
-        const accessToken = await callbacks.onPrompt({
+        callbacks.onProgress?.("Starting xAI SuperGrok OAuth login...");
+        const discovery = await xaiDiscovery();
+        const callbackServer = await startCallbackServer();
+        const { verifier, challenge } = pkcePair();
+        const state = randomUUID().replace(/-/g, "");
+        const nonce = randomUUID().replace(/-/g, "");
+        const authorizeUrl = buildAuthorizeUrl(discovery, callbackServer.redirectUri, challenge, state, nonce);
+
+        // Do not call callbacks.onAuth here: pi's login dialog always runs
+        // `open <url>`, which can launch the wrong browser/profile. Instead,
+        // show the exact OAuth URL and let the user paste it into the intended
+        // browser. The local callback server still completes automatically.
+        callbacks.onProgress?.(`Open this exact xAI OAuth URL in the browser/profile you want:\n${authorizeUrl}`);
+        callbacks.onProgress?.(`Waiting for callback on ${callbackServer.redirectUri}`);
+
+        callbacks.onPrompt({
           message:
-            "After authorizing in the browser, paste your xAI API key here (starts with xai-):",
+            `Open this exact xAI OAuth URL in the browser/profile you want:\n${authorizeUrl}\n\n` +
+            "Paste the redirect URL/code here if the browser cannot reach localhost, or press Enter to keep waiting for the callback:",
+          allowEmpty: true,
+        }).then((input) => {
+          const manual = parseCallbackInput(input);
+          if (manual) callbackServer.resolveCallback(manual);
+        }).catch(() => {
+          // Cancellation is handled by callbacks.signal / the login dialog.
         });
 
-        return {
-          refresh: "",
-          access: accessToken.trim(),
-          expires: Date.now() + 1000 * 60 * 60 * 24 * 365,
-        };
+        const callback = await callbackServer.waitForCallback(callbacks.signal);
+        if (callback.error) {
+          throw new Error(`xAI authorization failed: ${callback.error_description || callback.error}`);
+        }
+        if (callback.state && callback.state !== state) {
+          throw new Error("xAI authorization failed: state mismatch");
+        }
+        if (!callback.code) {
+          throw new Error("xAI authorization failed: no authorization code returned");
+        }
+
+        callbacks.onProgress?.("Exchanging xAI authorization code...");
+        const data = await exchangeXaiToken(discovery.token_endpoint, {
+          grant_type: "authorization_code",
+          code: callback.code,
+          redirect_uri: callbackServer.redirectUri,
+          client_id: XAI_OAUTH_CLIENT_ID,
+          code_verifier: verifier,
+        });
+
+        return credentialsFromTokenPayload(data, discovery.token_endpoint);
       },
 
       async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
         if (!credentials.refresh) return credentials;
 
-        const response = await fetch("https://api.x.ai/oauth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            grant_type: "refresh_token",
-            refresh_token: credentials.refresh,
-            client_id: "pi-xai-oauth",
-          }),
+        const tokenEndpoint =
+          typeof credentials.tokenEndpoint === "string" && credentials.tokenEndpoint
+            ? validateXaiEndpoint(credentials.tokenEndpoint)
+            : (await xaiDiscovery()).token_endpoint;
+
+        const data = await exchangeXaiToken(tokenEndpoint, {
+          grant_type: "refresh_token",
+          refresh_token: credentials.refresh,
+          client_id: XAI_OAUTH_CLIENT_ID,
         });
 
-        const data = await response.json();
-
-        return {
-          refresh: data.refresh_token || credentials.refresh,
-          access: data.access_token,
-          expires: Date.now() + (data.expires_in || 3600) * 1000,
-        };
+        return credentialsFromTokenPayload(data, tokenEndpoint, credentials.refresh);
       },
 
       getApiKey(credentials: OAuthCredentials): string {
         return credentials.access;
       },
-    },
+    } as any,
   });
 
   // ====================== CUSTOM TOOLS ======================
@@ -83,14 +462,14 @@ export default function (pi: ExtensionAPI) {
       type: "object",
       properties: {
         prompt: { type: "string", description: "The prompt or question" },
-        model: { type: "string", description: "Model to use", default: "grok-4" },
+        model: { type: "string", description: "Model to use", default: "grok-4.3" },
         reasoning_effort: { type: "string", enum: ["low", "medium", "high"], default: "medium" },
         response_format: { type: "string", description: "Set to 'json' for JSON output" },
         previous_response_id: { type: "string", description: "Continue conversation" },
       },
       required: ["prompt"],
     },
-    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) => {
+    execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
       const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
       if (!apiKey) {
         return {
@@ -100,7 +479,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const body: any = {
-        model: params.model || "grok-4",
+        model: params.model || "grok-4.3",
         input: params.prompt,
         reasoning: { effort: params.reasoning_effort || "medium" },
       };
@@ -147,7 +526,7 @@ export default function (pi: ExtensionAPI) {
       },
       required: ["query"],
     },
-    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) => {
+    execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
       const apiKey = ctx?.apiKey || process.env.XAI_API_KEY;
       if (!apiKey) {
         return {
@@ -193,7 +572,7 @@ export default function (pi: ExtensionAPI) {
       properties: { query: { type: "string" } },
       required: ["query"],
     },
-    execute: async (toolCallId: string, params: { query?: string }) => ({
+    execute: async (_toolCallId: string, params: { query?: string }) => ({
       content: [{ type: "text", text: `Web search results for: ${params.query}` }],
       details: { query: params.query },
     }),
@@ -208,7 +587,7 @@ export default function (pi: ExtensionAPI) {
       properties: { query: { type: "string" } },
       required: ["query"],
     },
-    execute: async (toolCallId: string, params: { query?: string }) => ({
+    execute: async (_toolCallId: string, params: { query?: string }) => ({
       content: [{ type: "text", text: `X search results for: ${params.query}` }],
       details: { query: params.query },
     }),
@@ -223,7 +602,7 @@ export default function (pi: ExtensionAPI) {
       properties: { code: { type: "string" } },
       required: ["code"],
     },
-    execute: async (toolCallId: string, params: { code?: string }) => ({
+    execute: async (_toolCallId: string, params: { code?: string }) => ({
       content: [{ type: "text", text: `Executed: ${String(params.code).substring(0, 80)}...` }],
       details: { code: params.code },
     }),
