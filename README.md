@@ -533,7 +533,15 @@ git checkout -b feature/your-task
 ```
 pi-xai-oauth/
 ├── extensions/
-│   └── xai-oauth.ts          # Provider registration + OAuth logic (start here)
+│   ├── xai-oauth.ts          # Thin provider/tools entrypoint
+│   └── xai/                  # Domain modules: OAuth, auth, models, payloads, tools
+│       ├── auth.ts           # Grok CLI credential reuse + token resolution
+│       ├── constants.ts      # URLs, OAuth constants, defaults
+│       ├── models.ts         # Model catalog + routing helpers
+│       ├── oauth.ts          # OAuth discovery/login/refresh/callback helpers
+│       ├── payload.ts        # xAI Responses payload normalization
+│       ├── responses.ts      # xAI request + streaming helpers
+│       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
 ├── scripts/
