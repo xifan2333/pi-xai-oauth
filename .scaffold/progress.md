@@ -111,3 +111,10 @@ Update this file frequently during execution.
 - [x] Verified tool extraction slice with `npm test` and `npm run typecheck`.
 - [x] Updated README and AGENTS architecture notes for the new module layout.
 - [x] Final verification passed: `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+
+## Phase 11: WSL OAuth manual-code repair
+- [x] Created branch `feature/wsl-oauth-manual-code`.
+- [x] Reproduced raw manual authorization code being misparsed as a query string and ignored for missing state.
+- [x] Added OAuth verification coverage for raw pasted codes, matching-state manual callback URLs, and wrong-state manual queries.
+- [x] Patched `parseCallbackInput()` to recognize raw xAI authorization codes before URL/query parsing.
+- [x] Verified fix with `npm test`, `npm run typecheck`, and `git diff --check`.

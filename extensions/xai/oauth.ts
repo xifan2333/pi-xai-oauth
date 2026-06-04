@@ -244,6 +244,10 @@ function parseCallbackInput(input: string): CallbackResult | undefined {
   const value = input.trim();
   if (!value) return undefined;
 
+  // xAI may show only the authorization code when localhost redirect fails,
+  // especially when pi runs in WSL and the browser runs on Windows.
+  if (/^[A-Za-z0-9_-]{20,}$/.test(value)) return { code: value, trustedManualCode: true };
+
   try {
     const url = value.startsWith("http")
       ? new URL(value)
@@ -255,7 +259,6 @@ function parseCallbackInput(input: string): CallbackResult | undefined {
       error_description: url.searchParams.get("error_description") || undefined,
     };
   } catch {
-    if (/^[A-Za-z0-9_-]{20,}$/.test(value)) return { code: value, trustedManualCode: true };
     return undefined;
   }
 }
