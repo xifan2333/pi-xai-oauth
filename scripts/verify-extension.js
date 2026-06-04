@@ -130,7 +130,7 @@ async function verifyCursorToolShims(tools) {
   const grepResult = await runCursorTool(tools, "Grep", { query: "DEFAULT_XAI_MODEL", include: "*.ts", path: "extensions", limit: 5 });
   assert.match(grepResult.content[0].text, /xai\/(auth|constants|models)\.ts|xai-oauth\.ts/, "Grep shim should map query/include to pi grep pattern/glob");
 
-  const globResult = await runCursorTool(tools, "Glob", { glob: "extensions/*.ts" });
+  const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts" });
   assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map to pi find");
 
   const readResult = await runCursorTool(tools, "Read", { file_path: "package.json", limit: 3 });
@@ -229,6 +229,83 @@ async function verifyOAuthCallbackState(provider) {
   assert.ok(authUrl, "login should provide an authorization URL");
 }
 
+async function verifyOAuthManualRawCode(provider) {
+  const rawCode = "bMmOusw8w9arz1aNEuDCY02jhiOs22O5j-92yEKTzMCbPShyToONJWSc2KITti2CgoM0clOeFMUosJm76y_2MA";
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), 500);
+  let authUrl;
+
+  try {
+    const credentials = await provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        authUrl = new URL(auth.url);
+      },
+      onManualCodeInput: async () => rawCode,
+      signal: controller.signal,
+    });
+
+    assert.equal(credentials.access, `access-${rawCode}`, "raw pasted xAI authorization code should be accepted and exchanged");
+    assert.ok(authUrl, "login should provide an authorization URL before accepting manual code");
+  } finally {
+    clearTimeout(abortTimer);
+  }
+}
+
+async function verifyOAuthManualCallbackUrlState(provider) {
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), 500);
+  let callbackUrl;
+
+  try {
+    const credentials = await provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+        callbackUrl.searchParams.set("code", "manual-url-code");
+        callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+      },
+      onManualCodeInput: async () => callbackUrl.toString(),
+      signal: controller.signal,
+    });
+
+    assert.equal(credentials.access, "access-manual-url-code", "manual callback URL with matching state should be exchanged");
+  } finally {
+    clearTimeout(abortTimer);
+  }
+}
+
+async function verifyOAuthManualWrongStateIgnored(provider) {
+  const progress = [];
+  let authUrl;
+  const login = provider.oauth.login({
+    onPrompt: async () => "n",
+    onProgress(message) {
+      progress.push(message);
+    },
+    onAuth(auth) {
+      authUrl = new URL(auth.url);
+      const redirectUri = authUrl.searchParams.get("redirect_uri");
+      const expectedState = authUrl.searchParams.get("state");
+      setTimeout(async () => {
+        const good = new URL(redirectUri);
+        good.searchParams.set("code", "manual-wrong-state-fallback-good");
+        good.searchParams.set("state", expectedState);
+        await originalFetch(good);
+      }, 10);
+    },
+    onManualCodeInput: async () => "code=bad-manual-state-code&state=wrong-state",
+  });
+
+  const credentials = await login;
+  assert.equal(credentials.access, "access-manual-wrong-state-fallback-good", "manual callback query with wrong state should be ignored");
+  assert.ok(progress.some((message) => /OAuth state did not match/.test(message)), "wrong-state manual callback should log that it was ignored");
+  assert.ok(authUrl, "login should provide an authorization URL");
+}
+
 async function main() {
   process.env.HOME = path.join(repoRoot, ".tmp-empty-home-for-tests");
   process.env.XAI_API_KEY = "must-not-be-used";
@@ -254,6 +331,9 @@ async function main() {
     await verifyCursorToolShims(tools);
 
     await verifyOAuthCallbackState(provider);
+    await verifyOAuthManualRawCode(provider);
+    await verifyOAuthManualCallbackUrlState(provider);
+    await verifyOAuthManualWrongStateIgnored(provider);
 
     const noAuthResult = await tools.get("xai_generate_text").execute("call_noauth", { prompt: "hi" }, undefined, () => {}, {
       modelRegistry: {
