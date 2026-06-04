@@ -5,7 +5,7 @@
 ## Project Overview
 pi-xai-oauth is a pi-package that registers the xAI OAuth provider ("xai-auth") and Grok models (including grok-4.3 with 1M context + reasoning) for the pi coding agent framework.
 
-Core flow: `bin/setup.js` → `pi install` → provider registration in `extensions/xai-oauth.ts` → OAuth PKCE login → streaming via xAI API.
+Core flow: `bin/setup.js` → `pi install` → provider registration in `extensions/xai-oauth.ts` → OAuth PKCE login in `extensions/xai/oauth.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`.
 
 ## Key Commands (Exact, Copy-Paste Ready)
 - Install / setup: `node bin/setup.js` or `npm run setup` (if added)
@@ -33,7 +33,15 @@ pi-xai-oauth/
 ├── bin/
 │   └── setup.js          # One-command installer + settings seeder
 ├── extensions/
-│   └── xai-oauth.ts      # Core provider registration + OAuth logic (start here for changes)
+│   ├── xai-oauth.ts      # Thin entrypoint: provider registration + tool orchestration
+│   └── xai/              # Focused implementation modules
+│       ├── constants.ts  # URLs, defaults, OAuth constants
+│       ├── models.ts     # Model catalog + routing helpers
+│       ├── oauth.ts      # OAuth discovery/login/refresh/callback helpers
+│       ├── auth.ts       # Credential reuse + token resolution helpers
+│       ├── payload.ts    # Responses payload normalization
+│       ├── responses.ts  # xAI request/stream helpers
+│       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
 ├── package.json
 ├── tsconfig.json
 ├── README.md
@@ -47,9 +55,10 @@ pi-xai-oauth/
 ```
 
 Start any task by reading:
-1. `extensions/xai-oauth.ts` (lines 600+ for registerProvider)
-2. `bin/setup.js`
-3. This AGENTS.md
+1. `extensions/xai-oauth.ts` (provider entrypoint)
+2. Relevant `extensions/xai/` domain module for the task
+3. `bin/setup.js`
+4. This AGENTS.md
 
 ## Style & Quality Rules
 - Use TypeScript strict mode

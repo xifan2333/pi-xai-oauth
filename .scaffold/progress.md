@@ -96,3 +96,18 @@ Update this file frequently during execution.
 - [x] Added Cursor/Grok CLI tool shims (`Read`, `Write`, `StrReplace`, `Edit`, `Delete`, `LS`, `Grep`, `Glob`, `Shell`, `WebSearch`) for Composer 2.5/Grok Build and model-scoped activation.
 - [x] Added verification for shim registration, activation/deactivation, argument normalization, and Grep/Glob/Read/Write/StrReplace/Shell/Delete execution.
 - [x] Documented Composer/Grok Build tool compatibility in README.
+
+## Phase 10: Refactor xAI OAuth extension module structure
+- [x] Created branch `feature/refactor-xai-oauth-modules` from clean `main`.
+- [x] Proposed focused module split before editing.
+- [x] Extracted xAI constants and model catalog/routing helpers into `extensions/xai/constants.ts` and `extensions/xai/models.ts`.
+- [x] Verified first extraction slice with `npm test` and `npm run typecheck`.
+- [x] Extracted OAuth login/refresh/callback handling into `extensions/xai/oauth.ts` and Grok credential/token resolution into `extensions/xai/auth.ts`.
+- [x] Updated verification to accept model constants living under the new module structure.
+- [x] Verified OAuth/auth extraction slice with `npm test` and `npm run typecheck`.
+- [x] Extracted image normalization, response text/error helpers, Responses payload rewriting, and xAI request/stream helpers into `extensions/xai/images.ts`, `text.ts`, `payload.ts`, and `responses.ts`.
+- [x] Verified payload/response extraction slice with `npm test` and `npm run typecheck`.
+- [x] Extracted Cursor/Grok CLI shims and custom xAI tools into `extensions/xai/tools/`, leaving `extensions/xai-oauth.ts` as a thin provider/tools entrypoint.
+- [x] Verified tool extraction slice with `npm test` and `npm run typecheck`.
+- [x] Updated README and AGENTS architecture notes for the new module layout.
+- [x] Final verification passed: `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
