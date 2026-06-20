@@ -39,7 +39,7 @@
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.79.8",
     "@earendil-works/pi-coding-agent": "^0.79.8",
-    "@types/node": "^25.8.0",
+    "@types/node": "^26.0.0",
     "jiti": "^2.7.0",
     "typescript": "^6.0.3"
   }
