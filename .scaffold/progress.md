@@ -131,5 +131,9 @@ Update this file frequently during execution.
 - [x] Staged docs for the `pi-xai-oauth` 1.2.4 update path covering published npm installs and local checkout reinstalls.
 - [x] Recorded that the issue 19 verification work now targets the real pi 0.79.x API guard instead of a mocked guard.
 - [x] Intended development dependency pins for the verification branch: `@earendil-works/pi-ai@^0.79.8` and `@earendil-works/pi-coding-agent@^0.79.8`.
+- [x] `npm install` resolved both pi packages to 0.79.8 and added direct `jiti@^2.7.0` for the verification loader.
+- [x] Replaced the mocked API-guard regression with real-package guard coverage that handles synchronous guard throws and `result.errorMessage`.
+- [x] Adapted Cursor/Grok CLI shims for pi-coding-agent 0.79.8 by avoiding external `rg`/`fd` downloads in the compatibility shim tests.
+- [x] Verified final branch with `npm test`, `npm run typecheck`, and `node bin/setup.js --help`.
 
 **Current branch:** feature/issue-19-api-guard

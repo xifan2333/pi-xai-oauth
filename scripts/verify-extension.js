@@ -130,8 +130,8 @@ async function verifyCursorToolShims(tools) {
   const grepResult = await runCursorTool(tools, "Grep", { query: "DEFAULT_XAI_MODEL", include: "*.ts", path: "extensions", limit: 5 });
   assert.match(grepResult.content[0].text, /xai\/(auth|constants|models)\.ts|xai-oauth\.ts/, "Grep shim should map query/include to pi grep pattern/glob");
 
-  const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts" });
-  assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map to pi find");
+  const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts", limit: 5 });
+  assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map glob to pi find");
 
   const readResult = await runCursorTool(tools, "Read", { file_path: "package.json", limit: 3 });
   assert.match(readResult.content[0].text, /"name": "pi-xai-oauth"/, "Read shim should map file_path to pi read path");

@@ -1,8 +1,89 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { streamSimpleOpenAIResponses } from "@earendil-works/pi-ai";
 import { randomUUID } from "crypto";
 import { isGrokCliProxyModel, xaiBaseUrlForModel, xaiModelForRequest, xaiModelRequestHeaders, xaiResponsesUrlForModel } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
+
+type AssistantStreamEvent = Record<string, any>;
+
+function resultFromStreamEvent(event: AssistantStreamEvent): any {
+  if (event.type === "done") return event.message;
+  if (event.type === "error") return event.error;
+  return undefined;
+}
+
+function createForwardingAssistantStream() {
+  const queue: AssistantStreamEvent[] = [];
+  const waiting: Array<(result: IteratorResult<AssistantStreamEvent>) => void> = [];
+  let done = false;
+  let resolveResult: (result: any) => void = () => {};
+  const resultPromise = new Promise<any>((resolve) => {
+    resolveResult = resolve;
+  });
+
+  function finish(result: any) {
+    if (done) return;
+    done = true;
+    resolveResult(result);
+  }
+
+  return {
+    push(event: AssistantStreamEvent) {
+      const finalResult = resultFromStreamEvent(event);
+      const isTerminal = event.type === "done" || event.type === "error";
+      if (isTerminal) finish(finalResult);
+      if (done && !isTerminal) return;
+      const waiter = waiting.shift();
+      if (waiter) {
+        waiter({ value: event, done: false });
+      } else {
+        queue.push(event);
+      }
+    },
+    end(result?: any) {
+      finish(result);
+      while (waiting.length > 0) {
+        waiting.shift()?.({ value: undefined as any, done: true });
+      }
+    },
+    result() {
+      return resultPromise;
+    },
+    async *[Symbol.asyncIterator]() {
+      while (true) {
+        if (queue.length > 0) {
+          yield queue.shift()!;
+        } else if (done) {
+          return;
+        } else {
+          const result = await new Promise<IteratorResult<AssistantStreamEvent>>((resolve) => waiting.push(resolve));
+          if (result.done) return;
+          yield result.value;
+        }
+      }
+    },
+  };
+}
+
+function streamErrorMessage(model: Model<Api>, error: unknown) {
+  return {
+    role: "assistant",
+    content: [],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "error",
+    errorMessage: error instanceof Error ? error.message : String(error),
+    timestamp: Date.now(),
+  };
+}
 
 /** POST a JSON body to an xAI endpoint with OAuth bearer auth. */
 export async function postXaiJson(
@@ -71,13 +152,28 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   const headers = { ...(options?.headers || {}) };
   if (grokCliSessionId && !headers["x-grok-conv-id"]) headers["x-grok-conv-id"] = grokCliSessionId;
 
-  return streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
-    ...options,
-    headers,
-    async onPayload(payload) {
-      const rewritten = rewriteXaiResponsesPayload(payload, streamModel, options);
-      const userRewritten = await options?.onPayload?.(rewritten, streamModel);
-      return userRewritten === undefined ? rewritten : userRewritten;
-    },
-  });
+  const stream = createForwardingAssistantStream();
+  void (async () => {
+    try {
+      const { streamSimpleOpenAIResponses } = await import("@earendil-works/pi-ai");
+      const inner = streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
+        ...options,
+        headers,
+        async onPayload(payload) {
+          const rewritten = rewriteXaiResponsesPayload(payload, streamModel, options);
+          const userRewritten = await options?.onPayload?.(rewritten, streamModel);
+          return userRewritten === undefined ? rewritten : userRewritten;
+        },
+      });
+      for await (const event of inner as AsyncIterable<AssistantStreamEvent>) {
+        stream.push(event);
+      }
+      stream.end();
+    } catch (error) {
+      const message = streamErrorMessage(model, error);
+      stream.push({ type: "error", reason: "error", error: message });
+      stream.end(message);
+    }
+  })();
+  return stream;
 }
