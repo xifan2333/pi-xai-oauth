@@ -118,3 +118,11 @@ Update this file frequently during execution.
 - [x] Added OAuth verification coverage for raw pasted codes, matching-state manual callback URLs, and wrong-state manual queries.
 - [x] Patched `parseCallbackInput()` to recognize raw xAI authorization codes before URL/query parsing.
 - [x] Verified fix with `npm test`, `npm run typecheck`, and `git diff --check`.
+
+## Phase 12: Issue 19 pi 0.79.8 API guard repair
+- [x] Created branch `feature/issue-19-api-guard`.
+- [x] Patched `extensions/xai/responses.ts` so `streamSimpleOpenAIResponses` receives a delegate model with `api: "openai-responses"` while xAI routing and payload hooks keep the `xai-responses` stream model.
+- [x] Added regression coverage in `scripts/verify-extension.js` with a guarded mock of `streamSimpleOpenAIResponses`.
+- [x] Verified with `npm test` and `npm run typecheck`.
+
+**Current branch:** feature/issue-19-api-guard

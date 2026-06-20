@@ -61,10 +61,17 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
       ...xaiModelRequestHeaders(model.id, grokCliSessionId),
     },
   };
+  // pi 0.79.8+ API-guards the OpenAI Responses helper; keep the xAI
+  // stream model for routing/payload rewriting, but delegate with the API
+  // tag expected by the helper.
+  const openAIResponsesModel = {
+    ...streamModel,
+    api: "openai-responses" as const,
+  };
   const headers = { ...(options?.headers || {}) };
   if (grokCliSessionId && !headers["x-grok-conv-id"]) headers["x-grok-conv-id"] = grokCliSessionId;
 
-  return streamSimpleOpenAIResponses(streamModel as Model<"openai-responses">, context, {
+  return streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
     ...options,
     headers,
     async onPayload(payload) {

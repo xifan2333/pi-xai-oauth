@@ -175,6 +175,75 @@ async function verifyCursorToolActivation(loadResult) {
   assert.ok(!getActiveTools().includes("Grep"), "Cursor shims should be disabled for non-Grok-CLI xAI models");
 }
 
+async function verifyOpenAIResponsesDelegateApi() {
+  const mockPath = path.join(repoRoot, ".tmp-pi-ai-guard.cjs");
+  await fs.writeFile(
+    mockPath,
+    `
+exports.streamSimpleOpenAIResponses = (model, context, options = {}) => {
+  if (model.api !== "openai-responses") {
+    throw new Error(\`Mismatched api: \${model.api} expected openai-responses\`);
+  }
+  global.__xaiOpenAIResponsesDelegateModel = model;
+  return {
+    async result() {
+      const rewritten = await options.onPayload?.({
+        model: model.id,
+        input: [{ role: "developer", content: "system rules" }, { role: "user", content: "hello" }],
+        prompt_cache_retention: "24h",
+      }, model);
+      return { api: model.api, rewritten };
+    },
+    async *[Symbol.asyncIterator]() {},
+  };
+};
+`,
+  );
+
+  try {
+    const guardedJiti = createJiti(__filename, {
+      interopDefault: true,
+      moduleCache: false,
+      alias: { "@earendil-works/pi-ai": mockPath },
+    });
+    const { streamSimpleXaiResponses } = guardedJiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
+    let callbackModelApi;
+    const stream = streamSimpleXaiResponses(
+      {
+        id: "grok-build",
+        provider: "xai-auth",
+        api: "xai-responses",
+        baseUrl: "https://api.x.ai/v1",
+        headers: {},
+        reasoning: true,
+        input: ["text", "image"],
+      },
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+      {
+        apiKey: "oauth-token",
+        sessionId: "delegate-session",
+        onPayload(payload, callbackModel) {
+          callbackModelApi = callbackModel.api;
+          return payload;
+        },
+      },
+    );
+
+    const result = await stream.result();
+    const delegateModel = global.__xaiOpenAIResponsesDelegateModel;
+    assert.equal(delegateModel.api, "openai-responses", "xAI streams should satisfy pi's OpenAI Responses API guard");
+    assert.equal(delegateModel.baseUrl, "https://cli-chat-proxy.grok.com/v1", "delegate model should preserve xAI model routing");
+    assert.equal(delegateModel.headers["x-grok-conv-id"], "delegate-session", "delegate model should preserve xAI routing headers");
+    assert.equal(callbackModelApi, "xai-responses", "payload hooks should still receive xAI model metadata");
+    assert.equal(result.rewritten.prompt_cache_retention, undefined, "xAI payload rewrite should still remove unsupported retention");
+    assert.equal(result.rewritten.prompt_cache_key, "delegate-session", "xAI payload rewrite should still apply session cache keys");
+  } finally {
+    delete global.__xaiOpenAIResponsesDelegateModel;
+    await fs.rm(mockPath, { force: true }).catch(() => {});
+  }
+}
+
+
 async function verifyCliModelStreamRouting(provider) {
   const composer = provider.models.find((model) => model.id === "grok-composer-2.5-fast");
   const model = {
@@ -325,6 +394,8 @@ async function main() {
     assert.equal(provider.models.find((model) => model.id === "grok-composer-2.5-fast")?.reasoning, false);
     assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
+
+    await verifyOpenAIResponsesDelegateApi();
 
     await verifyCliModelStreamRouting(provider);
     await verifyCursorToolActivation(firstLoad);
