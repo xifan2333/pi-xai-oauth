@@ -1,7 +1,7 @@
 # Execution Progress
 
 **Project:** pi-xai-oauth Repair + Tool Verification  
-**Branch:** feature/xai-tools-all-verified  
+**Branch:** feature/issue-19-api-guard
 **Started:** 2026-05-27
 
 ## Completed
@@ -118,3 +118,24 @@ Update this file frequently during execution.
 - [x] Added OAuth verification coverage for raw pasted codes, matching-state manual callback URLs, and wrong-state manual queries.
 - [x] Patched `parseCallbackInput()` to recognize raw xAI authorization codes before URL/query parsing.
 - [x] Verified fix with `npm test`, `npm run typecheck`, and `git diff --check`.
+
+## Phase 12: Issue 19 pi 0.79.8 API guard repair
+- [x] Created branch `feature/issue-19-api-guard`.
+- [x] Patched `extensions/xai/responses.ts` so `streamSimpleOpenAIResponses` receives a delegate model with `api: "openai-responses"` while xAI routing and payload hooks keep the `xai-responses` stream model.
+- [x] Added regression coverage in `scripts/verify-extension.js` with a guarded mock of `streamSimpleOpenAIResponses`.
+- [x] Verified with `npm test` and `npm run typecheck`.
+
+**Current branch:** feature/issue-19-api-guard
+
+## Phase 13: Issue 19 real-package verification and 1.2.4 release staging
+- [x] Staged docs for the `pi-xai-oauth` 1.2.4 update path covering published npm installs and local checkout reinstalls.
+- [x] Recorded that the issue 19 verification work now targets the real pi 0.79.x API guard instead of a mocked guard.
+- [x] Intended development dependency pins for the verification branch: `@earendil-works/pi-ai@^0.79.8` and `@earendil-works/pi-coding-agent@^0.79.8`.
+- [x] `npm install` resolved both pi packages to 0.79.8 and added direct `jiti@^2.7.0` for the verification loader.
+- [x] Replaced the mocked API-guard regression with real-package guard coverage that handles synchronous guard throws and `result.errorMessage`.
+- [x] Adapted Cursor/Grok CLI shims for pi-coding-agent 0.79.8 by avoiding external `rg`/`fd` downloads in the compatibility shim tests.
+- [x] Verified final branch with `npm test`, `npm run typecheck`, and `node bin/setup.js --help`.
+- [x] `npm pack --dry-run` confirmed the 1.2.4 tarball excludes agent worktrees/state.
+- [ ] `npm publish` is blocked by npm one-time-password authentication; rerun after completing npm CLI auth.
+
+**Current branch:** feature/issue-19-api-guard

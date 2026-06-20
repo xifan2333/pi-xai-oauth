@@ -130,8 +130,23 @@ async function verifyCursorToolShims(tools) {
   const grepResult = await runCursorTool(tools, "Grep", { query: "export const DEFAULT_XAI_MODEL", include: "*.ts", path: "extensions", limit: 5 });
   assert.match(grepResult.content[0].text, /xai\/constants\.ts/, "Grep shim should map query/include to pi grep pattern/glob");
 
-  const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts" });
-  assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map to pi find");
+  const grepContextResult = await runCursorTool(tools, "Grep", {
+    query: "DEFAULT_XAI_MODEL",
+    include: "constants.ts",
+    path: "extensions/xai",
+    context: 1,
+    limit: 1,
+  });
+  assert.match(grepContextResult.content[0].text, /constants\.ts-17-.*XAI_PROVIDER_ID/, "Grep shim should include leading context lines");
+  assert.match(grepContextResult.content[0].text, /constants\.ts:18:.*DEFAULT_XAI_MODEL/, "Grep shim should mark the matched line");
+  await assert.rejects(
+    () => runCursorTool(tools, "Grep", { query: "(a+)+$", include: "constants.ts", path: "extensions/xai" }),
+    /Unsafe regex pattern/,
+    "Grep shim should reject regexes with obvious catastrophic-backtracking structure",
+  );
+
+  const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts", limit: 5 });
+  assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map glob to pi find");
 
   const readResult = await runCursorTool(tools, "Read", { file_path: "package.json", limit: 3 });
   assert.match(readResult.content[0].text, /"name": "pi-xai-oauth"/, "Read shim should map file_path to pi read path");
@@ -174,6 +189,76 @@ async function verifyCursorToolActivation(loadResult) {
   await handlers.get("model_select")?.({ model: { provider: "xai-auth", id: "grok-4.3" } }, ctx);
   assert.ok(!getActiveTools().includes("Grep"), "Cursor shims should be disabled for non-Grok-CLI xAI models");
 }
+
+function lastResultErrorMessage(result) {
+  return result && typeof result.errorMessage === "string" ? result.errorMessage : "";
+}
+
+async function captureStreamResultMessage(createStream) {
+  try {
+    const result = await createStream().result();
+    return lastResultErrorMessage(result);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function verifyRealGuardSemantics() {
+  const { streamSimpleOpenAIResponses } = await import("@earendil-works/pi-ai");
+  const context = { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] };
+  const baseModel = {
+    id: "grok-4.3",
+    provider: "xai-auth",
+    baseUrl: "https://api.x.ai/v1",
+    headers: {},
+    reasoning: true,
+    input: ["text", "image"],
+  };
+
+  const rejectedMessage = await captureStreamResultMessage(() =>
+    streamSimpleOpenAIResponses({ ...baseModel, api: "xai-responses" }, context, { apiKey: "oauth-token" }),
+  );
+  assert.match(
+    rejectedMessage,
+    /Mismatched api/,
+    "installed @earendil-works/pi-ai must API-guard openai-responses (bump dev dep to 0.79.8)",
+  );
+
+  const before = requests.length;
+  const acceptedMessage = await captureStreamResultMessage(() =>
+    streamSimpleOpenAIResponses({ ...baseModel, api: "openai-responses" }, context, { apiKey: "oauth-token" }),
+  );
+  assert.doesNotMatch(acceptedMessage, /Mismatched api/, "an openai-responses model must satisfy the real guard");
+  assert.ok(
+    requests.slice(before).some((entry) => entry.url?.startsWith("https://api.x.ai")),
+    "guarded call should reach the xAI endpoint",
+  );
+}
+
+async function verifyXaiStreamPassesRealGuard(provider) {
+  const before = requests.length;
+  const message = await captureStreamResultMessage(() =>
+    provider.streamSimple(
+      {
+        id: "grok-4.3",
+        provider: "xai-auth",
+        api: "xai-responses",
+        baseUrl: "https://api.x.ai/v1",
+        headers: {},
+        reasoning: true,
+        input: ["text", "image"],
+      },
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+      { apiKey: "oauth-token", sessionId: "guard-session" },
+    ),
+  );
+  assert.doesNotMatch(message, /Mismatched api/, "xAI provider stream must satisfy pi 0.79.8 API guard");
+  assert.ok(
+    requests.slice(before).some((entry) => entry.url?.startsWith("https://api.x.ai")),
+    "xAI stream should reach the xAI endpoint past the guard",
+  );
+}
+
 
 async function verifyCliModelStreamRouting(provider) {
   const composer = provider.models.find((model) => model.id === "grok-composer-2.5-fast");
@@ -332,6 +417,9 @@ async function main() {
     assert.equal(provider.models.find((model) => model.id === "grok-composer-2.5-fast")?.reasoning, false);
     assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
+
+    await verifyRealGuardSemantics();
+    await verifyXaiStreamPassesRealGuard(provider);
 
     await verifyCliModelStreamRouting(provider);
     await verifyCursorToolActivation(firstLoad);
