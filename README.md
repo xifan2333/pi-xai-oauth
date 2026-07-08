@@ -24,11 +24,13 @@ npx pi-xai-oauth
 | **Context** | 500K tokens |
 | **Input** | text + image |
 | **Reasoning** | `low` / `medium` / `high` (defaults to **high**; cannot be disabled) |
+| **Fast mode** | Same model with **`low`** reasoning effort — not a separate model ID |
 | **Pricing** | $2 / $6 per 1M input/output · $0.50 cache read |
 
 ```bash
 pi --model grok-4.5 "Ship this feature end-to-end"
 pi --model grok-4.5:high "Review this architecture for failure modes"
+pi --model grok-4.5:low "Quick status check"   # fast mode
 ```
 
 This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-integrated xAI OAuth models in pi, with proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.).
@@ -64,6 +66,7 @@ This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Co
 - **Token refresh** — refresh tokens are stored and rotated automatically before expiry
 - **Reuses existing credentials** — auto-detects `~/.grok/auth.json` from the official Grok CLI
 - **Grok 4.5 flagship (default)** — xAI's newest model for coding, agentic tasks, and knowledge work; 500K context, text+image input, high reasoning by default
+- **Grok 4.5 fast mode** — same model with `low` reasoning effort (`/think low` or `grok-4.5:low`); not a separate model ID
 - **Long-context option** — Grok 4.3 still available with a full 1M context window
 - **Coding models** — Grok Build and Composer 2.5 Fast are available from the same `xai-auth` provider
 - **Reasoning support** — configurable thinking levels: `low` / `medium` / `high`
@@ -192,7 +195,7 @@ pi --model grok-4.5 "Write a poem about Rust"
 
 | Model ID | Description |
 |----------|-------------|
-| `grok-4.5` | **Default.** xAI flagship for coding, agentic tasks, and knowledge work; reasoning low/medium/high, 500K context, text+image. |
+| `grok-4.5` | **Default.** xAI flagship for coding, agentic tasks, and knowledge work; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
 | `grok-4.3` | Full reasoning, 1M context. |
 | `grok-build` | Grok Build coding model via the Grok CLI OAuth endpoint, 512K context. |
 | `grok-composer-2.5-fast` | Composer 2.5 Fast coding model via the Grok CLI OAuth endpoint, 200K context. |
@@ -223,26 +226,29 @@ pi --model grok-4.20-0309-non-reasoning "Quick answer"
 
 ### Reasoning / Thinking Levels
 
-Grok 4.5 and Grok 4.3 support configurable thinking levels:
+Grok 4.5 and Grok 4.3 support configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
 
 ```
 /think high
 /think medium
-/think low
+/think low      # Grok 4.5 fast mode
 ```
 
 Or via CLI:
 
 ```bash
 pi --model grok-4.5:high "Solve a complex math problem"
-pi --model grok-4.5:low "What's the weather?"
+pi --model grok-4.5:medium "Summarize this design doc"
+pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 ```
 
-- **`high`** — Deep reasoning, longer deliberation. Best for complex code, math, analysis.
-- **`medium`** — Balanced speed and depth.
-- **`low`** — Fast responses, minimal reasoning. Good for simple Q&A.
+| Effort | Grok 4.5 behavior (per xAI docs) | Best for |
+|--------|-----------------------------------|----------|
+| **`high`** (default) | More reasoning tokens, deeper thinking | Hard coding, complex math, multi-step logic |
+| **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
+| **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-4.5` defaults to high reasoning when no effort is specified; reasoning cannot be disabled. `grok-build` and `grok-composer-2.5-fast` are routed through xAI's Grok CLI OAuth endpoint using the same X account OAuth token. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). `grok-build` and `grok-composer-2.5-fast` are routed through xAI's Grok CLI OAuth endpoint using the same X account OAuth token. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
 
 ### Grok 4.5 source notes
 
