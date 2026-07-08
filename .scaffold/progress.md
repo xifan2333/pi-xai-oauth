@@ -149,3 +149,15 @@ Update this file frequently during execution.
 - [ ] `npm publish` is blocked by npm one-time-password authentication; rerun after completing npm CLI auth.
 
 **Current branch:** feature/issue-19-api-guard
+
+## Phase 15: Add Grok 4.5 model catalog support
+- [x] Created branch `feature/add-grok-4-5`.
+- [x] Researched official xAI Grok 4.5 docs, pricing, reasoning, launch notes, and card/paper availability.
+- [x] Added `grok-4.5` to `extensions/xai/models.ts` with text+image input, reasoning support, 500K context, and $2/$0.50 cached/$6 pricing.
+- [x] Made `grok-4.5` the default model in constants, setup, and README showcase.
+- [x] Hardened Grep Cursor shim: TypeBox required `pattern`, clearer errors, query alias mapping.
+- [x] Improved Responses `prompt_cache_key` / `x-grok-conv-id` routing per xAI caching docs.
+- [x] Updated README, setup copy, package description, and verification coverage for Grok 4.5.
+- [x] Verified with `npm test`, `npm run typecheck`.
+
+**Current branch:** feature/add-grok-4-5

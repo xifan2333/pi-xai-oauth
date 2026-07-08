@@ -9,19 +9,41 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue)](https://www.typescriptlang.org/)
 [![pi compatible](https://img.shields.io/badge/pi-Compatible-blueviolet)](https://pi.dev)
 
-**xAI (Grok) OAuth provider for pi** — 1M context, reasoning, and custom xAI tools.
+**xAI (Grok) OAuth provider for pi** — now with **Grok 4.5**, reasoning, long context, and custom xAI tools.
+
 ```bash
 npx pi-xai-oauth
 ```
 
-This package adds **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-integrated xAI OAuth models in pi, with proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.).
+## ✨ New: Grok 4.5
 
-> **Latest compatibility note:** `pi-xai-oauth` 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy installed with `pi remove npm:pi-xai-oauth && pi install .`.
+| | |
+|---|---|
+| **Model ID** | `grok-4.5` |
+| **Role** | xAI flagship for coding, agentic tasks, and knowledge work |
+| **Context** | 500K tokens |
+| **Input** | text + image |
+| **Reasoning** | `low` / `medium` / `high` (defaults to **high**; cannot be disabled) |
+| **Fast mode** | Same model with **`low`** reasoning effort — not a separate model ID |
+| **Pricing** | $2 / $6 per 1M input/output · $0.50 cache read |
+
+```bash
+pi --model grok-4.5 "Ship this feature end-to-end"
+pi --model grok-4.5:high "Review this architecture for failure modes"
+pi --model grok-4.5:low "Quick status check"   # fast mode
+```
+
+This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-integrated xAI OAuth models in pi, with proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.).
+
+> **Latest release:** `pi-xai-oauth` **1.3.0** adds **Grok 4.5** as the default model (500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
+>
+> **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
 
 ---
 
 ## Table of Contents
 
+- [✨ New: Grok 4.5](#-new-grok-45)
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
@@ -46,7 +68,9 @@ This package adds **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-in
 - **Automatic browser open** — pi opens your default browser automatically; fall back to manual paste if needed
 - **Token refresh** — refresh tokens are stored and rotated automatically before expiry
 - **Reuses existing credentials** — auto-detects `~/.grok/auth.json` from the official Grok CLI
-- **1M context window** — Grok 4.3's full context, no truncation
+- **Grok 4.5 flagship (default)** — xAI's newest model for coding, agentic tasks, and knowledge work; 500K context, text+image input, high reasoning by default
+- **Grok 4.5 fast mode** — same model with `low` reasoning effort (`/think low` or `grok-4.5:low`); not a separate model ID
+- **Long-context option** — Grok 4.3 still available with a full 1M context window
 - **Coding models** — Grok Build and Composer 2.5 Fast are available from the same `xai-auth` provider
 - **Reasoning support** — configurable thinking levels: `low` / `medium` / `high`
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
@@ -82,7 +106,7 @@ npx pi-xai-oauth
 This runs the setup script which:
 1. Installs `npm:pi-xai-oauth` into pi
 2. Sets `xai-auth` as your default provider
-3. Sets `grok-4.3` as your default model
+3. Sets `grok-4.5` as your default model
 4. Enables `high` thinking level by default
 
 ### Manual install
@@ -97,7 +121,7 @@ Then optionally configure it as default:
 # In ~/.pi/agent/settings.json:
 {
   "defaultProvider": "xai-auth",
-  "defaultModel": "grok-4.3",
+  "defaultModel": "grok-4.5",
   "defaultThinkingLevel": "high"
 }
 ```
@@ -167,14 +191,15 @@ pi "Explain quantum computing like I'm 5"
 Or use a specific model:
 
 ```bash
-pi --model grok-4.3 "Write a poem about Rust"
+pi --model grok-4.5 "Write a poem about Rust"
 ```
 
 ### Switching Models
 
 | Model ID | Description |
 |----------|-------------|
-| `grok-4.3` | **Default.** Full reasoning, 1M context. |
+| `grok-4.5` | **Default.** xAI flagship for coding, agentic tasks, and knowledge work; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
+| `grok-4.3` | Full reasoning, 1M context. |
 | `grok-build` | Grok Build coding model via the Grok CLI OAuth endpoint, 512K context. |
 | `grok-composer-2.5-fast` | Composer 2.5 Fast coding model via the Grok CLI OAuth endpoint, 200K context. |
 | `grok-4.20-0309-reasoning` | Grok 4.20 with automatic reasoning, 2M context. |
@@ -184,6 +209,7 @@ pi --model grok-4.3 "Write a poem about Rust"
 From the pi TUI:
 
 ```
+/model grok-4.5
 /model grok-4.3
 /model grok-build
 /model grok-composer-2.5-fast
@@ -194,7 +220,8 @@ From the pi TUI:
 From the command line:
 
 ```bash
-pi --model grok-4.3 "Your prompt here"
+pi --model grok-4.5 "Your prompt here"
+pi --model grok-4.3 "Use the 1M-context model"
 pi --model grok-build "Implement this feature"
 pi --model grok-composer-2.5-fast "Refactor this module"
 pi --model grok-4.20-0309-non-reasoning "Quick answer"
@@ -202,26 +229,40 @@ pi --model grok-4.20-0309-non-reasoning "Quick answer"
 
 ### Reasoning / Thinking Levels
 
-Grok 4.3 supports configurable thinking levels:
+Grok 4.5 and Grok 4.3 support configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
 
 ```
 /think high
 /think medium
-/think low
+/think low      # Grok 4.5 fast mode
 ```
 
 Or via CLI:
 
 ```bash
-pi --model grok-4.3:high "Solve a complex math problem"
-pi --model grok-4.3:low "What's the weather?"
+pi --model grok-4.5:high "Solve a complex math problem"
+pi --model grok-4.5:medium "Summarize this design doc"
+pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 ```
 
-- **`high`** — Deep reasoning, longer deliberation. Best for complex code, math, analysis.
-- **`medium`** — Balanced speed and depth.
-- **`low`** — Fast responses, minimal reasoning. Good for simple Q&A.
+| Effort | Grok 4.5 behavior (per xAI docs) | Best for |
+|--------|-----------------------------------|----------|
+| **`high`** (default) | More reasoning tokens, deeper thinking | Hard coding, complex math, multi-step logic |
+| **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
+| **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-build` and `grok-composer-2.5-fast` are routed through xAI's Grok CLI OAuth endpoint using the same X account OAuth token. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). `grok-build` and `grok-composer-2.5-fast` are routed through xAI's Grok CLI OAuth endpoint using the same X account OAuth token. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+
+### Grok 4.5 source notes
+
+Official xAI sources used for this catalog update:
+
+- [Grok 4.5 guide](https://docs.x.ai/developers/grok-4-5) — model ID, API usage, reasoning levels, tools, and availability notes.
+- [Grok 4.5 model details](https://docs.x.ai/developers/models/grok-4.5) — text+image input, 500K context window, cached input pricing, regions, and rate-limit snapshot.
+- [Reasoning docs](https://docs.x.ai/developers/model-capabilities/text/reasoning) — `low` / `medium` / `high` reasoning effort, default `high`, and non-disableable reasoning.
+- [Launch announcement](https://x.ai/news/grok-4-5) — coding/agentic benchmark notes, Grok Build/Cursor availability, and EU availability caveat.
+
+No Grok 4.5-specific model card, label card, system card, paper, or official max-output-token limit was found in the xAI docs/news/data sources during this update. The package keeps the existing Grok Responses max-token ceiling as a placeholder until xAI publishes official model metadata for that field.
 
 ### Composer / Grok Build Tool Compatibility
 
@@ -239,7 +280,7 @@ Composer 2.5 and Grok Build are trained against Cursor/Grok CLI-style tool names
 | `Shell` | `bash` |
 | `WebSearch` | xAI native web search |
 
-The shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are disabled again when you switch back to non-Grok-CLI models such as `grok-4.3`.
+The shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are disabled again when you switch back to non-Grok-CLI models such as `grok-4.5` or `grok-4.3`.
 
 ---
 
@@ -257,7 +298,7 @@ Generate text with full reasoning and stateful conversations.
 ```json
 {
   "prompt": "Explain neural networks",
-  "model": "grok-4.3",
+  "model": "grok-4.5",
   "reasoning_effort": "high"
 }
 ```
@@ -287,7 +328,7 @@ Search X (Twitter) using xAI's native `x_search` tool.
 
 ```json
 {
-  "query": "grok 4.3"
+  "query": "grok 4.5"
 }
 ```
 
@@ -355,7 +396,7 @@ Research a topic with Grok reasoning plus native web and X search tools.
 | Update | `pi update npm:pi-xai-oauth` |
 | Remove | `pi remove npm:pi-xai-oauth` |
 | List packages | `pi list` |
-| Set default model | `/model grok-4.3` (in TUI) |
+| Set default model | `/model grok-4.5` (in TUI) |
 | Set thinking level | `/think high` (in TUI) |
 
 ---
@@ -463,7 +504,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4 handles that guard for Grok/xAI streaming. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; **1.3.0** adds Grok 4.5 as the default model. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .
@@ -586,4 +627,4 @@ PRs welcome! If you find issues or want to improve the OAuth flow, feel free to 
 
 ---
 
-*Powered by Grok 4.3 — 1M context, reasoning, and the full xAI API.*
+*Powered by Grok 4.5 — flagship reasoning, agentic coding, and the full xAI API.*

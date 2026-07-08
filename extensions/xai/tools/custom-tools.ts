@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveXaiAuthToken } from "../auth";
 import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL, XAI_IMAGES_GENERATIONS_URL } from "../constants";
 import { normalizeXaiImageInput } from "../images";
-import { grokSupportsReasoningEffort } from "../models";
+import { grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiTextInput, xaiToolError } from "./common";
@@ -18,7 +18,12 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         properties: {
           prompt: { type: "string", description: "The prompt or question" },
           model: { type: "string", description: "Model to use", default: DEFAULT_XAI_MODEL },
-          reasoning_effort: { type: "string", enum: ["none", "low", "medium", "high"], default: "medium" },
+          reasoning_effort: {
+            type: "string",
+            enum: ["none", "low", "medium", "high"],
+            description:
+              "Reasoning effort. Defaults to high for grok-4.5 and medium for other models when omitted.",
+          },
           response_format: { type: "string", description: "Set to 'json' for JSON output" },
           previous_response_id: { type: "string", description: "Continue conversation" },
           image_url: { type: "string", description: "Optional image URL for vision/multimodal input (supports image analysis)" },
@@ -50,7 +55,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
           input,
         };
 
-        const effort = params.reasoning_effort || "medium";
+        const effort = params.reasoning_effort || (normalizedXaiModelId(model) === "grok-4.5" ? "high" : "medium");
         if (grokSupportsReasoningEffort(model) && effort !== "none") {
           body.reasoning = { effort };
         }

@@ -3,7 +3,7 @@
 > **For AI coding agents only.** Keep this file machine-readable and concise. Human-facing docs live in README.md.
 
 ## Project Overview
-pi-xai-oauth is a pi-package that registers the xAI OAuth provider ("xai-auth") and Grok models (including grok-4.3 with 1M context + reasoning) for the pi coding agent framework.
+pi-xai-oauth is a pi-package that registers the xAI OAuth provider ("xai-auth") and Grok models (including grok-4.5 and grok-4.3 with reasoning) for the pi coding agent framework.
 
 Core flow: `bin/setup.js` → `pi install` → provider registration in `extensions/xai-oauth.ts` → OAuth PKCE login in `extensions/xai/oauth.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`.
 

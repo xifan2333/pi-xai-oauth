@@ -112,8 +112,15 @@ export function normalizeEditArgs(args: unknown) {
 /** Normalize arguments for the Cursor/Grok CLI Grep shim. */
 export function normalizeGrepArgs(args: unknown) {
   const params = objectFromCursorArgs(args);
+  const pattern = cursorSearchPattern(params);
+  if (!pattern) {
+    const received = Object.keys(params).sort().join(", ") || "(none)";
+    throw new Error(
+      `Grep requires a non-empty pattern (or query alias). Received keys: ${received}`,
+    );
+  }
   return {
-    pattern: cursorSearchPattern(params) || "",
+    pattern,
     path: firstString(params.path, params.directory, params.dir, params.folder, params.file_path, params.filePath),
     glob: cursorGlob(params),
     ignoreCase: firstBoolean(params.ignoreCase, params.ignore_case, params.case_insensitive, params.caseInsensitive),

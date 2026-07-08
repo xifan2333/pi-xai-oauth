@@ -10,6 +10,7 @@ import {
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { readdir, readFile, rm, stat } from "fs/promises";
 import { join, relative, sep } from "path";
+import { Type } from "typebox";
 import { resolveXaiAuthToken } from "../auth";
 import { DEFAULT_XAI_MODEL, XAI_CURSOR_TOOL_NAMES, XAI_PROVIDER_ID } from "../constants";
 import { isGrokCliProxyModel } from "../models";
@@ -35,6 +36,34 @@ const DEFAULT_CURSOR_GREP_LIMIT = 1000;
 const MAX_CURSOR_REGEX_LENGTH = 500;
 const MAX_CURSOR_GREP_CONTEXT_LINES = 20;
 const SKIPPED_SEARCH_DIRS = new Set([".git", ".omp", "node_modules"]);
+
+/**
+ * TypeBox schema for the Grep shim.
+ * `pattern` is required (same as native pi grep) so models cannot omit the search text.
+ * `query` remains an optional Cursor/Grok CLI alias and is mapped in prepareArguments.
+ */
+const grepShimSchema = Type.Object({
+  pattern: Type.String({
+    description: "REQUIRED search text (regex or literal). This is the string to find in files — not a file glob.",
+  }),
+  query: Type.Optional(
+    Type.String({
+      description: "Alias for pattern (Cursor/Grok CLI style). Mapped to pattern before execution.",
+    }),
+  ),
+  path: Type.Optional(Type.String({ description: "Directory or file to search" })),
+  include: Type.Optional(
+    Type.String({ description: "Glob filter for which files to search, e.g. *.ts (NOT the search text)" }),
+  ),
+  glob: Type.Optional(
+    Type.String({ description: "Glob filter for which files to search, e.g. *.ts (NOT the search text)" }),
+  ),
+  glob_filter: Type.Optional(Type.String({ description: "Cursor-style alias for glob" })),
+  ignoreCase: Type.Optional(Type.Boolean({ description: "Case-insensitive search" })),
+  literal: Type.Optional(Type.Boolean({ description: "Treat pattern as a literal string instead of regex" })),
+  context: Type.Optional(Type.Number({ description: "Number of context lines before/after each match" })),
+  limit: Type.Optional(Type.Number({ description: "Maximum matches" })),
+});
 
 function toPosixPath(filePath: string): string {
   return filePath.split(sep).join("/");
@@ -214,7 +243,9 @@ async function runLocalGrep(cwd: string, params: ReturnType<typeof normalizeGrep
   if (!searchInfo) throw new Error(`Path not found: ${searchPath}`);
 
   const pattern = params.pattern || "";
-  if (!pattern) throw new Error("Grep requires a pattern");
+  if (!pattern) {
+    throw new Error("Grep requires a non-empty pattern (or query alias)");
+  }
 
   const ignoreCase = !!params.ignoreCase;
   const literalPattern = ignoreCase ? pattern.toLowerCase() : pattern;
@@ -426,23 +457,13 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
     pi.registerTool({
       name: "Grep",
       label: "Grep",
-      description: "Cursor/Grok CLI compatibility shim for pi's grep tool. Accepts pattern/query plus include/glob filters.",
-      promptSnippet: "Cursor-style alias for grep; accepts pattern/query and include/glob filters",
-      parameters: {
-        type: "object",
-        properties: {
-          pattern: { type: "string", description: "Regex or literal search pattern" },
-          query: { type: "string", description: "Cursor-style alias for pattern" },
-          path: { type: "string", description: "Directory or file to search" },
-          include: { type: "string", description: "Glob filter, e.g. *.ts" },
-          glob: { type: "string", description: "Glob filter, e.g. *.ts" },
-          glob_filter: { type: "string", description: "Cursor-style alias for glob" },
-          ignoreCase: { type: "boolean", description: "Case-insensitive search" },
-          limit: { type: "number", description: "Maximum matches" },
-        },
-      },
+      description:
+        "Search file contents for a required pattern (search regex/string). query is an optional alias for pattern. include/glob only filter which files are searched — they are not the search text.",
+      promptSnippet: "Search file contents; requires pattern (query alias ok); optional include/glob file filters",
+      parameters: grepShimSchema,
       prepareArguments: normalizeGrepArgs,
       execute: async (_toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) => {
+        // Re-normalize so direct execute() callers (and query-only args) still work.
         return runLocalGrep(ctx.cwd, normalizeGrepArgs(params), signal);
       },
     } as any);
