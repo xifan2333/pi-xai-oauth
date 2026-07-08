@@ -18,7 +18,12 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         properties: {
           prompt: { type: "string", description: "The prompt or question" },
           model: { type: "string", description: "Model to use", default: DEFAULT_XAI_MODEL },
-          reasoning_effort: { type: "string", enum: ["none", "low", "medium", "high"], default: "medium" },
+          reasoning_effort: {
+            type: "string",
+            enum: ["none", "low", "medium", "high"],
+            description:
+              "Reasoning effort. Defaults to high for grok-4.5 and medium for other models when omitted.",
+          },
           response_format: { type: "string", description: "Set to 'json' for JSON output" },
           previous_response_id: { type: "string", description: "Continue conversation" },
           image_url: { type: "string", description: "Optional image URL for vision/multimodal input (supports image analysis)" },

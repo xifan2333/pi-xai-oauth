@@ -15,7 +15,7 @@
 npx pi-xai-oauth
 ```
 
-### ✨ New: Grok 4.5
+## ✨ New: Grok 4.5
 
 | | |
 |---|---|
@@ -41,6 +41,7 @@ This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Co
 
 ## Table of Contents
 
+- [✨ New: Grok 4.5](#-new-grok-45)
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
