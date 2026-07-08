@@ -152,6 +152,39 @@ async function verifyCursorToolShims(tools) {
     /Unsafe regex pattern/,
     "Grep shim should reject regexes with obvious catastrophic-backtracking structure",
   );
+  await assert.rejects(
+    () => runCursorTool(tools, "Grep", { path: "extensions", include: "*.ts", limit: 5 }),
+    /Grep requires a non-empty pattern \(or query alias\)/,
+    "Grep shim should fail clearly when pattern/query is omitted",
+  );
+  await assert.rejects(
+    () => runCursorTool(tools, "Grep", { pattern: "   ", path: "extensions" }),
+    /Grep requires a non-empty pattern \(or query alias\)/,
+    "Grep shim should reject whitespace-only patterns",
+  );
+
+  const grepByPattern = await runCursorTool(tools, "Grep", {
+    pattern: "registerProvider",
+    path: "extensions",
+    include: "*.ts",
+    limit: 3,
+  });
+  assert.match(grepByPattern.content[0].text, /registerProvider/, "Grep shim should accept pattern directly");
+
+  const grepPrepared = tools.get("Grep").prepareArguments({
+    query: "export const DEFAULT_XAI_MODEL",
+    include: "*.ts",
+    path: "extensions",
+  });
+  assert.equal(grepPrepared.pattern, "export const DEFAULT_XAI_MODEL", "Grep prepareArguments should map query to required pattern");
+  assert.equal(grepPrepared.glob, "*.ts", "Grep prepareArguments should map include to glob");
+  const grepParams = tools.get("Grep").parameters;
+  assert.ok(
+    Array.isArray(grepParams.required) && grepParams.required.includes("pattern"),
+    "Grep schema should require pattern so models do not omit the search text",
+  );
+  assert.ok(grepParams.properties?.pattern, "Grep schema should expose a pattern property");
+  assert.ok(grepParams.properties?.query, "Grep schema should keep query as a Cursor-style alias");
 
   const globResult = await runCursorTool(tools, "Glob", { glob: "xai-oauth.ts", limit: 5 });
   assert.match(globResult.content[0].text, /extensions\/xai-oauth\.ts/, "Glob shim should map glob to pi find");
@@ -419,6 +452,14 @@ async function main() {
     assert.ok(provider, "xai-auth provider should be registered");
     assert.equal(secondLoad.tools.size, tools.size, "extension reloads should register tools on the new pi API object");
     assert.equal(provider.api, "xai-responses");
+    const grok45 = provider.models.find((model) => model.id === "grok-4.5");
+    assert.ok(grok45, "grok-4.5 should be registered in the xAI model catalog");
+    assert.equal(grok45?.contextWindow, 500_000);
+    assert.equal(grok45?.reasoning, true);
+    assert.equal(grok45?.cost.input, 2);
+    assert.equal(grok45?.cost.cacheRead, 0.5);
+    assert.equal(grok45?.cost.output, 6);
+    assert.equal(grok45?.thinkingLevelMap?.off, null, "Grok 4.5 reasoning cannot be disabled");
     assert.equal(provider.models.find((model) => model.id === "grok-4.3")?.contextWindow, 1_000_000);
     assert.equal(provider.models.find((model) => model.id === "grok-build")?.contextWindow, 512_000);
     assert.equal(provider.models.find((model) => model.id === "grok-composer-2.5-fast")?.contextWindow, 200_000);
@@ -444,6 +485,13 @@ async function main() {
       },
     });
     assert.match(noAuthResult.content[0].text, /No xAI OAuth credentials/, "tools should not fall back to XAI_API_KEY");
+
+    const { body: grok45TextBody } = await runTool(tools, "xai_generate_text", {
+      prompt: "hi",
+      model: "grok-4.5",
+    });
+    assert.equal(grok45TextBody.model, "grok-4.5", "xai_generate_text should support explicit Grok 4.5 requests");
+    assert.equal(grok45TextBody.reasoning.effort, "high", "Grok 4.5 text generation should default to high reasoning");
 
     const { body: composerBody, request: composerRequest } = await runTool(
       tools,

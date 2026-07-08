@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveXaiAuthToken } from "../auth";
 import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL, XAI_IMAGES_GENERATIONS_URL } from "../constants";
 import { normalizeXaiImageInput } from "../images";
-import { grokSupportsReasoningEffort } from "../models";
+import { grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiTextInput, xaiToolError } from "./common";
@@ -50,7 +50,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
           input,
         };
 
-        const effort = params.reasoning_effort || "medium";
+        const effort = params.reasoning_effort || (normalizedXaiModelId(model) === "grok-4.5" ? "high" : "medium");
         if (grokSupportsReasoningEffort(model) && effort !== "none") {
           body.reasoning = { effort };
         }
