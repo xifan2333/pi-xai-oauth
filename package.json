@@ -23,7 +23,7 @@
   "scripts": {
     "scaffold": "node bin/setup.js --scaffold",
     "setup": "node bin/setup.js",
-    "test": "node scripts/verify-extension.js",
+    "test": "node scripts/verify-extension.js && node scripts/verify-setup.js",
     "typecheck": "npx tsc --noEmit"
   },
   "pi": {

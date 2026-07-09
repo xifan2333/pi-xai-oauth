@@ -161,3 +161,14 @@ Update this file frequently during execution.
 - [x] Verified with `npm test`, `npm run typecheck`.
 
 **Current branch:** feature/add-grok-4-5
+
+## Phase 16: npm/local package conflict repair
+- [x] Created branch `fix/dedupe-local-package-install`.
+- [x] Fast-forwarded branch onto latest `origin/main` (`00db405`, v1.3.0).
+- [x] Reproduced `pi` startup tool conflicts when user settings contained both `../../projects/pi-xai-oauth` and `npm:pi-xai-oauth`.
+- [x] Added setup-script package pruning helpers to remove duplicate local installs of this package when installing the npm package.
+- [x] Added setup regression coverage for npm spec parsing, local duplicate pruning, and settings rewrite behavior.
+- [x] Removed the duplicate local package entry from `~/.pi/agent/settings.json` to unblock this machine while preserving the npm default `grok-4.5`.
+- [ ] Re-verify on latest main: `npm test`, `npm run typecheck`, `git diff --check`, `node bin/setup.js --help`, `npm pack --dry-run`.
+
+**Current branch:** fix/dedupe-local-package-install
