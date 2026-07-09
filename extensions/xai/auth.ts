@@ -78,13 +78,19 @@ export function getGrokAuthCredentials(): OAuthCredentials | null {
 }
 
 /** Resolve an xAI OAuth access token from pi context or reusable Grok CLI credentials. */
-export async function resolveXaiAuthToken(ctx: any): Promise<string | null> {
-  const registryModel = ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL);
-  if (registryModel && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
-    if (auth?.ok && auth.apiKey) return auth.apiKey;
-    const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
-    if (authorization.toLowerCase().startsWith("bearer ")) return authorization.slice("bearer ".length);
+export async function resolveXaiAuthToken(ctx: any, modelId?: string): Promise<string | null> {
+  const activeModelId = ctx?.model?.provider === XAI_PROVIDER_ID && typeof ctx.model.id === "string" ? ctx.model.id : undefined;
+  const candidateModelIds = [...new Set([modelId, activeModelId, DEFAULT_XAI_MODEL].filter(Boolean))] as string[];
+
+  if (typeof ctx?.modelRegistry?.find === "function" && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
+    for (const candidateModelId of candidateModelIds) {
+      const registryModel = ctx.modelRegistry.find(XAI_PROVIDER_ID, candidateModelId);
+      if (!registryModel) continue;
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
+      if (auth?.ok && auth.apiKey) return auth.apiKey;
+      const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
+      if (authorization.toLowerCase().startsWith("bearer ")) return authorization.slice("bearer ".length);
+    }
   }
   if (ctx?.apiKey) return ctx.apiKey;
 

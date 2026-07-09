@@ -33,8 +33,8 @@
     "image": "https://raw.githubusercontent.com/BlockedPath/pi-xai-oauth/main/preview.jpeg"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-ai": ">=0.80.3 <0.81.0",
+    "@earendil-works/pi-coding-agent": ">=0.80.3 <0.81.0"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.80.3",

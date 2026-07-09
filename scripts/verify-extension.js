@@ -3,12 +3,16 @@
 const assert = require("assert");
 const path = require("path");
 const fs = require("fs/promises");
+const os = require("os");
 const { createJiti } = require("jiti");
 
 const repoRoot = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { interopDefault: true });
 const extensionModule = jiti(path.join(repoRoot, "extensions", "xai-oauth.ts"));
 const extension = extensionModule.default || extensionModule;
+const { registerCursorToolShims } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "cursor-shims.ts"));
+const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
+const { normalizeXaiImageInput } = jiti(path.join(repoRoot, "extensions", "xai", "images.ts"));
 const originalFetch = global.fetch;
 const requests = [];
 
@@ -217,6 +221,73 @@ async function verifyCursorToolShims(tools) {
   }
 }
 
+async function verifyGrepResourceLimits(tools) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-oauth-grep-"));
+  try {
+    await fs.writeFile(path.join(root, "a.txt"), "needle one\n");
+    await fs.writeFile(path.join(root, "b.txt"), "needle two\n");
+    await fs.writeFile(path.join(root, "c.txt"), "needle three\n");
+    const fileLimitResult = await runCursorTool(
+      tools,
+      "Grep",
+      { pattern: "needle", include: "*.txt", max_files: 2, limit: 10 },
+      { cwd: root },
+    );
+    assert.match(fileLimitResult.content[0].text, /2 files searched limit reached/, "Grep should report file-count truncation");
+    assert.equal(fileLimitResult.details.fileLimitReached, 2, "Grep should expose file-count truncation details");
+
+    await fs.writeFile(path.join(root, "large.txt"), `needle ${"x".repeat(64)}\n`);
+    const largeFileResult = await runCursorTool(
+      tools,
+      "Grep",
+      { pattern: "needle", include: "large.txt", max_file_bytes: 10, limit: 10 },
+      { cwd: root },
+    );
+    assert.match(largeFileResult.content[0].text, /1 file skipped over 10 bytes/, "Grep should report large-file skips");
+    assert.equal(largeFileResult.details.skippedLargeFiles, 1, "Grep should expose large-file skip details");
+    assert.equal(largeFileResult.details.maxFileBytes, 10, "Grep should expose the effective file byte limit");
+
+    const lockedPath = path.join(root, "locked.txt");
+    await fs.writeFile(lockedPath, "needle locked\n");
+    await fs.chmod(lockedPath, 0o000);
+    try {
+      const lockedResult = await runCursorTool(
+        tools,
+        "Grep",
+        { pattern: "needle", include: "locked.txt", limit: 10 },
+        { cwd: root },
+      );
+      assert.doesNotMatch(
+        lockedResult.content[0].text,
+        /skipped over/,
+        "unreadable files should not be reported as large-file skips",
+      );
+      assert.equal(
+        lockedResult.details?.skippedLargeFiles,
+        undefined,
+        "unreadable files must not increment skippedLargeFiles",
+      );
+    } finally {
+      await fs.chmod(lockedPath, 0o644).catch(() => {});
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+function verifyCursorToolCollisionMessage() {
+  assert.throws(
+    () =>
+      registerCursorToolShims({
+        registerTool(tool) {
+          if (tool.name === "Read") throw new Error('Tool "Read" conflicts with another extension');
+        },
+      }),
+    /Could not register xAI Cursor\/Grok CLI shim "Read".*duplicate pi-xai-oauth install.*Tool "Read" conflicts/,
+    "Cursor shim registration conflicts should fail with an actionable package-collision message",
+  );
+}
+
 async function verifyCursorToolActivation(loadResult) {
   const { handlers, getActiveTools } = loadResult;
   const ctx = {
@@ -229,6 +300,103 @@ async function verifyCursorToolActivation(loadResult) {
 
   await handlers.get("model_select")?.({ model: { provider: "xai-auth", id: "grok-4.3" } }, ctx);
   assert.ok(!getActiveTools().includes("Grep"), "Cursor shims should be disabled for non-Grok-CLI xAI models");
+}
+
+async function verifyLocalImagePathConfinement(tools) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-oauth-images-"));
+  const workspace = path.join(root, "workspace");
+  const outside = path.join(root, "outside");
+  await fs.mkdir(workspace, { recursive: true });
+  await fs.mkdir(outside, { recursive: true });
+  const workspaceImage = path.join(workspace, "inside.png");
+  const outsideImage = path.join(outside, "secret.png");
+  const symlinkImage = path.join(workspace, "linked-secret.png");
+  await fs.writeFile(workspaceImage, "workspace image");
+  await fs.writeFile(outsideImage, "outside image");
+  await fs.symlink(outsideImage, symlinkImage);
+
+  try {
+    const before = requests.length;
+    const result = await tools.get("xai_analyze_image").execute(
+      "call_workspace_image",
+      { image: "inside.png", question: "what is here?" },
+      undefined,
+      () => {},
+      { ...authContext(), cwd: workspace },
+    );
+    assert.match(result.content[0].text, /OK/, "workspace-local image should be accepted");
+    const request = requests.slice(before).find((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai"));
+    const imageUrl = request?.body?.input?.[0]?.content?.[0]?.image_url;
+    assert.match(imageUrl, /^data:image\/png;base64,/, "workspace-local image should be encoded as a data URI");
+
+    const outsideResult = await tools.get("xai_analyze_image").execute(
+      "call_outside_absolute_image",
+      { image: outsideImage },
+      undefined,
+      () => {},
+      { ...authContext(), cwd: workspace },
+    );
+    assert.match(outsideResult.content[0].text, /outside the workspace/, "absolute image paths outside the workspace should be rejected");
+
+    const parentEscapeResult = await tools.get("xai_analyze_image").execute(
+      "call_parent_escape_image",
+      { image: "../outside/secret.png" },
+      undefined,
+      () => {},
+      { ...authContext(), cwd: workspace },
+    );
+    assert.match(parentEscapeResult.content[0].text, /outside the workspace/, "../ image escapes should be rejected");
+
+    const symlinkEscapeResult = await tools.get("xai_analyze_image").execute(
+      "call_symlink_escape_image",
+      { image: "linked-secret.png" },
+      undefined,
+      () => {},
+      { ...authContext(), cwd: workspace },
+    );
+    assert.match(symlinkEscapeResult.content[0].text, /outside the workspace/, "symlink image escapes should be rejected");
+
+    const model = { id: "grok-4.5", provider: "xai-auth", api: "openai-responses", input: ["text", "image"], reasoning: true };
+    const rewritten = rewriteXaiResponsesPayload(
+      { model: "grok-4.5", input: [{ role: "user", content: [{ type: "input_image", image_url: "inside.png" }] }] },
+      model,
+      { cwd: workspace },
+    );
+    assert.match(
+      rewritten.input[0].content[0].image_url,
+      /^data:image\/png;base64,/,
+      "Responses payload rewriting should encode workspace-local image paths when cwd is provided",
+    );
+    assert.throws(
+      () =>
+        rewriteXaiResponsesPayload(
+          { model: "grok-4.5", input: [{ role: "user", content: [{ type: "input_image", image_url: outsideImage }] }] },
+          model,
+          { cwd: workspace },
+        ),
+      /outside the workspace/,
+      "Responses payload rewriting should reject local image paths outside the workspace",
+    );
+
+    const missingWorkspace = path.join(root, "missing-workspace");
+    assert.throws(
+      () => normalizeXaiImageInput("inside.png", { cwd: missingWorkspace }),
+      /explicit existing workspace/,
+      "missing workspace cwd should fail with a clear image-path error, not a raw realpath ENOENT",
+    );
+    assert.throws(
+      () =>
+        rewriteXaiResponsesPayload(
+          { model: "grok-4.5", input: [{ role: "user", content: [{ type: "input_image", image_url: "inside.png" }] }] },
+          model,
+          { cwd: missingWorkspace },
+        ),
+      /explicit existing workspace/,
+      "payload rewriting should surface a clear missing-workspace image error",
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 }
 
 function lastResultErrorMessage(result) {
@@ -245,7 +413,8 @@ async function captureStreamResultMessage(createStream) {
 }
 
 async function verifyRealGuardSemantics() {
-  const { streamSimpleOpenAIResponses } = await import("@earendil-works/pi-ai");
+  const { streamSimple } = await import("@earendil-works/pi-ai/api/openai-responses");
+  assert.equal(typeof streamSimple, "function", "installed @earendil-works/pi-ai must expose the 0.80 openai-responses subpath helper");
   const context = { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] };
   const baseModel = {
     id: "grok-4.3",
@@ -256,18 +425,9 @@ async function verifyRealGuardSemantics() {
     input: ["text", "image"],
   };
 
-  const rejectedMessage = await captureStreamResultMessage(() =>
-    streamSimpleOpenAIResponses({ ...baseModel, api: "xai-responses" }, context, { apiKey: "oauth-token" }),
-  );
-  assert.match(
-    rejectedMessage,
-    /Mismatched api/,
-    "installed @earendil-works/pi-ai must API-guard openai-responses (bump dev dep to 0.79.8)",
-  );
-
   const before = requests.length;
   const acceptedMessage = await captureStreamResultMessage(() =>
-    streamSimpleOpenAIResponses({ ...baseModel, api: "openai-responses" }, context, { apiKey: "oauth-token" }),
+    streamSimple({ ...baseModel, api: "openai-responses" }, context, { apiKey: "oauth-token" }),
   );
   assert.doesNotMatch(acceptedMessage, /Mismatched api/, "an openai-responses model must satisfy the real guard");
   assert.ok(
@@ -277,27 +437,51 @@ async function verifyRealGuardSemantics() {
 }
 
 async function verifyXaiStreamPassesRealGuard(provider) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-oauth-stream-images-"));
+  const workspace = path.join(root, "workspace");
+  await fs.mkdir(workspace, { recursive: true });
+  await fs.writeFile(path.join(workspace, "inside.png"), "stream workspace image");
+
   const before = requests.length;
-  const message = await captureStreamResultMessage(() =>
-    provider.streamSimple(
-      {
-        id: "grok-4.3",
-        provider: "xai-auth",
-        api: "xai-responses",
-        baseUrl: "https://api.x.ai/v1",
-        headers: {},
-        reasoning: true,
-        input: ["text", "image"],
-      },
-      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
-      { apiKey: "oauth-token", sessionId: "guard-session" },
-    ),
-  );
-  assert.doesNotMatch(message, /Mismatched api/, "xAI provider stream must satisfy pi 0.79.8 API guard");
-  assert.ok(
-    requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai")),
-    "xAI stream should reach the xAI endpoint past the guard",
-  );
+  try {
+    const message = await captureStreamResultMessage(() =>
+      provider.streamSimple(
+        {
+          id: "grok-4.3",
+          provider: "xai-auth",
+          api: "openai-responses",
+          baseUrl: "https://api.x.ai/v1",
+          headers: {},
+          reasoning: true,
+          input: ["text", "image"],
+        },
+        {
+          cwd: workspace,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "hello" },
+                { type: "image", data: Buffer.from("stream workspace image").toString("base64"), mimeType: "image/png" },
+              ],
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        { apiKey: "oauth-token", sessionId: "guard-session" },
+      ),
+    );
+    assert.doesNotMatch(message, /Mismatched api/, "xAI provider stream must use the OpenAI Responses API surface");
+    const request = requests.slice(before).find((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai"));
+    assert.ok(request, "xAI stream should reach the xAI endpoint past the guard");
+    assert.match(
+      JSON.stringify(request.body.input),
+      /data:image\/png;base64,/,
+      "xAI provider streams should preserve pi image blocks as xAI-compatible data URIs",
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 }
 
 
@@ -451,7 +635,7 @@ async function main() {
     const provider = providers.get("xai-auth");
     assert.ok(provider, "xai-auth provider should be registered");
     assert.equal(secondLoad.tools.size, tools.size, "extension reloads should register tools on the new pi API object");
-    assert.equal(provider.api, "xai-responses");
+    assert.equal(provider.api, "openai-responses");
     const grok45 = provider.models.find((model) => model.id === "grok-4.5");
     assert.ok(grok45, "grok-4.5 should be registered in the xAI model catalog");
     assert.equal(grok45?.contextWindow, 500_000);
@@ -471,8 +655,11 @@ async function main() {
     await verifyXaiStreamPassesRealGuard(provider);
 
     await verifyCliModelStreamRouting(provider);
+    verifyCursorToolCollisionMessage();
     await verifyCursorToolActivation(firstLoad);
     await verifyCursorToolShims(tools);
+    await verifyGrepResourceLimits(tools);
+    await verifyLocalImagePathConfinement(tools);
 
     await verifyOAuthCallbackState(provider);
     await verifyOAuthManualRawCode(provider);
@@ -485,6 +672,29 @@ async function main() {
       },
     });
     assert.match(noAuthResult.content[0].text, /No xAI OAuth credentials/, "tools should not fall back to XAI_API_KEY");
+
+    const requestedModelAuthStart = requests.length;
+    const requestedModelAuthResult = await tools.get("xai_generate_text").execute(
+      "call_requested_model_auth",
+      { prompt: "hi", model: "grok-4.3" },
+      undefined,
+      () => {},
+      {
+        modelRegistry: {
+          find(provider, modelId) {
+            return modelId === "grok-4.3" ? { provider, id: modelId, headers: {} } : undefined;
+          },
+          async getApiKeyAndHeaders() {
+            return { ok: true, apiKey: "requested-model-token" };
+          },
+        },
+      },
+    );
+    assert.match(requestedModelAuthResult.content[0].text, /OK/, "tools should resolve OAuth for the requested xAI model");
+    const requestedModelAuthRequest = requests
+      .slice(requestedModelAuthStart)
+      .find((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai"));
+    assert.equal(headerValue(requestedModelAuthRequest.headers, "Authorization"), "Bearer requested-model-token");
 
     const { body: grok45TextBody } = await runTool(tools, "xai_generate_text", {
       prompt: "hi",

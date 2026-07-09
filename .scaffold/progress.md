@@ -172,3 +172,22 @@ Update this file frequently during execution.
 - [ ] Re-verify on latest main: `npm test`, `npm run typecheck`, `git diff --check`, `node bin/setup.js --help`, `npm pack --dry-run`.
 
 **Current branch:** fix/dedupe-local-package-install
+
+## Phase 18: pi 0.80 streaming/API/CI repair
+- [x] Created branch `fix/pi-080-provider-ci` in the isolated `/tmp/pi-xai-oauth-fix-plan/codex-plan` worktree.
+- [x] Replaced the removed root `streamSimpleOpenAIResponses` import with `streamSimple` from `@earendil-works/pi-ai/api/openai-responses`.
+- [x] Updated provider/model API metadata from the custom `xai-responses` label to pi's canonical `openai-responses` surface.
+- [x] Updated verification coverage for the pi 0.80 subpath helper and provider streaming through the xAI endpoint.
+- [x] Added PR/push CI and made the publish placeholder run install, typecheck, tests, and pack dry-run first.
+- [x] Confined local image reads to explicit workspaces and added absolute, parent-path, and symlink escape regression coverage.
+- [x] Added Grep file-count and per-file byte limits with truncation details and regression coverage.
+- [x] Added actionable Cursor/Grok CLI shim registration conflict errors.
+- [x] Changed setup so existing defaults are preserved unless `--set-defaults` opts into replacement; `--yes` is noninteractive only.
+- [x] Removed dead `sanitize.ts` and replaced template `SECURITY.md`.
+- [x] Made xAI custom tool auth resolution try requested/active xAI models before falling back to the default model.
+- [x] Verified after each slice with `npm test` and `npm run typecheck`; earlier baseline also passed `git diff --check` and `npm pack --dry-run`.
+- [x] Dispatched Herdr reviews to Grok, Main, GLM/advisor, and OMP; all emitted `REVIEW_DONE_*` markers.
+- [x] Addressed actionable review findings: payload rewrite `cwd` propagation, `--yes` default preservation, peer dependency floors, README/CONTRIBUTING drift, structured image-path tool errors, and provider stream image coverage.
+- [x] Final validation passed: `npm run typecheck`, `npm test`, `git diff --check`, `node bin/setup.js --help`, and `npm pack --dry-run`.
+
+**Current branch:** fix/pi-080-provider-ci

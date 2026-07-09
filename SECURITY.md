@@ -2,20 +2,21 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Security fixes are applied to the latest published `1.x` release of `pi-xai-oauth`.
+Older releases should update with:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+```bash
+pi update npm:pi-xai-oauth
+```
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Report security issues privately through GitHub security advisories for this repository when available. If private advisories are unavailable, open a GitHub issue with minimal reproduction details and avoid including tokens, OAuth refresh credentials, or private workspace contents.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Expected response:
+
+- Initial acknowledgement within 7 days.
+- Triage result or follow-up questions within 14 days.
+- Coordinated fix and release notes for accepted vulnerabilities.
+
+Do not post access tokens, refresh tokens, `~/.grok/auth.json`, or `~/.pi/agent/settings.json` contents in public reports.

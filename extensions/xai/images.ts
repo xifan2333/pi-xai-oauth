@@ -1,6 +1,10 @@
-import { existsSync, readFileSync } from "fs";
-import { extname, isAbsolute, resolve } from "path";
+import { existsSync, readFileSync, realpathSync } from "fs";
+import { extname, isAbsolute, relative, resolve } from "path";
 import { fileURLToPath } from "url";
+
+export interface NormalizeXaiImageInputOptions {
+  cwd?: string;
+}
 
 function stripShellQuotes(value: string): string {
   const trimmed = value.trim();
@@ -30,26 +34,56 @@ function imageMimeTypeForPath(path: string): string {
   }
 }
 
-function resolveLocalImagePath(value: string): string | undefined {
+function resolveExistingWorkspace(cwd: string | undefined): string {
+  if (!cwd) {
+    throw new Error("Local image paths require an explicit workspace");
+  }
+  try {
+    return realpathSync(cwd);
+  } catch {
+    throw new Error("Local image paths require an explicit existing workspace");
+  }
+}
+
+function assertInsideWorkspace(workspaceRealPath: string, localPath: string, originalValue: string): string {
+  let localRealPath: string;
+  try {
+    localRealPath = realpathSync(localPath);
+  } catch {
+    throw new Error(`Image file does not exist or is not a valid URL: ${originalValue}`);
+  }
+
+  const workspaceRelativePath = relative(workspaceRealPath, localRealPath);
+  if (workspaceRelativePath.startsWith("..") || isAbsolute(workspaceRelativePath)) {
+    throw new Error(`Refusing to read image outside the workspace: ${originalValue}`);
+  }
+  return localRealPath;
+}
+
+function resolveLocalImagePath(value: string, options: NormalizeXaiImageInputOptions): string | undefined {
   const cleaned = unescapeShellPath(value);
   if (!cleaned) return undefined;
 
+  // Validate workspace first so missing cwd is not reported as a missing image file.
+  const workspaceRealPath = resolveExistingWorkspace(options.cwd);
+
+  let localPath: string | undefined;
   if (cleaned.startsWith("file://")) {
     try {
-      return fileURLToPath(cleaned);
+      localPath = fileURLToPath(cleaned);
     } catch {
       return undefined;
     }
+  } else {
+    localPath = isAbsolute(cleaned) ? resolve(cleaned) : resolve(workspaceRealPath, cleaned);
   }
 
-  const candidates = [cleaned];
-  if (!isAbsolute(cleaned)) candidates.push(resolve(process.cwd(), cleaned));
-
-  return candidates.find((candidate) => existsSync(candidate));
+  if (!existsSync(localPath)) return undefined;
+  return assertInsideWorkspace(workspaceRealPath, localPath, cleaned);
 }
 
 /** Normalize an image URL/path into an xAI-compatible URL or data URI. */
-export function normalizeXaiImageInput(value: unknown): string | undefined {
+export function normalizeXaiImageInput(value: unknown, options: NormalizeXaiImageInputOptions = {}): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const cleaned = stripShellQuotes(value);
 
@@ -57,7 +91,7 @@ export function normalizeXaiImageInput(value: unknown): string | undefined {
     return cleaned;
   }
 
-  const localPath = resolveLocalImagePath(cleaned);
+  const localPath = resolveLocalImagePath(cleaned, options);
   if (!localPath) {
     throw new Error(`Image file does not exist or is not a valid URL: ${cleaned}`);
   }

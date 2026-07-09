@@ -48,9 +48,15 @@ cd pi-xai-oauth
 npm install
 
 # Run TypeScript check
-npx tsc --noEmit
+npm run typecheck
 
-# Test the CLI
+# Run verification tests
+npm test
+
+# Check package contents
+npm pack --dry-run
+
+# Test the CLI help
 node bin/setup.js --help
 ```
 

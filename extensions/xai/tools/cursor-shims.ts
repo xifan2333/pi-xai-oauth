@@ -33,6 +33,8 @@ import {
 
 const DEFAULT_CURSOR_GLOB_LIMIT = 1000;
 const DEFAULT_CURSOR_GREP_LIMIT = 1000;
+const MAX_CURSOR_GREP_FILES = 2000;
+const MAX_CURSOR_GREP_FILE_BYTES = 1_000_000;
 const MAX_CURSOR_REGEX_LENGTH = 500;
 const MAX_CURSOR_GREP_CONTEXT_LINES = 20;
 const SKIPPED_SEARCH_DIRS = new Set([".git", ".omp", "node_modules"]);
@@ -63,6 +65,8 @@ const grepShimSchema = Type.Object({
   literal: Type.Optional(Type.Boolean({ description: "Treat pattern as a literal string instead of regex" })),
   context: Type.Optional(Type.Number({ description: "Number of context lines before/after each match" })),
   limit: Type.Optional(Type.Number({ description: "Maximum matches" })),
+  max_files: Type.Optional(Type.Number({ description: "Advanced: lower the maximum number of files searched" })),
+  max_file_bytes: Type.Optional(Type.Number({ description: "Advanced: lower the maximum bytes read from each file" })),
 });
 
 function toPosixPath(filePath: string): string {
@@ -209,18 +213,38 @@ const localFindOperations: FindOperations = {
   glob: localGlob,
 };
 
-async function collectLocalFiles(searchPath: string, rootPath: string, globPattern: string | undefined, signal: any): Promise<string[]> {
+function boundedPositiveInteger(value: number | undefined, fallback: number, maximum: number): number {
+  if (value === undefined) return fallback;
+  return Math.min(maximum, Math.max(1, Math.floor(value)));
+}
+
+async function collectLocalFiles(
+  searchPath: string,
+  rootPath: string,
+  globPattern: string | undefined,
+  maxFiles: number,
+  signal: any,
+): Promise<{ files: string[]; truncated: boolean }> {
   throwIfAborted(signal);
   const info = await stat(searchPath);
-  if (info.isFile()) return [searchPath];
-  if (!info.isDirectory()) return [];
+  if (info.isFile()) return { files: [searchPath], truncated: false };
+  if (!info.isDirectory()) return { files: [], truncated: false };
 
   const files: string[] = [];
+  let truncated = false;
   async function visit(directory: string): Promise<void> {
     throwIfAborted(signal);
+    if (files.length >= maxFiles) {
+      truncated = true;
+      return;
+    }
     const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       throwIfAborted(signal);
+      if (files.length >= maxFiles) {
+        truncated = true;
+        return;
+      }
       if (entry.isDirectory() && SKIPPED_SEARCH_DIRS.has(entry.name)) continue;
       const absolutePath = join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -233,7 +257,7 @@ async function collectLocalFiles(searchPath: string, rootPath: string, globPatte
   }
 
   await visit(searchPath);
-  return files;
+  return { files, truncated };
 }
 
 async function runLocalGrep(cwd: string, params: ReturnType<typeof normalizeGrepArgs>, signal: any) {
@@ -251,19 +275,29 @@ async function runLocalGrep(cwd: string, params: ReturnType<typeof normalizeGrep
   const literalPattern = ignoreCase ? pattern.toLowerCase() : pattern;
   const matcher = params.literal ? undefined : createSafeRegexMatcher(pattern, ignoreCase);
   const limit = Math.max(1, params.limit || DEFAULT_CURSOR_GREP_LIMIT);
+  const maxFiles = boundedPositiveInteger(params.maxFiles, MAX_CURSOR_GREP_FILES, MAX_CURSOR_GREP_FILES);
+  const maxFileBytes = boundedPositiveInteger(params.maxFileBytes, MAX_CURSOR_GREP_FILE_BYTES, MAX_CURSOR_GREP_FILE_BYTES);
   const contextLines = Math.min(
     MAX_CURSOR_GREP_CONTEXT_LINES,
     Math.max(0, Math.floor(params.context || 0)),
   );
-  const files = await collectLocalFiles(searchPath, searchPath, params.glob, signal);
+  const fileSearch = await collectLocalFiles(searchPath, searchPath, params.glob, maxFiles, signal);
   const outputLines: string[] = [];
   let matchCount = 0;
   let limitReached = false;
+  let skippedLargeFiles = 0;
 
-  for (const filePath of files) {
+  for (const filePath of fileSearch.files) {
     if (matchCount >= limit) {
       limitReached = true;
       break;
+    }
+    const fileInfo = await stat(filePath).catch(() => undefined);
+    // Missing/unreadable metadata is not a size skip — only count true oversize files.
+    if (!fileInfo) continue;
+    if (fileInfo.size > maxFileBytes) {
+      skippedLargeFiles++;
+      continue;
     }
     const content = await readFile(filePath, "utf8").catch(() => undefined);
     if (content === undefined) continue;
@@ -295,15 +329,20 @@ async function runLocalGrep(cwd: string, params: ReturnType<typeof normalizeGrep
     }
   }
 
-  if (matchCount === 0) {
-    return { content: [{ type: "text", text: "No matches found" }], details: undefined };
-  }
-
-  let text = outputLines.join("\n");
-  const details: { matchLimitReached?: number } = {};
+  let text = matchCount === 0 ? "No matches found" : outputLines.join("\n");
+  const details: { matchLimitReached?: number; fileLimitReached?: number; skippedLargeFiles?: number; maxFileBytes?: number } = {};
   if (limitReached) {
     text += `\n\n[${limit} matches limit reached]`;
     details.matchLimitReached = limit;
+  }
+  if (fileSearch.truncated) {
+    text += `\n\n[${maxFiles} files searched limit reached]`;
+    details.fileLimitReached = maxFiles;
+  }
+  if (skippedLargeFiles > 0) {
+    text += `\n\n[${skippedLargeFiles} file${skippedLargeFiles === 1 ? "" : "s"} skipped over ${maxFileBytes} bytes]`;
+    details.skippedLargeFiles = skippedLargeFiles;
+    details.maxFileBytes = maxFileBytes;
   }
 
   return { content: [{ type: "text", text }], details: Object.keys(details).length ? details : undefined };
@@ -327,9 +366,20 @@ export function syncCursorToolShimsForModel(ctx: any, model?: Model<Api>) {
   }
 }
 
+function registerCursorToolShim(pi: ExtensionAPI, tool: any) {
+  try {
+    pi.registerTool(tool);
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not register xAI Cursor/Grok CLI shim "${tool.name}". These shims use global tool names; remove the conflicting package or duplicate pi-xai-oauth install. Cause: ${cause}`,
+    );
+  }
+}
+
 /** Register Cursor/Grok CLI compatibility shims. */
 export function registerCursorToolShims(pi: ExtensionAPI) {
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Read",
       label: "Read",
       description: "Cursor/Grok CLI compatibility shim for pi's read tool. Reads a file by path/file_path with optional offset and limit.",
@@ -349,7 +399,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Write",
       label: "Write",
       description: "Cursor/Grok CLI compatibility shim for pi's write tool. Writes content/contents to path/file_path.",
@@ -369,7 +419,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "StrReplace",
       label: "StrReplace",
       description: "Cursor/Grok CLI compatibility shim for exact string replacement. Accepts old_string/new_string or oldText/newText.",
@@ -391,7 +441,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Edit",
       label: "Edit",
       description: "Cursor/Grok CLI compatibility shim for pi's edit tool. Accepts edits or old_string/new_string aliases.",
@@ -412,7 +462,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Delete",
       label: "Delete",
       description: "Cursor/Grok CLI compatibility shim for deleting a workspace file. Directories require recursive=true.",
@@ -436,7 +486,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "LS",
       label: "LS",
       description: "Cursor/Grok CLI compatibility shim for pi's ls tool. Lists files under path.",
@@ -454,7 +504,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Grep",
       label: "Grep",
       description:
@@ -468,7 +518,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Glob",
       label: "Glob",
       description: "Cursor/Grok CLI compatibility shim for pi's find tool. Finds files matching pattern/glob.",
@@ -488,7 +538,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "Shell",
       label: "Shell",
       description: "Cursor/Grok CLI compatibility shim for pi's bash tool. Executes command/cmd in the workspace shell.",
@@ -507,7 +557,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       },
     } as any);
 
-    pi.registerTool({
+    registerCursorToolShim(pi, {
       name: "WebSearch",
       label: "WebSearch",
       description: "Cursor/Grok CLI compatibility shim for xAI web search. Searches the web with xAI's native web_search tool.",

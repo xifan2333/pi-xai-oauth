@@ -1,10 +1,12 @@
 import type { Api, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { normalizeXaiImageInput } from "./images";
+import { normalizeXaiImageInput, type NormalizeXaiImageInputOptions } from "./images";
 import { grokSupportsReasoningEffort, isGrokCliProxyModel } from "./models";
 import { textFromResponsesContent } from "./text";
 
-function normalizeResponsesImageParts(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalizeResponsesImageParts);
+type XaiPayloadRewriteOptions = SimpleStreamOptions & NormalizeXaiImageInputOptions;
+
+function normalizeResponsesImageParts(value: unknown, options: NormalizeXaiImageInputOptions): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeResponsesImageParts(item, options));
   if (!value || typeof value !== "object") return value;
 
   const obj: Record<string, any> = { ...(value as Record<string, any>) };
@@ -25,13 +27,13 @@ function normalizeResponsesImageParts(value: unknown): unknown {
   if (obj.type === "input_image") {
     const imageUrl = typeof obj.image_url === "object" && obj.image_url ? obj.image_url.url : obj.image_url;
     const detail = typeof obj.image_url === "object" && obj.image_url ? obj.image_url.detail : obj.detail;
-    const normalized = normalizeXaiImageInput(imageUrl);
+    const normalized = normalizeXaiImageInput(imageUrl, options);
     if (normalized) obj.image_url = normalized;
     if (typeof detail === "string" && detail) obj.detail = detail;
     if (typeof obj.detail !== "string" || !obj.detail) obj.detail = "auto";
   }
-  if (Array.isArray(obj.content)) obj.content = normalizeResponsesImageParts(obj.content);
-  if (Array.isArray(obj.output)) obj.output = normalizeResponsesImageParts(obj.output);
+  if (Array.isArray(obj.content)) obj.content = normalizeResponsesImageParts(obj.content, options);
+  if (Array.isArray(obj.output)) obj.output = normalizeResponsesImageParts(obj.output, options);
   return obj;
 }
 
@@ -57,8 +59,8 @@ function textForFunctionCallOutput(output: unknown): string {
   return chunks.join("\n") || (imageCount > 0 ? `[${imageCount} image${imageCount === 1 ? "" : "s"} attached]` : "");
 }
 
-function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknown[] {
-  const normalizedInput = input.map(normalizeResponsesImageParts) as Record<string, any>[];
+function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>, options: NormalizeXaiImageInputOptions): unknown[] {
+  const normalizedInput = input.map((item) => normalizeResponsesImageParts(item, options)) as Record<string, any>[];
   const rewritten: unknown[] = [];
   const modelInputs = Array.isArray((model as any).input) ? ((model as any).input as unknown[]) : [];
   const supportsImages = modelInputs.includes("image");
@@ -91,7 +93,7 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
 }
 
 /** Rewrite generic OpenAI Responses payloads into xAI-compatible payloads. */
-export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, options?: SimpleStreamOptions): unknown {
+export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, options?: XaiPayloadRewriteOptions): unknown {
   if (!payload || typeof payload !== "object") return payload;
   const body: Record<string, any> = { ...(payload as Record<string, any>) };
   const modelId = String(body.model || model.id);
@@ -102,7 +104,7 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
   // same Grok OAuth path with top-level instructions; xAI also rejects
   // image arrays in function_call_output.output, so normalize those here.
   if (Array.isArray(body.input)) {
-    let input = normalizeXaiResponsesInput([...body.input], model) as Record<string, any>[];
+    let input = normalizeXaiResponsesInput([...body.input], model, { cwd: options?.cwd }) as Record<string, any>[];
     const instructionParts: string[] = [];
 
     if (usesGrokCliProxy) {

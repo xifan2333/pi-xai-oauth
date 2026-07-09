@@ -75,6 +75,26 @@ function makeFixture() {
   updateSettings(fixture.settingsPath);
   const settings = JSON.parse(fs.readFileSync(fixture.settingsPath, "utf8"));
   assert.deepEqual(settings.packages, ["npm:pi-xai-oauth"]);
+  assert.equal(settings.defaultProvider, "xai-auth");
+  assert.equal(settings.defaultModel, "grok-4.3");
+  assert.equal(settings.defaultThinkingLevel, "high");
+  fs.rmSync(fixture.root, { recursive: true, force: true });
+})();
+
+(function verifyUpdateSettingsCanExplicitlyReplaceDefaults() {
+  const fixture = makeFixture();
+  fs.writeFileSync(fixture.settingsPath, JSON.stringify({
+    packages: ["npm:pi-xai-oauth"],
+    defaultProvider: "openai",
+    defaultModel: "gpt-5",
+    defaultThinkingLevel: "medium",
+  }));
+
+  updateSettings(fixture.settingsPath, { setDefaults: true });
+  const settings = JSON.parse(fs.readFileSync(fixture.settingsPath, "utf8"));
+  assert.equal(settings.defaultProvider, "xai-auth");
+  assert.equal(settings.defaultModel, "grok-4.5");
+  assert.equal(settings.defaultThinkingLevel, "high");
   fs.rmSync(fixture.root, { recursive: true, force: true });
 })();
 
