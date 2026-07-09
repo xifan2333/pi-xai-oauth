@@ -10,7 +10,8 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const NPM_SPEC = "npm:pi-xai-oauth";
+const PACKAGE_NAME = "pi-xai-oauth";
+const NPM_SPEC = `npm:${PACKAGE_NAME}`;
 const SETTINGS_PATH = path.join(os.homedir(), ".pi/agent/settings.json");
 
 // ANSI colors
@@ -54,18 +55,93 @@ function installPackage() {
   }
 }
 
-function updateSettings() {
+function getPackageEntrySource(entry) {
+  if (typeof entry === "string") return entry;
+  if (entry && typeof entry === "object" && typeof entry.source === "string") return entry.source;
+  return undefined;
+}
+
+function getNpmPackageName(source) {
+  if (typeof source !== "string" || !source.startsWith("npm:")) return undefined;
+  const spec = source.slice("npm:".length);
+  if (spec.startsWith("@")) {
+    const slashIndex = spec.indexOf("/");
+    if (slashIndex === -1) return spec;
+    const versionIndex = spec.indexOf("@", slashIndex + 1);
+    return versionIndex === -1 ? spec : spec.slice(0, versionIndex);
+  }
+  const versionIndex = spec.indexOf("@");
+  return versionIndex === -1 ? spec : spec.slice(0, versionIndex);
+}
+
+function resolveLocalPackageJson(source, settingsPath = SETTINGS_PATH) {
+  if (typeof source !== "string") return undefined;
+  if (source.startsWith("npm:") || source.startsWith("git:") || /^[a-z]+:\/\//i.test(source)) return undefined;
+
+  const expanded = source.startsWith("~/") ? path.join(os.homedir(), source.slice(2)) : source;
+  const resolved = path.resolve(path.dirname(settingsPath), expanded);
+
+  try {
+    const stat = fs.statSync(resolved);
+    return stat.isDirectory() ? path.join(resolved, "package.json") : path.join(path.dirname(resolved), "package.json");
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocalPackageNamed(source, packageName = PACKAGE_NAME, settingsPath = SETTINGS_PATH) {
+  const packageJsonPath = resolveLocalPackageJson(source, settingsPath);
+  if (!packageJsonPath) return false;
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    return pkg.name === packageName;
+  } catch {
+    return false;
+  }
+}
+
+function pruneDuplicatePackageEntries(packages, settingsPath = SETTINGS_PATH, packageName = PACKAGE_NAME) {
+  let hasNpmPackage = false;
+  const removed = [];
+  const next = [];
+
+  for (const entry of packages) {
+    const source = getPackageEntrySource(entry);
+    if (getNpmPackageName(source) === packageName) {
+      hasNpmPackage = true;
+      next.push(entry);
+      continue;
+    }
+
+    if (isLocalPackageNamed(source, packageName, settingsPath)) {
+      removed.push(source);
+      continue;
+    }
+
+    next.push(entry);
+  }
+
+  if (!hasNpmPackage) {
+    next.push(NPM_SPEC);
+    hasNpmPackage = true;
+  }
+
+  return { packages: next, removed, addedNpmPackage: !packages.some((entry) => getNpmPackageName(getPackageEntrySource(entry)) === packageName) };
+}
+
+function updateSettings(settingsPath = SETTINGS_PATH) {
   console.log(color("\n⚙️  Configuring pi settings...", "cyan"));
 
   let settings = {};
 
-  if (fs.existsSync(SETTINGS_PATH)) {
+  if (fs.existsSync(settingsPath)) {
     try {
-      settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+      settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
     } catch (e) {
-      const backupPath = `${SETTINGS_PATH}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+      const backupPath = `${settingsPath}.bak-${new Date().toISOString().replace(/[:.]/g, "-")}`;
       try {
-        fs.copyFileSync(SETTINGS_PATH, backupPath);
+        fs.copyFileSync(settingsPath, backupPath);
         console.log(color(`   Warning: Could not parse existing settings.json; backed it up to ${backupPath}`, "yellow"));
       } catch {
         console.log(color("   Warning: Could not parse existing settings.json and could not create a backup", "yellow"));
@@ -79,16 +155,19 @@ function updateSettings() {
     settings.packages = [];
   }
 
-  const hasPackage = settings.packages.some(p => {
-    if (typeof p === "string") return p === NPM_SPEC;
-    if (p && typeof p === "object") return p.source === NPM_SPEC;
-    return false;
-  });
-
-  if (!hasPackage) {
-    settings.packages.push(NPM_SPEC);
+  const packagePrune = pruneDuplicatePackageEntries(settings.packages, settingsPath);
+  if (packagePrune.removed.length > 0) {
+    settings.packages = packagePrune.packages;
     changed = true;
-    console.log(color("   + Added npm:pi-xai-oauth to packages", "green"));
+    for (const source of packagePrune.removed) {
+      console.log(color(`   - Removed duplicate local ${PACKAGE_NAME} package: ${source}`, "yellow"));
+    }
+  }
+
+  if (packagePrune.addedNpmPackage) {
+    settings.packages = packagePrune.packages;
+    changed = true;
+    console.log(color(`   + Added ${NPM_SPEC} to packages`, "green"));
   }
 
   if (settings.defaultProvider !== "xai-auth") {
@@ -111,9 +190,9 @@ function updateSettings() {
 
   if (changed) {
     try {
-      const dir = path.dirname(SETTINGS_PATH);
+      const dir = path.dirname(settingsPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
       console.log(color("   ✅ Settings updated!", "green"));
     } catch (e) {
       console.log(color("   ⚠️  Could not write settings.json (you can configure manually)", "yellow"));
@@ -343,4 +422,15 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  PACKAGE_NAME,
+  NPM_SPEC,
+  getNpmPackageName,
+  isLocalPackageNamed,
+  pruneDuplicatePackageEntries,
+  updateSettings,
+};
