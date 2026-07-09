@@ -12,6 +12,7 @@ const extensionModule = jiti(path.join(repoRoot, "extensions", "xai-oauth.ts"));
 const extension = extensionModule.default || extensionModule;
 const { registerCursorToolShims } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "cursor-shims.ts"));
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
+const { normalizeXaiImageInput } = jiti(path.join(repoRoot, "extensions", "xai", "images.ts"));
 const originalFetch = global.fetch;
 const requests = [];
 
@@ -245,6 +246,30 @@ async function verifyGrepResourceLimits(tools) {
     assert.match(largeFileResult.content[0].text, /1 file skipped over 10 bytes/, "Grep should report large-file skips");
     assert.equal(largeFileResult.details.skippedLargeFiles, 1, "Grep should expose large-file skip details");
     assert.equal(largeFileResult.details.maxFileBytes, 10, "Grep should expose the effective file byte limit");
+
+    const lockedPath = path.join(root, "locked.txt");
+    await fs.writeFile(lockedPath, "needle locked\n");
+    await fs.chmod(lockedPath, 0o000);
+    try {
+      const lockedResult = await runCursorTool(
+        tools,
+        "Grep",
+        { pattern: "needle", include: "locked.txt", limit: 10 },
+        { cwd: root },
+      );
+      assert.doesNotMatch(
+        lockedResult.content[0].text,
+        /skipped over/,
+        "unreadable files should not be reported as large-file skips",
+      );
+      assert.equal(
+        lockedResult.details?.skippedLargeFiles,
+        undefined,
+        "unreadable files must not increment skippedLargeFiles",
+      );
+    } finally {
+      await fs.chmod(lockedPath, 0o644).catch(() => {});
+    }
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -351,6 +376,23 @@ async function verifyLocalImagePathConfinement(tools) {
         ),
       /outside the workspace/,
       "Responses payload rewriting should reject local image paths outside the workspace",
+    );
+
+    const missingWorkspace = path.join(root, "missing-workspace");
+    assert.throws(
+      () => normalizeXaiImageInput("inside.png", { cwd: missingWorkspace }),
+      /explicit existing workspace/,
+      "missing workspace cwd should fail with a clear image-path error, not a raw realpath ENOENT",
+    );
+    assert.throws(
+      () =>
+        rewriteXaiResponsesPayload(
+          { model: "grok-4.5", input: [{ role: "user", content: [{ type: "input_image", image_url: "inside.png" }] }] },
+          model,
+          { cwd: missingWorkspace },
+        ),
+      /explicit existing workspace/,
+      "payload rewriting should surface a clear missing-workspace image error",
     );
   } finally {
     await fs.rm(root, { recursive: true, force: true });

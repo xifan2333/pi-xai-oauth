@@ -293,7 +293,9 @@ async function runLocalGrep(cwd: string, params: ReturnType<typeof normalizeGrep
       break;
     }
     const fileInfo = await stat(filePath).catch(() => undefined);
-    if (!fileInfo || fileInfo.size > maxFileBytes) {
+    // Missing/unreadable metadata is not a size skip — only count true oversize files.
+    if (!fileInfo) continue;
+    if (fileInfo.size > maxFileBytes) {
       skippedLargeFiles++;
       continue;
     }

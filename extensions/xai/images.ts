@@ -34,9 +34,25 @@ function imageMimeTypeForPath(path: string): string {
   }
 }
 
-function assertInsideWorkspace(workspace: string, localPath: string, originalValue: string): string {
-  const workspaceRealPath = realpathSync(workspace);
-  const localRealPath = realpathSync(localPath);
+function resolveExistingWorkspace(cwd: string | undefined): string {
+  if (!cwd) {
+    throw new Error("Local image paths require an explicit workspace");
+  }
+  try {
+    return realpathSync(cwd);
+  } catch {
+    throw new Error("Local image paths require an explicit existing workspace");
+  }
+}
+
+function assertInsideWorkspace(workspaceRealPath: string, localPath: string, originalValue: string): string {
+  let localRealPath: string;
+  try {
+    localRealPath = realpathSync(localPath);
+  } catch {
+    throw new Error(`Image file does not exist or is not a valid URL: ${originalValue}`);
+  }
+
   const workspaceRelativePath = relative(workspaceRealPath, localRealPath);
   if (workspaceRelativePath.startsWith("..") || isAbsolute(workspaceRelativePath)) {
     throw new Error(`Refusing to read image outside the workspace: ${originalValue}`);
@@ -48,6 +64,9 @@ function resolveLocalImagePath(value: string, options: NormalizeXaiImageInputOpt
   const cleaned = unescapeShellPath(value);
   if (!cleaned) return undefined;
 
+  // Validate workspace first so missing cwd is not reported as a missing image file.
+  const workspaceRealPath = resolveExistingWorkspace(options.cwd);
+
   let localPath: string | undefined;
   if (cleaned.startsWith("file://")) {
     try {
@@ -56,17 +75,11 @@ function resolveLocalImagePath(value: string, options: NormalizeXaiImageInputOpt
       return undefined;
     }
   } else {
-    if (!options.cwd) {
-      throw new Error("Local image paths require an explicit workspace");
-    }
-    localPath = isAbsolute(cleaned) ? resolve(cleaned) : resolve(options.cwd, cleaned);
+    localPath = isAbsolute(cleaned) ? resolve(cleaned) : resolve(workspaceRealPath, cleaned);
   }
 
   if (!existsSync(localPath)) return undefined;
-  if (!options.cwd) {
-    throw new Error("Local image paths require an explicit workspace");
-  }
-  return assertInsideWorkspace(options.cwd, localPath, cleaned);
+  return assertInsideWorkspace(workspaceRealPath, localPath, cleaned);
 }
 
 /** Normalize an image URL/path into an xAI-compatible URL or data URI. */
