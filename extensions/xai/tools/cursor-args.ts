@@ -127,6 +127,8 @@ export function normalizeGrepArgs(args: unknown) {
     literal: firstBoolean(params.literal, params.fixed_strings, params.fixedStrings),
     context: firstNumber(params.context, params.context_lines, params.contextLines),
     limit: firstNumber(params.limit, params.max_results, params.maxResults),
+    maxFiles: firstNumber(params.maxFiles, params.max_files, params.file_limit, params.fileLimit),
+    maxFileBytes: firstNumber(params.maxFileBytes, params.max_file_bytes, params.file_size_limit, params.fileSizeLimit),
   };
 }
 

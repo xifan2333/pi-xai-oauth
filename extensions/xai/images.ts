@@ -1,6 +1,10 @@
-import { existsSync, readFileSync } from "fs";
-import { extname, isAbsolute, resolve } from "path";
+import { existsSync, readFileSync, realpathSync } from "fs";
+import { extname, isAbsolute, relative, resolve } from "path";
 import { fileURLToPath } from "url";
+
+export interface NormalizeXaiImageInputOptions {
+  cwd?: string;
+}
 
 function stripShellQuotes(value: string): string {
   const trimmed = value.trim();
@@ -30,26 +34,43 @@ function imageMimeTypeForPath(path: string): string {
   }
 }
 
-function resolveLocalImagePath(value: string): string | undefined {
+function assertInsideWorkspace(workspace: string, localPath: string, originalValue: string): string {
+  const workspaceRealPath = realpathSync(workspace);
+  const localRealPath = realpathSync(localPath);
+  const workspaceRelativePath = relative(workspaceRealPath, localRealPath);
+  if (workspaceRelativePath.startsWith("..") || isAbsolute(workspaceRelativePath)) {
+    throw new Error(`Refusing to read image outside the workspace: ${originalValue}`);
+  }
+  return localRealPath;
+}
+
+function resolveLocalImagePath(value: string, options: NormalizeXaiImageInputOptions): string | undefined {
   const cleaned = unescapeShellPath(value);
   if (!cleaned) return undefined;
 
+  let localPath: string | undefined;
   if (cleaned.startsWith("file://")) {
     try {
-      return fileURLToPath(cleaned);
+      localPath = fileURLToPath(cleaned);
     } catch {
       return undefined;
     }
+  } else {
+    if (!options.cwd) {
+      throw new Error("Local image paths require an explicit workspace");
+    }
+    localPath = isAbsolute(cleaned) ? resolve(cleaned) : resolve(options.cwd, cleaned);
   }
 
-  const candidates = [cleaned];
-  if (!isAbsolute(cleaned)) candidates.push(resolve(process.cwd(), cleaned));
-
-  return candidates.find((candidate) => existsSync(candidate));
+  if (!existsSync(localPath)) return undefined;
+  if (!options.cwd) {
+    throw new Error("Local image paths require an explicit workspace");
+  }
+  return assertInsideWorkspace(options.cwd, localPath, cleaned);
 }
 
 /** Normalize an image URL/path into an xAI-compatible URL or data URI. */
-export function normalizeXaiImageInput(value: unknown): string | undefined {
+export function normalizeXaiImageInput(value: unknown, options: NormalizeXaiImageInputOptions = {}): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const cleaned = stripShellQuotes(value);
 
@@ -57,7 +78,7 @@ export function normalizeXaiImageInput(value: unknown): string | undefined {
     return cleaned;
   }
 
-  const localPath = resolveLocalImagePath(cleaned);
+  const localPath = resolveLocalImagePath(cleaned, options);
   if (!localPath) {
     throw new Error(`Image file does not exist or is not a valid URL: ${cleaned}`);
   }

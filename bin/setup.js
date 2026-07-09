@@ -130,7 +130,18 @@ function pruneDuplicatePackageEntries(packages, settingsPath = SETTINGS_PATH, pa
   return { packages: next, removed, addedNpmPackage: !packages.some((entry) => getNpmPackageName(getPackageEntrySource(entry)) === packageName) };
 }
 
-function updateSettings(settingsPath = SETTINGS_PATH) {
+function updateDefault(settings, key, value, label, options) {
+  if (settings[key] === value) return false;
+  if (settings[key] === undefined || settings[key] === "" || options.setDefaults) {
+    settings[key] = value;
+    console.log(color(`   + Set ${label}: ${value}`, "green"));
+    return true;
+  }
+  console.log(color(`   (Preserved ${label}: ${settings[key]}; use --set-defaults to change it)`, "yellow"));
+  return false;
+}
+
+function updateSettings(settingsPath = SETTINGS_PATH, options = {}) {
   console.log(color("\n⚙️  Configuring pi settings...", "cyan"));
 
   let settings = {};
@@ -170,23 +181,9 @@ function updateSettings(settingsPath = SETTINGS_PATH) {
     console.log(color(`   + Added ${NPM_SPEC} to packages`, "green"));
   }
 
-  if (settings.defaultProvider !== "xai-auth") {
-    settings.defaultProvider = "xai-auth";
-    changed = true;
-    console.log(color("   + Set defaultProvider: xai-auth", "green"));
-  }
-
-  if (settings.defaultModel !== "grok-4.5") {
-    settings.defaultModel = "grok-4.5";
-    changed = true;
-    console.log(color("   + Set defaultModel: grok-4.5", "green"));
-  }
-
-  if (settings.defaultThinkingLevel !== "high") {
-    settings.defaultThinkingLevel = "high";
-    changed = true;
-    console.log(color("   + Set defaultThinkingLevel: high", "green"));
-  }
+  changed = updateDefault(settings, "defaultProvider", "xai-auth", "defaultProvider", options) || changed;
+  changed = updateDefault(settings, "defaultModel", "grok-4.5", "defaultModel", options) || changed;
+  changed = updateDefault(settings, "defaultThinkingLevel", "high", "defaultThinkingLevel", options) || changed;
 
   if (changed) {
     try {
@@ -209,8 +206,8 @@ function printNextSteps(nonInteractive = false) {
     console.log("Next steps:\n");
     console.log(`   ${color("1.", "bold")} Authenticate with xAI OAuth:`);
     console.log(`      ${color("pi /login xai-auth", "cyan")}\n`);
-    console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.5 (already set as default)`);
-    console.log(`      ${color("pi", "cyan")}\n`);
+    console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.5`);
+    console.log(`      ${color("pi --model grok-4.5", "cyan")}\n`);
   } else {
     console.log("Grok 4.5, Grok 4.3, Grok Build, Composer 2.5 + xAI OAuth are now configured and ready.\n");
   }
@@ -386,6 +383,7 @@ function printHelp() {
   console.log("  npx pi-xai-oauth              Run interactive xAI OAuth + settings setup");
   console.log("  npx pi-xai-oauth --scaffold   Generate .scaffold/ harness in current project");
   console.log("  npx pi-xai-oauth --yes        Non-interactive / automated mode");
+  console.log("  npx pi-xai-oauth --set-defaults  Replace existing pi default provider/model/thinking settings");
   console.log("  npx pi-xai-oauth --help       Show this help\n");
   console.log("Examples:");
   console.log("  npx pi-xai-oauth --scaffold   # in any pi project to add agent harness\n");
@@ -396,6 +394,7 @@ function main() {
   const yes = args.includes("--yes") || args.includes("-y");
   const scaffold = args.includes("--scaffold") || args.includes("-s");
   const help = args.includes("--help") || args.includes("-h");
+  const setDefaults = args.includes("--set-defaults");
 
   if (help) {
     printHelp();
@@ -417,7 +416,7 @@ function main() {
 
   const success = installPackage();
   if (success) {
-    updateSettings();
+    updateSettings(SETTINGS_PATH, { setDefaults });
     printNextSteps(yes);
   }
 }

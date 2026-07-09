@@ -31,13 +31,18 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["prompt"],
       },
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
-        const apiKey = await resolveXaiAuthToken(ctx);
+        const model = params.model || DEFAULT_XAI_MODEL;
+        const apiKey = await resolveXaiAuthToken(ctx, model);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
         }
 
-        const model = params.model || DEFAULT_XAI_MODEL;
-        const imageUrl = normalizeXaiImageInput(params.image_url);
+        let imageUrl: string | undefined;
+        try {
+          imageUrl = normalizeXaiImageInput(params.image_url, { cwd: ctx?.cwd });
+        } catch (error) {
+          return xaiToolError(`Error: ${messageFromError(error)}`, { error: true, image_url: params.image_url });
+        }
         const input = imageUrl
           ? [
               {
@@ -370,7 +375,12 @@ Be specific and cite examples where helpful.`;
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { image: params?.image });
         }
         const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
-        const imageInput = normalizeXaiImageInput(params.image) || params.image;
+        let imageInput: string | undefined;
+        try {
+          imageInput = normalizeXaiImageInput(params.image, { cwd: ctx?.cwd }) || params.image;
+        } catch (error) {
+          return xaiToolError(`Error: ${messageFromError(error)}`, { error: true, image: params.image });
+        }
         const input = [{ role: "user", content: [{ type: "input_image", image_url: imageInput, detail: "high" }, { type: "input_text", text: question }] }];
         let data: any;
         try {

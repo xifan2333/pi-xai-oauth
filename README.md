@@ -37,7 +37,7 @@ This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Co
 
 > **Latest release:** `pi-xai-oauth` **1.3.1** (Grok 4.5 default since **1.3.0**: 500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`. Local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
-> **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
+> **Compatibility note:** Current builds require pi 0.80.3+ and use pi's canonical `openai-responses` stream surface for Grok/xAI streaming.
 
 ### ✅ Setup auto-dedupes local + npm copies
 
@@ -55,6 +55,7 @@ Setup will:
 1. Install `npm:pi-xai-oauth`
 2. Remove matching **local path** entries for this package from settings
 3. Keep a single `npm:pi-xai-oauth` entry
+4. Preserve any existing default provider/model/thinking settings. Add `--set-defaults` only if you want setup to replace them with `xai-auth`, `grok-4.5`, and `high`.
 
 Confirm with `pi list` (should show only one `pi-xai-oauth`).
 
@@ -130,9 +131,13 @@ npx pi-xai-oauth
 This runs the setup script which:
 1. Installs `npm:pi-xai-oauth` into pi
 2. Removes duplicate **local path** installs of this package from `~/.pi/agent/settings.json` (keeps the npm entry)
-3. Sets `xai-auth` as your default provider
-4. Sets `grok-4.5` as your default model
-5. Enables `high` thinking level by default
+3. Preserves existing default provider/model/thinking settings
+
+To make xAI the default during setup, run:
+
+```bash
+npx pi-xai-oauth --set-defaults
+```
 
 ### Manual install
 
@@ -536,7 +541,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; **1.3.0** adds Grok 4.5 as the default model. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+pi 0.80.3+ exposes OpenAI Responses streaming through `@earendil-works/pi-ai/api/openai-responses`. Current `pi-xai-oauth` builds use that canonical surface for Grok/xAI streaming; **1.3.0** adds Grok 4.5 as the default model. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .

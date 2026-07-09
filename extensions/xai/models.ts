@@ -104,7 +104,7 @@ export function xaiModelForRequest(modelId?: string): Model<Api> {
     ...model,
     id,
     provider: XAI_PROVIDER_ID,
-    api: "xai-responses",
+    api: "openai-responses",
     baseUrl: xaiBaseUrlForModel(id),
   } as any;
 }
