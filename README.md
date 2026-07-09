@@ -39,6 +39,23 @@ This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Co
 >
 > **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
 
+> **✅ Setup auto-dedupes local + npm copies**
+>
+> If `~/.pi/agent/settings.json` has both a local path (e.g. `../../projects/pi-xai-oauth`) and `npm:pi-xai-oauth`, pi loads the extension twice and fails with `Tool "xai_generate_text" conflicts with ...`.
+>
+> Running setup fixes that:
+> ```bash
+> npx pi-xai-oauth --yes
+> # or from a checkout:
+> node bin/setup.js --yes
+> ```
+> Setup installs the npm package, removes matching local path entries for this package, and keeps a single `npm:pi-xai-oauth` entry. Confirm with:
+> ```bash
+> pi list
+> ```
+>
+> `pi update npm:pi-xai-oauth` updates the published package but does **not** prune local path duplicates — re-run setup if you still see tool conflicts.
+
 ---
 
 ## Table of Contents
@@ -105,9 +122,10 @@ npx pi-xai-oauth
 
 This runs the setup script which:
 1. Installs `npm:pi-xai-oauth` into pi
-2. Sets `xai-auth` as your default provider
-3. Sets `grok-4.5` as your default model
-4. Enables `high` thinking level by default
+2. Removes duplicate **local path** installs of this package from `~/.pi/agent/settings.json` (keeps the npm entry)
+3. Sets `xai-auth` as your default provider
+4. Sets `grok-4.5` as your default model
+5. Enables `high` thinking level by default
 
 ### Manual install
 
@@ -469,7 +487,14 @@ In the pi TUI, the current model is shown in the status bar. You can also check 
 
 You have more than one copy of this extension installed. This commonly happens when updating from npm to a local checkout, or when switching between two local worktrees. pi refuses to load duplicate tool names.
 
-First inspect installed packages:
+**Fastest fix for normal npm users** — re-run setup so it prunes local path duplicates and keeps `npm:pi-xai-oauth`:
+
+```bash
+npx pi-xai-oauth --yes
+pi list
+```
+
+Or clean up manually. First inspect installed packages:
 
 ```bash
 pi list
@@ -510,7 +535,13 @@ pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles
 pi remove npm:pi-xai-oauth && pi install .
 ```
 
-If you previously installed a local checkout with `pi install .`, `pi update npm:pi-xai-oauth` will not replace that local copy. Run `pi list` and make sure only one `pi-xai-oauth` entry is installed. Remove duplicate npm/local/worktree copies before restarting pi.
+If you previously installed a local checkout with `pi install .`, `pi update npm:pi-xai-oauth` will not replace that local copy. Run `pi list` and make sure only one `pi-xai-oauth` entry is installed. To switch back to npm and auto-remove local path duplicates, re-run setup:
+
+```bash
+npx pi-xai-oauth --yes
+```
+
+Or remove duplicate npm/local/worktree copies manually before restarting pi.
 
 ---
 
