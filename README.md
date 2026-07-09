@@ -35,32 +35,39 @@ pi --model grok-4.5:low "Quick status check"   # fast mode
 
 This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-integrated xAI OAuth models in pi, with proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.).
 
-> **Latest release:** `pi-xai-oauth` **1.3.0** adds **Grok 4.5** as the default model (500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
+> **Latest release:** `pi-xai-oauth` **1.3.1** (Grok 4.5 default since **1.3.0**: 500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`. Local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
 > **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
 
-> **✅ Setup auto-dedupes local + npm copies**
->
-> If `~/.pi/agent/settings.json` has both a local path (e.g. `../../projects/pi-xai-oauth`) and `npm:pi-xai-oauth`, pi loads the extension twice and fails with `Tool "xai_generate_text" conflicts with ...`.
->
-> Running setup fixes that:
-> ```bash
-> npx pi-xai-oauth --yes
-> # or from a checkout:
-> node bin/setup.js --yes
-> ```
-> Setup installs the npm package, removes matching local path entries for this package, and keeps a single `npm:pi-xai-oauth` entry. Confirm with:
-> ```bash
-> pi list
-> ```
->
-> `pi update npm:pi-xai-oauth` updates the published package but does **not** prune local path duplicates — re-run setup if you still see tool conflicts.
+### ✅ Setup auto-dedupes local + npm copies
+
+If `~/.pi/agent/settings.json` has both a local path (e.g. `../../projects/pi-xai-oauth`) **and** `npm:pi-xai-oauth`, pi loads the extension twice and fails with `Tool "xai_generate_text" conflicts with ...`.
+
+For normal **npm** users, re-run setup:
+
+```bash
+npx pi-xai-oauth --yes
+# or from a checkout:
+node bin/setup.js --yes
+```
+
+Setup will:
+1. Install `npm:pi-xai-oauth`
+2. Remove matching **local path** entries for this package from settings
+3. Keep a single `npm:pi-xai-oauth` entry
+
+Confirm with `pi list` (should show only one `pi-xai-oauth`).
+
+Notes:
+- `pi update npm:pi-xai-oauth` updates the published package but does **not** prune local path duplicates — re-run setup if tool conflicts remain.
+- Setup is **npm-oriented**. If you intentionally develop from a local checkout, do **not** run setup to “fix” conflicts; keep only the checkout with `pi remove npm:pi-xai-oauth && pi install .`.
 
 ---
 
 ## Table of Contents
 
 - [✨ New: Grok 4.5](#-new-grok-45)
+- [✅ Setup auto-dedupes local + npm copies](#-setup-auto-dedupes-local--npm-copies)
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
