@@ -168,6 +168,11 @@ Update this file frequently during execution.
 
 **Current branch:** feature/add-grok-4-5
 
+## Phase 18: Issue 47 compat dispatcher isolation
+- [x] Replaced global compat `streamSimple` dispatch with the builtin `openAIResponsesApi()` provider stream.
+- [x] Added regression coverage that registers a conflicting `openai-responses` compat provider and verifies xAI bypasses it.
+- [x] Final verification passed: `npm test`, `npm run typecheck`, and `git diff --check`.
+
 ## Phase 16: npm/local package conflict repair
 - [x] Created branch `fix/dedupe-local-package-install`.
 - [x] Fast-forwarded branch onto latest `origin/main` (`00db405`, v1.3.0).

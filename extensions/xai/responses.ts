@@ -1,10 +1,12 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { streamSimple as streamSimplePi } from "@earendil-works/pi-ai/compat";
+import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { isGrokCliProxyModel, xaiBaseUrlForModel, xaiModelForRequest, xaiModelRequestHeaders, xaiResponsesUrlForModel } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
 
 type AssistantStreamEvent = Record<string, any>;
+
+const streamSimpleOpenAIResponses = openAIResponsesApi().streamSimple;
 
 function resultFromStreamEvent(event: AssistantStreamEvent): any {
   if (event.type === "done") return event.message;
@@ -135,13 +137,13 @@ export async function createXaiResponse(apiKey: string, body: Record<string, any
 /**
  * Stream pi's simple Responses flow through xAI with payload normalization.
  *
- * The transport is delegated through pi's compatibility dispatcher with a
- * temporary `openai-responses` API tag expected by pi's transport, while xAI
- * routing headers, request URLs, and payload rewriting continue to use the
- * original xAI model metadata. Returned events are forwarded through an
- * assistant stream exposing async iteration and `result()`. Delegate load or
- * stream failures are converted into terminal error events with xAI provider
- * metadata instead of escaping as unstructured promise failures.
+ * The transport is delegated to pi's builtin OpenAI Responses helper with a
+ * temporary `openai-responses` API tag, while xAI routing headers, request
+ * URLs, and payload rewriting continue to use the original xAI model metadata.
+ * Returned events are forwarded through an assistant stream exposing async
+ * iteration and `result()`. Delegate load or stream failures are converted
+ * into terminal error events with xAI provider metadata instead of escaping
+ * as unstructured promise failures.
  *
  * @param model xAI provider model selected by pi.
  * @param context Conversation messages and tool context to stream.
@@ -176,9 +178,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   const stream = createForwardingAssistantStream();
   void (async () => {
     try {
-      // Pi aliases the package root to compat when loading extensions. Importing
-      // a root subpath here is therefore rewritten as `compat.js/api/...`.
-      const inner = streamSimplePi(openAIResponsesModel as Model<"openai-responses">, context, {
+      const inner = streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
         ...options,
         // Ensure rewriteXaiResponsesPayload can always stamp prompt_cache_key.
         sessionId: sessionId || routingSessionId,
