@@ -31,6 +31,12 @@ This structure follows 2026 best practices: dedicated AGENTS.md, external persis
 
 Update this file frequently during execution.
 
+## Phase 11: pi-ai 0.80 API compatibility
+- [x] Created branch `codex/fix-pi-ai-080-api` after the 1.3.1 release checks exposed a removed root export.
+- [x] Updated xAI Responses streaming and its guard verification to use `@earendil-works/pi-ai/api/openai-responses`.
+- [x] Updated the Node 24 test callback to return a Promise as required by `assert.doesNotReject`.
+- [x] Passed `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run` before preparing 1.3.2.
+
 ## Phase 5: Multi-Agent Integration
 - [ ] Document preferred subagent usage patterns in AGENTS.md
 - [ ] Create lightweight `scaffold-starter` template

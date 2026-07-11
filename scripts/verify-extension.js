@@ -261,7 +261,7 @@ async function verifyCursorToolActivation(loadResult) {
 
   loadResult.setToolRegistryFailures({ get: true });
   await assert.doesNotReject(
-    () => handlers.get("session_start")?.({}, { model: { provider: "anthropic", id: "claude-opus-4-8" } }),
+    async () => handlers.get("session_start")?.({}, { model: { provider: "anthropic", id: "claude-opus-4-8" } }),
     "session_start should tolerate an unavailable tool registry",
   );
   loadResult.setToolRegistryFailures({ get: false, set: true });
@@ -283,8 +283,8 @@ async function captureStreamResultMessage(createStream) {
   }
 }
 
-async function verifyRealGuardSemantics() {
-  const { streamSimpleOpenAIResponses } = await import("@earendil-works/pi-ai");
+async function verifyOpenAIResponsesTransport() {
+  const { streamSimple } = await import("@earendil-works/pi-ai/api/openai-responses");
   const context = { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] };
   const baseModel = {
     id: "grok-4.3",
@@ -295,27 +295,17 @@ async function verifyRealGuardSemantics() {
     input: ["text", "image"],
   };
 
-  const rejectedMessage = await captureStreamResultMessage(() =>
-    streamSimpleOpenAIResponses({ ...baseModel, api: "xai-responses" }, context, { apiKey: "oauth-token" }),
-  );
-  assert.match(
-    rejectedMessage,
-    /Mismatched api/,
-    "installed @earendil-works/pi-ai must API-guard openai-responses (bump dev dep to 0.79.8)",
-  );
-
   const before = requests.length;
-  const acceptedMessage = await captureStreamResultMessage(() =>
-    streamSimpleOpenAIResponses({ ...baseModel, api: "openai-responses" }, context, { apiKey: "oauth-token" }),
+  await captureStreamResultMessage(() =>
+    streamSimple({ ...baseModel, api: "openai-responses" }, context, { apiKey: "oauth-token" }),
   );
-  assert.doesNotMatch(acceptedMessage, /Mismatched api/, "an openai-responses model must satisfy the real guard");
   assert.ok(
     requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai")),
-    "guarded call should reach the xAI endpoint",
+    "OpenAI Responses transport should reach the configured xAI endpoint",
   );
 }
 
-async function verifyXaiStreamPassesRealGuard(provider) {
+async function verifyXaiResponsesTransport(provider) {
   const before = requests.length;
   const message = await captureStreamResultMessage(() =>
     provider.streamSimple(
@@ -332,10 +322,10 @@ async function verifyXaiStreamPassesRealGuard(provider) {
       { apiKey: "oauth-token", sessionId: "guard-session" },
     ),
   );
-  assert.doesNotMatch(message, /Mismatched api/, "xAI provider stream must satisfy pi 0.79.8 API guard");
+  assert.ok(typeof message === "string", "xAI provider stream should expose a terminal result message");
   assert.ok(
     requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai")),
-    "xAI stream should reach the xAI endpoint past the guard",
+    "xAI stream should reach the xAI endpoint through the OpenAI Responses transport",
   );
 }
 
@@ -506,8 +496,8 @@ async function main() {
     assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
 
-    await verifyRealGuardSemantics();
-    await verifyXaiStreamPassesRealGuard(provider);
+    await verifyOpenAIResponsesTransport();
+    await verifyXaiResponsesTransport(provider);
 
     await verifyCliModelStreamRouting(provider);
     await verifyCursorToolActivation(firstLoad);

@@ -135,7 +135,7 @@ export async function createXaiResponse(apiKey: string, body: Record<string, any
  * Stream pi's simple Responses flow through xAI with payload normalization.
  *
  * The transport is delegated to pi's OpenAI Responses helper with a temporary
- * `openai-responses` API tag so pi 0.79.8+ accepts the helper call, while xAI
+ * `openai-responses` API tag expected by pi's transport, while xAI
  * routing headers, request URLs, and payload rewriting continue to use the
  * original xAI model metadata. Returned events are forwarded through an
  * assistant stream exposing async iteration and `result()`. Delegate load or
@@ -163,9 +163,8 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
       ...xaiModelRequestHeaders(model.id, routingSessionId),
     },
   };
-  // pi 0.79.8+ API-guards the OpenAI Responses helper; keep the xAI
-  // stream model for routing/payload rewriting, but delegate with the API
-  // tag expected by the helper.
+  // Keep the xAI stream model for routing/payload rewriting, but delegate with
+  // the API tag expected by pi's OpenAI Responses transport.
   const openAIResponsesModel = {
     ...streamModel,
     api: "openai-responses" as const,
@@ -176,8 +175,8 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   const stream = createForwardingAssistantStream();
   void (async () => {
     try {
-      const { streamSimpleOpenAIResponses } = await import("@earendil-works/pi-ai");
-      const inner = streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
+      const { streamSimple } = await import("@earendil-works/pi-ai/api/openai-responses");
+      const inner = streamSimple(openAIResponsesModel as Model<"openai-responses">, context, {
         ...options,
         // Ensure rewriteXaiResponsesPayload can always stamp prompt_cache_key.
         sessionId: sessionId || routingSessionId,
