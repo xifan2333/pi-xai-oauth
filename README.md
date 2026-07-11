@@ -419,6 +419,18 @@ If localhost is blocked (VPN, Docker, remote SSH, WSL):
 3. **Paste it into the TUI's input field** that says "Paste redirect URL below."
 4. pi parses the authorization code from the URL and completes the login.
 
+### `Cannot find module .../pi-ai/dist/compat.js/api/openai-responses`
+
+This is a known compatibility issue on pi `0.80.x` when the extension dynamically imports `@earendil-works/pi-ai/api/openai-responses`.
+
+pi's extension loader aliases `@earendil-works/pi-ai` to `dist/compat.js`, so that subpath becomes:
+
+```text
+.../pi-ai/dist/compat.js/api/openai-responses
+```
+
+Upgrade to a package version that imports `@earendil-works/pi-ai/compat` instead, then restart pi or run `/reload`.
+
 ### "Cannot find provider xai-auth"
 
 Run `pi list` to verify the package is installed. If not:

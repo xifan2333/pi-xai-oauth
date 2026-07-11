@@ -1,4 +1,5 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import { streamSimple as streamOpenAIResponsesCompat } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { isGrokCliProxyModel, xaiBaseUrlForModel, xaiModelForRequest, xaiModelRequestHeaders, xaiResponsesUrlForModel } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
@@ -134,13 +135,17 @@ export async function createXaiResponse(apiKey: string, body: Record<string, any
 /**
  * Stream pi's simple Responses flow through xAI with payload normalization.
  *
- * The transport is delegated to pi's OpenAI Responses helper with a temporary
+ * The transport is delegated through `@earendil-works/pi-ai/compat` with a temporary
  * `openai-responses` API tag expected by pi's transport, while xAI
  * routing headers, request URLs, and payload rewriting continue to use the
  * original xAI model metadata. Returned events are forwarded through an
- * assistant stream exposing async iteration and `result()`. Delegate load or
- * stream failures are converted into terminal error events with xAI provider
+ * assistant stream exposing async iteration and `result()`. Delegate stream
+ * failures are converted into terminal error events with xAI provider
  * metadata instead of escaping as unstructured promise failures.
+ *
+ * Note: do not dynamically import `@earendil-works/pi-ai/api/*` subpaths from
+ * extensions. pi's jiti loader aliases `@earendil-works/pi-ai` to
+ * `dist/compat.js`, which breaks subpath resolution at runtime.
  *
  * @param model xAI provider model selected by pi.
  * @param context Conversation messages and tool context to stream.
@@ -175,8 +180,9 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   const stream = createForwardingAssistantStream();
   void (async () => {
     try {
-      const { streamSimple } = await import("@earendil-works/pi-ai/api/openai-responses");
-      const inner = streamSimple(openAIResponsesModel as Model<"openai-responses">, context, {
+      // Use the compat entrypoint so pi's extension loader can resolve the
+      // package (it aliases @earendil-works/pi-ai -> dist/compat.js).
+      const inner = streamOpenAIResponsesCompat(openAIResponsesModel as Model<"openai-responses">, context, {
         ...options,
         // Ensure rewriteXaiResponsesPayload can always stamp prompt_cache_key.
         sessionId: sessionId || routingSessionId,
