@@ -306,23 +306,43 @@ async function verifyOpenAIResponsesTransport() {
 }
 
 async function verifyXaiResponsesTransport(provider) {
+  const { registerApiProvider, resetApiProviders } = await import("@earendil-works/pi-ai/compat");
+  let compatDispatcherCalled = false;
+  registerApiProvider({
+    api: "openai-responses",
+    stream() {
+      compatDispatcherCalled = true;
+      throw new Error("conflicting compat stream should not be called");
+    },
+    streamSimple() {
+      compatDispatcherCalled = true;
+      throw new Error("conflicting compat streamSimple should not be called");
+    },
+  }, "verify-conflicting-extension");
+
   const before = requests.length;
-  const message = await captureStreamResultMessage(() =>
-    provider.streamSimple(
-      {
-        id: "grok-4.3",
-        provider: "xai-auth",
-        api: "xai-responses",
-        baseUrl: "https://api.x.ai/v1",
-        headers: {},
-        reasoning: true,
-        input: ["text", "image"],
-      },
-      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
-      { apiKey: "oauth-token", sessionId: "guard-session" },
-    ),
-  );
+  let message;
+  try {
+    message = await captureStreamResultMessage(() =>
+      provider.streamSimple(
+        {
+          id: "grok-4.3",
+          provider: "xai-auth",
+          api: "xai-responses",
+          baseUrl: "https://api.x.ai/v1",
+          headers: {},
+          reasoning: true,
+          input: ["text", "image"],
+        },
+        { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+        { apiKey: "oauth-token", sessionId: "guard-session" },
+      ),
+    );
+  } finally {
+    resetApiProviders();
+  }
   assert.ok(typeof message === "string", "xAI provider stream should expose a terminal result message");
+  assert.equal(compatDispatcherCalled, false, "xAI stream should bypass conflicting compat API registrations");
   assert.ok(
     requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai")),
     "xAI stream should reach the xAI endpoint through the OpenAI Responses transport",
