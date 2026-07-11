@@ -76,6 +76,8 @@ function loadExtension() {
   const tools = new Map();
   const handlers = new Map();
   let activeTools = ["read", "bash", "edit", "write"];
+  let throwOnGetActiveTools = false;
+  let throwOnSetActiveTools = false;
   extension({
     on(event, handler) {
       handlers.set(event, handler);
@@ -87,13 +89,25 @@ function loadExtension() {
       tools.set(tool.name, tool);
     },
     getActiveTools() {
+      if (throwOnGetActiveTools) throw new Error("tool registry not ready");
       return activeTools;
     },
     setActiveTools(toolNames) {
+      if (throwOnSetActiveTools) throw new Error("tool registry temporarily unavailable");
       activeTools = toolNames;
     },
   });
-  return { providers, tools, handlers, getActiveTools: () => activeTools, setActiveTools: (toolNames) => { activeTools = toolNames; } };
+  return {
+    providers,
+    tools,
+    handlers,
+    getActiveTools: () => activeTools,
+    setActiveTools: (toolNames) => { activeTools = toolNames; },
+    setToolRegistryFailures({ get = false, set = false } = {}) {
+      throwOnGetActiveTools = get;
+      throwOnSetActiveTools = set;
+    },
+  };
 }
 
 function authContext() {
@@ -219,16 +233,41 @@ async function verifyCursorToolShims(tools) {
 
 async function verifyCursorToolActivation(loadResult) {
   const { handlers, getActiveTools } = loadResult;
-  const ctx = {
-    getActiveTools,
-    setActiveTools: loadResult.setActiveTools,
-  };
+  // Real ExtensionContext objects do not expose the active-tool accessors.
+  // Keeping this context empty prevents the test from masking the regression.
+  const ctx = {};
+  const selectModel = (id, provider = "xai-auth") =>
+    handlers.get("model_select")?.({ model: { provider, id } }, ctx);
 
-  await handlers.get("model_select")?.({ model: { provider: "xai-auth", id: "grok-composer-2.5-fast" } }, ctx);
+  await selectModel("grok-composer-2.5-fast");
   assert.ok(getActiveTools().includes("Grep"), "Cursor shims should be enabled for Composer 2.5");
+  const composerTools = getActiveTools();
+  await selectModel("grok-composer-2.5-fast");
+  assert.deepStrictEqual(getActiveTools(), composerTools, "Repeated Composer sync should not duplicate shims");
 
-  await handlers.get("model_select")?.({ model: { provider: "xai-auth", id: "grok-4.3" } }, ctx);
+  await selectModel("grok-4.3");
   assert.ok(!getActiveTools().includes("Grep"), "Cursor shims should be disabled for non-Grok-CLI xAI models");
+  for (const shim of ["Read", "Write", "StrReplace", "Edit", "Delete", "LS", "Grep", "Glob", "Shell", "WebSearch"]) {
+    assert.ok(!getActiveTools().includes(shim), `${shim} shim must be removed for non-Grok models`);
+  }
+
+  await selectModel("grok-composer-2.5-fast");
+  await handlers.get("session_start")?.({}, { model: { provider: "anthropic", id: "claude-opus-4-8" } });
+  assert.ok(!getActiveTools().includes("Grep"), "session_start should prune shims for Anthropic models");
+
+  await selectModel("grok-composer-2.5-fast");
+  await handlers.get("before_agent_start")?.({}, { model: { provider: "anthropic", id: "claude-opus-4-8" } });
+  assert.ok(!getActiveTools().includes("Grep"), "before_agent_start should prune shims for Anthropic models");
+
+  loadResult.setToolRegistryFailures({ get: true });
+  await assert.doesNotReject(
+    () => handlers.get("session_start")?.({}, { model: { provider: "anthropic", id: "claude-opus-4-8" } }),
+    "session_start should tolerate an unavailable tool registry",
+  );
+  loadResult.setToolRegistryFailures({ get: false, set: true });
+  await selectModel("grok-composer-2.5-fast");
+  assert.ok(!getActiveTools().includes("Grep"), "a failed set should not partially update the tool list");
+  loadResult.setToolRegistryFailures();
 }
 
 function lastResultErrorMessage(result) {

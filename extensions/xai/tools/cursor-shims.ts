@@ -314,16 +314,28 @@ function uniqueToolNames(toolNames: string[]): string[] {
 }
 
 /** Enable Cursor/Grok CLI shims only for Grok CLI proxy models. */
-export function syncCursorToolShimsForModel(ctx: any, model?: Model<Api>) {
-  if (typeof ctx?.getActiveTools !== "function" || typeof ctx?.setActiveTools !== "function") return;
+export function syncCursorToolShimsForModel(api: any, model?: Model<Api>) {
+  if (typeof api?.getActiveTools !== "function" || typeof api?.setActiveTools !== "function") return;
 
-  const activeTools = Array.isArray(ctx.getActiveTools()) ? (ctx.getActiveTools() as string[]) : [];
+  let activeTools: string[];
+  try {
+    const current = api.getActiveTools();
+    activeTools = Array.isArray(current) ? (current as string[]) : [];
+  } catch {
+    // The registry may not be bound during early session startup. The
+    // before_agent_start handler will retry once initialization is complete.
+    return;
+  }
   const withoutCursorShims = activeTools.filter((toolName) => !XAI_CURSOR_TOOL_NAMES.includes(toolName));
   const shouldEnableCursorShims = model?.provider === XAI_PROVIDER_ID && isGrokCliProxyModel(model.id);
   const nextTools = shouldEnableCursorShims ? uniqueToolNames([...withoutCursorShims, ...XAI_CURSOR_TOOL_NAMES]) : withoutCursorShims;
 
   if (nextTools.length !== activeTools.length || nextTools.some((toolName, index) => toolName !== activeTools[index])) {
-    ctx.setActiveTools(nextTools);
+    try {
+      api.setActiveTools(nextTools);
+    } catch {
+      // Ignore transient registry failures; a later synchronization will retry.
+    }
   }
 }
 
