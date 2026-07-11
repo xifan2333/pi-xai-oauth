@@ -171,4 +171,10 @@ Update this file frequently during execution.
 - [x] Removed the duplicate local package entry from `~/.pi/agent/settings.json` to unblock this machine while preserving the npm default `grok-4.5`.
 - [ ] Re-verify on latest main: `npm test`, `npm run typecheck`, `git diff --check`, `node bin/setup.js --help`, `npm pack --dry-run`.
 
-**Current branch:** fix/dedupe-local-package-install
+## Phase 17: Issue 40 Cursor shim leakage repair
+- [x] Routed Cursor shim synchronization through the pi `ExtensionAPI` active-tool registry.
+- [x] Added regression coverage for realistic event contexts, model switching, idempotency, and transient registry failures.
+- [x] Targeted shim checks and `git diff --check` pass; committed and pushed as PR #41, with PRs #37 and #38 superseded.
+- [x] Full `npm test` / `npm run typecheck` remain blocked by the pre-existing pi 0.80.3 `streamSimpleOpenAIResponses` API mismatch in `responses.ts`.
+
+**Current branch:** codex/fix-issue-40-cursor-shims
