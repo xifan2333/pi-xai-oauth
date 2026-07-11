@@ -284,7 +284,7 @@ async function captureStreamResultMessage(createStream) {
 }
 
 async function verifyOpenAIResponsesTransport() {
-  const { streamSimple } = await import("@earendil-works/pi-ai/api/openai-responses");
+  const { streamSimple } = await import("@earendil-works/pi-ai/compat");
   const context = { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] };
   const baseModel = {
     id: "grok-4.3",

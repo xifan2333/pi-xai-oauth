@@ -184,3 +184,8 @@ Update this file frequently during execution.
 - [x] Full `npm test` / `npm run typecheck` remain blocked by the pre-existing pi 0.80.3 `streamSimpleOpenAIResponses` API mismatch in `responses.ts`.
 
 **Current branch:** codex/fix-issue-40-cursor-shims
+
+## Phase 18: pi 0.80 extension-loader subpath repair
+- [x] Reproduced pi's root alias rewriting `@earendil-works/pi-ai/api/openai-responses` to the invalid `compat.js/api/openai-responses` path.
+- [x] Routed Responses streaming through the supported `@earendil-works/pi-ai/compat` dispatcher.
+- [x] Verified unit/setup tests, TypeScript diagnostics, and an actual pi extension-loader stream probe.
