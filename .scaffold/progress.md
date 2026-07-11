@@ -189,3 +189,4 @@ Update this file frequently during execution.
 - [x] Reproduced pi's root alias rewriting `@earendil-works/pi-ai/api/openai-responses` to the invalid `compat.js/api/openai-responses` path.
 - [x] Routed Responses streaming through the supported `@earendil-works/pi-ai/compat` dispatcher.
 - [x] Verified unit/setup tests, TypeScript diagnostics, and an actual pi extension-loader stream probe.
+- [x] Bumped the npm package and lockfile to 1.3.3 and updated release guidance.

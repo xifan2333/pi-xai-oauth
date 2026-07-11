@@ -1,6 +1,6 @@
 {
   "name": "pi-xai-oauth",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "One-command installer for xAI OAuth provider + Grok 4.5, Grok Build, and Composer models in pi",
   "keywords": [
     "pi-package",

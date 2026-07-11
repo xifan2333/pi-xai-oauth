@@ -35,7 +35,7 @@ pi --model grok-4.5:low "Quick status check"   # fast mode
 
 This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Composer 2.5** as fully-integrated xAI OAuth models in pi, with proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.).
 
-> **Latest release:** `pi-xai-oauth` **1.3.0** adds **Grok 4.5** as the default model (500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
+> **Latest release:** `pi-xai-oauth` **1.3.3** fixes xAI Responses streaming under pi 0.80's extension loader and includes **Grok 4.5** as the default model (500K context, low/medium/high reasoning; fast mode = `low`). Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
 > **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
 
@@ -504,7 +504,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; **1.3.0** adds Grok 4.5 as the default model. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; **1.3.3** also fixes Responses transport resolution under pi 0.80's extension loader and includes Grok 4.5 as the default model. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .
