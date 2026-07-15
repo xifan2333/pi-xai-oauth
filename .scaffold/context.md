@@ -1,7 +1,7 @@
 # Shared Agent Context
 
 **Project:** pi-xai-oauth
-**Branch:** feature/xai-tools-picker-focus
+**Branch:** feature/changelog
 **Date:** 2026-07-15
 
 ## Key Context
@@ -13,8 +13,8 @@
 - Disabled tools must fail before OAuth credential resolution or network access.
 
 ## Current Focus
-- Preserve cursor position inside the `/xai-tools` TUI after toggles.
-- Keep RPC selection and all activation safety semantics unchanged.
-- Preserve the unrelated untracked pi session HTML export.
+- Add a durable version-by-version changelog grounded in Git and npm history.
+- Keep the README focused on current usage while linking to historical release details.
+- Do not invent release claims for early versions that lack reliable per-version notes.
 
 See plan.md for the active phases and progress.md for completed work.

@@ -270,3 +270,14 @@ Update this file frequently during execution.
 - [x] Committed and pushed the release update to PR #57.
 
 **Current branch:** feature/xai-tools-picker-focus
+
+## Phase 25: Versioned changelog
+- [x] Confirmed npm publication dates, `gitHead` values, and the published-version list through 1.3.5.
+- [x] Audited exact Git ranges between published revisions for notable user-facing changes.
+- [x] Added `CHANGELOG.md` with detailed modern releases and a grouped early-history summary.
+- [x] Linked the changelog from the README introduction and table of contents.
+- [x] Corrected release assignments using npm `gitHead` ranges rather than version strings alone.
+- [x] Passed changelog structure, README link, `git diff --check`, `npm test`, `npm run typecheck`, and npm tarball checks.
+- [x] Committed, pushed, and opened the changelog PR.
+
+**Current branch:** feature/changelog
