@@ -1,56 +1,38 @@
-# Implementation Plan: Enhanced Agent Scaffolding for pi Projects
+# Implementation Plan: GitHub Issues #49 and #50
 
-**Branch:** feature/improved-agent-scaffolding  
-**Date:** 2026-05-17  
-**Goal:** Upgrade pi/agent and pi-package scaffolding with 2026 best practices (AGENTS.md, vertical slices, persistent external state, multi-agent orchestration, planning-first init).
+**Branch:** feature/issues-49-50
 
-## Phase 1: Foundation (Current)
-- [x] Create new branch `feature/improved-agent-scaffolding`
-- [x] Run parallel agents (scout + researcher) for context and best practices
-- [x] Generate AGENTS.md in project root
-- [x] Create `.scaffold/` directory with persistent state files
+**Date:** 2026-07-15
 
-## Phase 2: Persistent State Harness
-- [ ] Create `.scaffold/constraints.md` — Hard MUST/MUST NOT rules
-- [ ] Create `.scaffold/progress.md` — Execution tracking
-- [ ] Create `.scaffold/context.md` — Shared agent context
-- [ ] Update AGENTS.md to reference these files
+**Goal:** Prevent unintended xAI paid-search calls and keep stateless Responses requests below the xAI OAuth gateway's unreliable inline-image payload range.
 
-## Phase 3: Improved Setup / Init Script
-- [x] Enhance `bin/setup.js` to:
-  - Auto-generate full `.scaffold/` structure on first run
-  - Seed AGENTS.md if missing
-  - Set sensible pi defaults + agentic settings
-  - Add support for `--scaffold` flag for new projects
-- [x] Add npm script: `"scaffold": "node bin/setup.js --scaffold"`
+## Phase 1: Issue review and baseline
+- [x] Read issues #49 and #50 and their comments through GitHub.
+- [x] Inspect the provider entrypoint, custom tool registration, payload normalization, Responses transport, setup script, tests, README, and pi extension contracts.
+- [x] Move the existing worktree from the obsolete merged branch to `feature/issues-49-50` at current `origin/main`.
+- [x] Run baseline `npm test` and `npm run typecheck`.
 
-## Phase 4: Structure & Organization
-- [ ] Recommend (and optionally enforce) vertical feature slices in future packages
-- [ ] Add example `src/features/` structure to documentation
-- [ ] Update tsconfig / package.json if needed for better agent context
+## Phase 2: Issue #49 paid-search guard
+- [x] Keep xAI search/research tools registered but inactive by default.
+- [x] Remove those tools immediately when the active model is not from `xai-auth`.
+- [x] Fail tool execution locally before auth/network resolution unless an active xAI model is present.
+- [x] Route web/X/deep-research requests through the active xAI model instead of `DEFAULT_XAI_MODEL`.
+- [x] Add regression coverage for default inactivity, model switching, local no-request rejection, active-model routing, and zero requests from lifecycle events.
 
-## Phase 5: Multi-Agent Integration
-- [ ] Document preferred subagent usage patterns in AGENTS.md
-- [ ] Create a lightweight `scaffold-starter` template that includes:
-  - AGENTS.md
-  - .scaffold/ files
-  - Example parallel/chain subagent config
-- [ ] Add reviewer step in the workflow
+## Phase 3: Issue #50 image lifecycle and transport mitigation
+- [x] Omit consumed historical tool-result image binaries after a later assistant response while retaining explicit text markers.
+- [x] Preserve unconsumed tool-result images until the first assistant response.
+- [x] Compact oversized inline PNG/JPEG images with high-fidelity JPEG encoding before transport and enforce an aggregate inline-image budget.
+- [x] Normalize delegated transport error prefixes from OpenAI to xAI.
+- [x] Add regression coverage for image lifecycle, compaction, dimensions, payload budget, and clear no-network overflow failure.
 
-## Phase 6: Validation & Polish
-- [x] Run `reviewer` agent on all changes
-- [x] Test full setup flow on clean machine
-- [x] Update README.md with new scaffolding features
-- [x] Commit with clear message referencing this plan
+## Phase 4: Verification and review
+- [x] Run focused tests, `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+- [x] Run an independent reviewer agent against the final diff.
+- [x] Address all valid findings and re-run validation.
 
-## Success Metrics
-- New projects initialize with AGENTS.md + .scaffold/ in < 30 seconds
-- Agents using the scaffold show 40%+ reduction in exploratory turns
-- Clear separation between human docs (README) and agent docs (AGENTS.md)
+**Owner:** Main agent
 
-## Open Questions
-- Should we publish a reusable `pi-scaffold` npm package?
-- Add support for Tailwind / HyperFrames specific scaffolds?
+**Research:** Parallel issue #49 and issue #50 subagents
 
-**Owner:** Main agent (with parallel subagent support)  
-**Next Action:** Create remaining .scaffold/ files and enhance setup.js
+**Next action:** Hand off the completed worktree for commit or PR publication.

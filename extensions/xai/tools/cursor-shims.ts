@@ -12,11 +12,12 @@ import { readdir, readFile, rm, stat } from "fs/promises";
 import { join, relative, sep } from "path";
 import { Type } from "typebox";
 import { resolveXaiAuthToken } from "../auth";
-import { DEFAULT_XAI_MODEL, XAI_CURSOR_TOOL_NAMES, XAI_PROVIDER_ID } from "../constants";
+import { XAI_CURSOR_AUTO_TOOL_NAMES, XAI_PROVIDER_ID } from "../constants";
 import { isGrokCliProxyModel } from "../models";
 import { createXaiResponse } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiToolError } from "./common";
+import { isXaiSearchToolActive } from "./model-scope";
 import {
   firstString,
   normalizeDeleteArgs,
@@ -313,7 +314,7 @@ function uniqueToolNames(toolNames: string[]): string[] {
   return [...new Set(toolNames)];
 }
 
-/** Enable Cursor/Grok CLI shims only for Grok CLI proxy models. */
+/** Enable non-search Cursor/Grok CLI shims only for Grok CLI proxy models. */
 export function syncCursorToolShimsForModel(api: any, model?: Model<Api>) {
   if (typeof api?.getActiveTools !== "function" || typeof api?.setActiveTools !== "function") return;
 
@@ -326,9 +327,11 @@ export function syncCursorToolShimsForModel(api: any, model?: Model<Api>) {
     // before_agent_start handler will retry once initialization is complete.
     return;
   }
-  const withoutCursorShims = activeTools.filter((toolName) => !XAI_CURSOR_TOOL_NAMES.includes(toolName));
+  const withoutCursorShims = activeTools.filter((toolName) => !XAI_CURSOR_AUTO_TOOL_NAMES.includes(toolName));
   const shouldEnableCursorShims = model?.provider === XAI_PROVIDER_ID && isGrokCliProxyModel(model.id);
-  const nextTools = shouldEnableCursorShims ? uniqueToolNames([...withoutCursorShims, ...XAI_CURSOR_TOOL_NAMES]) : withoutCursorShims;
+  const nextTools = shouldEnableCursorShims
+    ? uniqueToolNames([...withoutCursorShims, ...XAI_CURSOR_AUTO_TOOL_NAMES])
+    : withoutCursorShims;
 
   if (nextTools.length !== activeTools.length || nextTools.some((toolName, index) => toolName !== activeTools[index])) {
     try {
@@ -522,8 +525,9 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
     pi.registerTool({
       name: "WebSearch",
       label: "WebSearch",
-      description: "Cursor/Grok CLI compatibility shim for xAI web search. Searches the web with xAI's native web_search tool.",
+      description: "Opt-in paid Cursor/Grok CLI web search. Enable via /tools and call only when the user explicitly requests xAI web search.",
       promptSnippet: "Cursor-style web search backed by xAI native web_search",
+      promptGuidelines: ["Call WebSearch only when the user explicitly requests xAI web search."],
       parameters: {
         type: "object",
         properties: {
@@ -538,6 +542,12 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
         const query = firstString(params?.query, params?.search_term, params?.value);
         if (!query) return xaiToolError("Error: WebSearch requires a query.");
+        if (ctx?.model?.provider !== XAI_PROVIDER_ID || !isGrokCliProxyModel(ctx.model.id)) {
+          return xaiToolError("Error: WebSearch requires an active xAI Grok Build or Composer model. No xAI request was sent.");
+        }
+        if (!isXaiSearchToolActive(pi, "WebSearch")) {
+          return xaiToolError("Error: WebSearch is disabled. Enable it in pi's /tools picker and request it explicitly. No xAI request was sent.");
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
 
@@ -545,7 +555,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
           const data = await createXaiResponse(
             apiKey,
             {
-              model: DEFAULT_XAI_MODEL,
+              model: ctx.model.id,
               input: `Search the web for: ${query}\n\nSummarize the key results with sources where available.`,
               tools: [{ type: "web_search", enable_image_understanding: true }],
             },

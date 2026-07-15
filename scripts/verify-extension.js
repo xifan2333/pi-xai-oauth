@@ -9,8 +9,24 @@ const repoRoot = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { interopDefault: true });
 const extensionModule = jiti(path.join(repoRoot, "extensions", "xai-oauth.ts"));
 const extension = extensionModule.default || extensionModule;
+const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
+  path.join(repoRoot, "extensions", "xai", "images.ts"),
+);
+const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
+const { createXaiResponse } = jiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
 const originalFetch = global.fetch;
 const requests = [];
+let nextXaiResponse;
+
+const TEST_XAI_MODEL = {
+  id: "grok-4.5",
+  provider: "xai-auth",
+  api: "xai-responses",
+  baseUrl: "https://api.x.ai/v1",
+  headers: {},
+  reasoning: true,
+  input: ["text", "image"],
+};
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -46,6 +62,11 @@ function installFetchMock() {
 
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     requests.push({ url: href, headers: init.headers || {}, body, signal: init.signal });
+    if (nextXaiResponse && urlOriginIs(href, "https://api.x.ai")) {
+      const response = nextXaiResponse;
+      nextXaiResponse = undefined;
+      return jsonResponse(response.body, { status: response.status });
+    }
     if (href.endsWith("/images/generations")) {
       return jsonResponse({ data: [{ url: "https://example.test/image.png" }] });
     }
@@ -55,6 +76,10 @@ function installFetchMock() {
 
 function restoreFetchMock() {
   global.fetch = originalFetch;
+}
+
+function respondToNextXaiRequest(status, body) {
+  nextXaiResponse = { status, body };
 }
 
 function headerValue(headers, name) {
@@ -87,6 +112,7 @@ function loadExtension() {
     },
     registerTool(tool) {
       tools.set(tool.name, tool);
+      if (!activeTools.includes(tool.name)) activeTools.push(tool.name);
     },
     getActiveTools() {
       if (throwOnGetActiveTools) throw new Error("tool registry not ready");
@@ -110,8 +136,9 @@ function loadExtension() {
   };
 }
 
-function authContext() {
+function authContext(model = TEST_XAI_MODEL) {
   return {
+    model,
     modelRegistry: {
       find(provider, modelId) {
         return { provider, id: modelId, headers: {} };
@@ -123,10 +150,17 @@ function authContext() {
   };
 }
 
-async function runTool(tools, name, params = {}, expectedText = "OK", requestOrigin = "https://api.x.ai") {
+async function runTool(
+  tools,
+  name,
+  params = {},
+  expectedText = "OK",
+  requestOrigin = "https://api.x.ai",
+  model = TEST_XAI_MODEL,
+) {
   const controller = new AbortController();
   const before = requests.length;
-  const result = await tools.get(name).execute("call_test", params, controller.signal, () => {}, authContext());
+  const result = await tools.get(name).execute("call_test", params, controller.signal, () => {}, authContext(model));
   const request = requests.slice(before).find((entry) => entry.url && urlOriginIs(entry.url, requestOrigin));
   if (expectedText instanceof RegExp) {
     assert.match(result.content[0].text, expectedText, `${name} should surface mocked xAI text`);
@@ -144,10 +178,37 @@ async function runCursorTool(tools, name, params = {}, ctx = {}) {
   return tools.get(name).execute("call_cursor", params, controller.signal, () => {}, { cwd: repoRoot, ...ctx });
 }
 
-async function verifyCursorToolShims(tools) {
+async function verifyCursorToolShims(loadResult) {
+  const { tools, getActiveTools, setActiveTools } = loadResult;
   for (const name of ["Read", "Write", "StrReplace", "Edit", "Delete", "LS", "Grep", "Glob", "Shell", "WebSearch"]) {
     assert.ok(tools.has(name), `${name} Cursor/Grok CLI shim should be registered`);
   }
+
+  const composerModel = { ...TEST_XAI_MODEL, id: "grok-composer-2.5-fast" };
+  const beforeDisabledWebSearch = requests.length;
+  const disabledWebSearchResult = await runCursorTool(tools, "WebSearch", { query: "must opt in" }, authContext(composerModel));
+  assert.match(disabledWebSearchResult.content[0].text, /WebSearch is disabled/);
+  assert.equal(requests.length, beforeDisabledWebSearch, "inactive Cursor WebSearch must fail before network access");
+
+  setActiveTools([...getActiveTools(), "WebSearch"]);
+  const beforeWebSearch = requests.length;
+  const webSearchResult = await runCursorTool(tools, "WebSearch", { query: "xAI docs" }, authContext(composerModel));
+  assert.equal(webSearchResult.content[0].text, "OK");
+  const webSearchRequest = requests
+    .slice(beforeWebSearch)
+    .find((entry) => entry.url && urlOriginIs(entry.url, "https://cli-chat-proxy.grok.com"));
+  assert.ok(webSearchRequest, "Cursor WebSearch should route through the active Grok CLI model");
+  assert.equal(webSearchRequest.body.model, composerModel.id);
+
+  const beforeStaleWebSearch = requests.length;
+  const staleWebSearchResult = await runCursorTool(
+    tools,
+    "WebSearch",
+    { query: "must not run" },
+    authContext({ provider: "anthropic", id: "claude-opus-4-8" }),
+  );
+  assert.match(staleWebSearchResult.content[0].text, /requires an active xAI/);
+  assert.equal(requests.length, beforeStaleWebSearch, "stale Cursor WebSearch calls must fail before network access");
 
   const grepResult = await runCursorTool(tools, "Grep", { query: "export const DEFAULT_XAI_MODEL", include: "*.ts", path: "extensions", limit: 5 });
   assert.match(grepResult.content[0].text, /xai\/constants\.ts/, "Grep shim should map query/include to pi grep pattern/glob");
@@ -232,7 +293,7 @@ async function verifyCursorToolShims(tools) {
 }
 
 async function verifyCursorToolActivation(loadResult) {
-  const { handlers, getActiveTools } = loadResult;
+  const { handlers, getActiveTools, setActiveTools } = loadResult;
   // Real ExtensionContext objects do not expose the active-tool accessors.
   // Keeping this context empty prevents the test from masking the regression.
   const ctx = {};
@@ -241,9 +302,18 @@ async function verifyCursorToolActivation(loadResult) {
 
   await selectModel("grok-composer-2.5-fast");
   assert.ok(getActiveTools().includes("Grep"), "Cursor shims should be enabled for Composer 2.5");
+  assert.ok(!getActiveTools().includes("WebSearch"), "selecting a Grok CLI model must not activate paid WebSearch");
   const composerTools = getActiveTools();
   await selectModel("grok-composer-2.5-fast");
   assert.deepStrictEqual(getActiveTools(), composerTools, "Repeated Composer sync should not duplicate shims");
+  await handlers.get("before_agent_start")?.({}, { model: { provider: "xai-auth", id: "grok-composer-2.5-fast" } });
+  assert.ok(!getActiveTools().includes("WebSearch"), "before-agent synchronization must preserve a manual WebSearch disable");
+
+  setActiveTools([...getActiveTools(), "WebSearch"]);
+  await selectModel("grok-4.3");
+  assert.ok(!getActiveTools().includes("WebSearch"), "switching to a non-CLI xAI model must disable Cursor WebSearch");
+  await selectModel("grok-composer-2.5-fast");
+  assert.ok(!getActiveTools().includes("WebSearch"), "switching back to a Grok CLI model must not restore Cursor WebSearch");
 
   await selectModel("grok-4.3");
   assert.ok(!getActiveTools().includes("Grep"), "Cursor shims should be disabled for non-Grok-CLI xAI models");
@@ -268,6 +338,298 @@ async function verifyCursorToolActivation(loadResult) {
   await selectModel("grok-composer-2.5-fast");
   assert.ok(!getActiveTools().includes("Grep"), "a failed set should not partially update the tool list");
   loadResult.setToolRegistryFailures();
+}
+
+async function verifyXaiSearchToolActivation(loadResult) {
+  const { handlers, tools, getActiveTools, setActiveTools } = loadResult;
+  const customSearchTools = ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research"];
+  const searchTools = [...customSearchTools, "WebSearch"];
+  const anthropicModel = { provider: "anthropic", id: "claude-opus-4-8" };
+  const requestsBeforeLifecycle = requests.length;
+
+  assert.ok(searchTools.every((name) => getActiveTools().includes(name)), "pi activates newly registered extension tools by default");
+  await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "session start must make paid xAI search tools opt-in");
+
+  await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
+  assert.ok(
+    searchTools.every((name) => !getActiveTools().includes(name)),
+    "selecting an xAI model must not implicitly activate paid search tools",
+  );
+  assert.equal(requests.length, requestsBeforeLifecycle, "session/model lifecycle hooks must never send an xAI request");
+
+  setActiveTools([...getActiveTools(), ...searchTools]);
+  loadResult.setToolRegistryFailures({ get: true });
+  await assert.doesNotReject(
+    async () => handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL }),
+    "search-tool reset should tolerate an unavailable registry",
+  );
+  loadResult.setToolRegistryFailures();
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry read");
+
+  setActiveTools([...getActiveTools(), ...searchTools]);
+  loadResult.setToolRegistryFailures({ set: true });
+  await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  const requestsBeforePersistentSetFailure = requests.length;
+  const persistentFailureResult = await tools.get("xai_web_search").execute(
+    "call_persistent_registry_failure",
+    { query: "must fail closed" },
+    undefined,
+    () => {},
+    authContext(TEST_XAI_MODEL),
+  );
+  assert.match(persistentFailureResult.content[0].text, /is disabled/);
+  assert.equal(
+    requests.length,
+    requestsBeforePersistentSetFailure,
+    "persistent registry write failures must keep paid search tools fail-closed",
+  );
+  loadResult.setToolRegistryFailures();
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry write");
+
+  setActiveTools([...getActiveTools(), ...searchTools]);
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(customSearchTools.every((name) => getActiveTools().includes(name)), "explicitly enabled xAI search tools should stay active for xAI models");
+  assert.ok(!getActiveTools().includes("WebSearch"), "Cursor WebSearch must remain disabled for non-CLI xAI models");
+
+  await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "switching away from xAI must disable paid search tools immediately");
+  await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "switching back to xAI must not silently restore paid search tools");
+
+  setActiveTools([...getActiveTools(), ...searchTools]);
+  const guardedCalls = {
+    xai_web_search: { query: "guard test" },
+    xai_x_search: { query: "guard test" },
+    xai_multi_agent: { query: "guard test" },
+    xai_deep_research: { topic: "guard test" },
+  };
+  const requestsBeforeGuards = requests.length;
+  for (const [name, params] of Object.entries(guardedCalls)) {
+    const result = await tools.get(name).execute("call_guard", params, undefined, () => {}, authContext(anthropicModel));
+    assert.match(result.content[0].text, /is disabled/, `${name} should reject a stale non-xAI invocation`);
+  }
+  assert.equal(requests.length, requestsBeforeGuards, "non-xAI search-tool guards must run before auth or network access");
+
+  setActiveTools(getActiveTools().filter((name) => name !== "WebSearch"));
+}
+
+function inlineImageUrls(value, urls = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) inlineImageUrls(item, urls);
+    return urls;
+  }
+  if (!value || typeof value !== "object") return urls;
+  if (value.type === "input_image" && typeof value.image_url === "string" && value.image_url.startsWith("data:image/")) {
+    urls.push(value.image_url);
+  }
+  for (const child of Object.values(value)) inlineImageUrls(child, urls);
+  return urls;
+}
+
+function inlineImageBase64Bytes(value) {
+  return inlineImageUrls(value).reduce((total, url) => total + Buffer.byteLength(url.split(",", 2)[1] || "", "utf8"), 0);
+}
+
+function toolImageOutput(imageUrl, callId = "call_image") {
+  return {
+    type: "function_call_output",
+    call_id: callId,
+    output: [
+      { type: "input_text", text: "screenshot result" },
+      { type: "input_image", image_url: imageUrl, detail: "auto" },
+    ],
+  };
+}
+
+async function verifyXaiImageLifecycle() {
+  const tinyImageUrl = `data:image/png;base64,${Buffer.from("tiny-image-fixture").toString("base64")}`;
+  const assistantOutputs = [
+    { type: "reasoning", summary: [] },
+    { type: "function_call", call_id: "next_call", name: "read", arguments: "{}" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+  ];
+
+  for (const assistantOutput of assistantOutputs) {
+    const rewritten = rewriteXaiResponsesPayload(
+      { model: TEST_XAI_MODEL.id, input: [toolImageOutput(tinyImageUrl), assistantOutput, { role: "user", content: "next" }] },
+      TEST_XAI_MODEL,
+    );
+    assert.equal(inlineImageUrls(rewritten).length, 0, `${assistantOutput.type} should consume earlier tool-result images`);
+    assert.match(JSON.stringify(rewritten), /historical tool image.*omitted/, "consumed tool images should leave an explicit marker");
+  }
+
+  const pending = rewriteXaiResponsesPayload(
+    { model: TEST_XAI_MODEL.id, input: [toolImageOutput(tinyImageUrl)] },
+    TEST_XAI_MODEL,
+  );
+  assert.equal(inlineImageUrls(pending).length, 1, "a tool image awaiting its first assistant response must be retained");
+
+  const nonAssistantTail = rewriteXaiResponsesPayload(
+    {
+      model: TEST_XAI_MODEL.id,
+      input: [
+        toolImageOutput(tinyImageUrl, "pending_a"),
+        { role: "user", content: [{ type: "input_text", text: "continue" }] },
+        { type: "function_call_output", call_id: "pending_b", output: "text only" },
+      ],
+    },
+    TEST_XAI_MODEL,
+  );
+  assert.equal(inlineImageUrls(nonAssistantTail).length, 1, "user and tool-output items must not consume a pending tool image");
+
+  const mixed = rewriteXaiResponsesPayload(
+    {
+      model: TEST_XAI_MODEL.id,
+      input: [
+        toolImageOutput(tinyImageUrl, "historical"),
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "seen" }] },
+        toolImageOutput(tinyImageUrl, "current"),
+      ],
+    },
+    TEST_XAI_MODEL,
+  );
+  assert.equal(inlineImageUrls(mixed).length, 1, "mixed history should omit consumed images and retain the current pending image");
+
+  const ordinaryUserImage = rewriteXaiResponsesPayload(
+    {
+      model: TEST_XAI_MODEL.id,
+      input: [
+        { role: "user", content: [{ type: "input_image", image_url: tinyImageUrl, detail: "auto" }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "seen" }] },
+      ],
+    },
+    TEST_XAI_MODEL,
+  );
+  assert.equal(inlineImageUrls(ordinaryUserImage).length, 1, "ordinary user images must never be pruned by the tool-image lifecycle");
+}
+
+async function verifyXaiImageCompaction() {
+  const sourceBytes = await fs.readFile(path.join(repoRoot, "preview.jpeg"));
+  const sourceBase64 = sourceBytes.toString("base64");
+  const sourceUrl = `data:image/jpeg;base64,${sourceBase64}`;
+  const payload = {
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_image", image_url: sourceUrl, detail: "auto" },
+          { type: "input_image", image_url: sourceUrl, detail: "auto" },
+        ],
+      },
+    ],
+  };
+
+  const underBudget = await compactXaiInlineImages(payload, sourceBase64.length * 2 + 1);
+  assert.deepEqual(inlineImageUrls(underBudget), [sourceUrl, sourceUrl], "under-budget images within 2000px should remain byte-identical");
+
+  const compactBudget = Math.floor(sourceBase64.length * 1.5);
+  const compacted = await compactXaiInlineImages(payload, compactBudget);
+  const compactedUrls = inlineImageUrls(compacted);
+  assert.equal(compactedUrls.length, 2);
+  assert.ok(inlineImageBase64Bytes(compacted) <= compactBudget, "compacted inline images must obey the aggregate budget");
+  const { resizeImage } = await import("@earendil-works/pi-coding-agent");
+  for (const url of compactedUrls) {
+    assert.match(url, /^data:image\/(?:png|jpeg);base64,/);
+    const [metadata, data] = url.split(",", 2);
+    const inspected = await resizeImage(Buffer.from(data, "base64"), metadata.slice(5).split(";", 1)[0], {
+      maxWidth: 2000,
+      maxHeight: 2000,
+      maxBytes: Buffer.byteLength(data, "utf8") + 1,
+      jpegQuality: 95,
+    });
+    assert.ok(inspected && inspected.width <= 2000 && inspected.height <= 2000, "compacted image dimensions must stay within 2000px");
+  }
+
+  await assert.rejects(
+    () => compactXaiInlineImages({ input: [{ type: "input_image", image_url: "data:image/png;base64,bm90LWFuLWltYWdl" }] }, 2),
+    /exceeds the safe transport budget and could not be compacted/,
+    "undecodable oversized inline images should fail locally instead of reaching xAI",
+  );
+}
+
+async function verifyXaiImageTransport(provider) {
+  const sourceBytes = await fs.readFile(path.join(repoRoot, "preview.jpeg"));
+  const oversizedBytes = Buffer.concat(Array(10).fill(sourceBytes));
+  const oversizedBase64 = oversizedBytes.toString("base64");
+  const oversizedUrl = `data:image/jpeg;base64,${oversizedBase64}`;
+  const input = [
+    {
+      role: "user",
+      content: [
+        { type: "input_image", image_url: oversizedUrl, detail: "auto" },
+        { type: "input_image", image_url: oversizedUrl, detail: "auto" },
+        { type: "input_text", text: "Reply exactly OK." },
+      ],
+    },
+  ];
+
+  const beforeDirect = requests.length;
+  await createXaiResponse("oauth-token", { model: TEST_XAI_MODEL.id, input, max_output_tokens: 32 });
+  const directRequest = requests.slice(beforeDirect).find((entry) => entry.url?.endsWith("/responses"));
+  assert.ok(directRequest, "createXaiResponse should send the prepared payload");
+  assert.ok(inlineImageBase64Bytes(directRequest.body) <= MAX_XAI_INLINE_IMAGE_BASE64_BYTES);
+  assert.ok(inlineImageUrls(directRequest.body).every((url) => url !== oversizedUrl), "direct Responses calls should compact oversized images");
+
+  const beforeStream = requests.length;
+  const stream = provider.streamSimple(
+    TEST_XAI_MODEL,
+    {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", data: oversizedBase64, mimeType: "image/jpeg" },
+            { type: "image", data: oversizedBase64, mimeType: "image/jpeg" },
+            { type: "text", text: "Reply exactly OK." },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    { apiKey: "oauth-token", sessionId: "image-transport-session" },
+  );
+  await stream.result();
+  const streamRequest = requests.slice(beforeStream).find((entry) => entry.url?.endsWith("/responses"));
+  assert.ok(streamRequest, "provider streaming should send the prepared payload");
+  assert.ok(inlineImageBase64Bytes(streamRequest.body) <= MAX_XAI_INLINE_IMAGE_BASE64_BYTES);
+  assert.ok(inlineImageUrls(streamRequest.body).every((url) => url !== oversizedUrl), "streaming Responses calls should compact oversized images");
+
+  const beforeMutatingHook = requests.length;
+  const mutatingHookStream = provider.streamSimple(
+    TEST_XAI_MODEL,
+    { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+    {
+      apiKey: "oauth-token",
+      sessionId: "image-mutating-hook-session",
+      onPayload(payload) {
+        payload.input = input;
+      },
+    },
+  );
+  await mutatingHookStream.result();
+  const mutatingHookRequest = requests.slice(beforeMutatingHook).find((entry) => entry.url?.endsWith("/responses"));
+  assert.ok(mutatingHookRequest, "an in-place payload hook should still send a prepared request");
+  assert.ok(
+    inlineImageBase64Bytes(mutatingHookRequest.body) <= MAX_XAI_INLINE_IMAGE_BASE64_BYTES,
+    "in-place payload hook mutations must be compacted before transport",
+  );
+}
+
+async function verifyXaiStreamErrorPrefix(provider) {
+  respondToNextXaiRequest(500, { code: "internal", error: "Auth context expired." });
+  const message = await captureStreamResultMessage(() =>
+    provider.streamSimple(
+      TEST_XAI_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+      { apiKey: "oauth-token", sessionId: "error-prefix-session" },
+    ),
+  );
+  assert.match(message, /^xAI API error\b/i, "delegated xAI transport errors should be labeled as xAI errors");
+  assert.doesNotMatch(message, /^OpenAI API error\b/i);
 }
 
 function lastResultErrorMessage(result) {
@@ -516,12 +878,19 @@ async function main() {
     assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
 
+    await verifyXaiSearchToolActivation(firstLoad);
+    await verifyXaiImageLifecycle();
+    await verifyXaiImageCompaction();
+
     await verifyOpenAIResponsesTransport();
     await verifyXaiResponsesTransport(provider);
 
+    await verifyXaiImageTransport(provider);
+    await verifyXaiStreamErrorPrefix(provider);
+
     await verifyCliModelStreamRouting(provider);
     await verifyCursorToolActivation(firstLoad);
-    await verifyCursorToolShims(tools);
+    await verifyCursorToolShims(firstLoad);
 
     await verifyOAuthCallbackState(provider);
     await verifyOAuthManualRawCode(provider);
@@ -566,11 +935,38 @@ async function main() {
     assert.equal(headerValue(buildRequest.headers, "x-grok-model-override"), "grok-build");
     assert.ok(headerValue(buildRequest.headers, "x-grok-conv-id"), "Grok Build tool calls should include a Grok conversation id");
 
+    firstLoad.setActiveTools([
+      ...firstLoad.getActiveTools(),
+      "xai_web_search",
+      "xai_x_search",
+      "xai_multi_agent",
+      "xai_deep_research",
+    ]);
     const { body: webBody } = await runTool(tools, "xai_web_search", { query: "xAI docs" });
     assert.deepEqual(webBody.tools, [{ type: "web_search", enable_image_understanding: true }]);
+    assert.equal(webBody.model, TEST_XAI_MODEL.id, "xai_web_search should use the active xAI model");
+
+    respondToNextXaiRequest(403, {
+      code: "personal-team-blocked:spending-limit",
+      error: "You have run out of credits or need a Grok subscription.",
+    });
+    const beforeProviderError = requests.length;
+    const selectedGrok43 = { ...TEST_XAI_MODEL, id: "grok-4.3" };
+    const providerErrorResult = await tools.get("xai_web_search").execute(
+      "call_provider_error",
+      { query: "one attempt" },
+      undefined,
+      () => {},
+      authContext(selectedGrok43),
+    );
+    assert.match(providerErrorResult.content[0].text, /xAI API Error 403/);
+    const providerErrorRequests = requests.slice(beforeProviderError).filter((entry) => urlOriginIs(entry.url, "https://api.x.ai"));
+    assert.equal(providerErrorRequests.length, 1, "a provider failure should result in one xAI request, not an implicit retry loop");
+    assert.equal(providerErrorRequests[0].body.model, selectedGrok43.id, "provider errors should still use the active selected model");
 
     const { body: xBody } = await runTool(tools, "xai_x_search", { query: "grok", since: "2026-05-01", until: "2026-05-22" });
     assert.equal(xBody.tools[0].type, "x_search");
+    assert.equal(xBody.model, TEST_XAI_MODEL.id, "xai_x_search should use the active xAI model");
     assert.equal(xBody.tools[0].from_date, "2026-05-01");
     assert.equal(xBody.tools[0].to_date, "2026-05-22");
 
