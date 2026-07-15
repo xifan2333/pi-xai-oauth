@@ -313,7 +313,7 @@ In the pi TUI, select an `xai-auth` model and run:
 /xai-tools
 ```
 
-The picker shows each tool's category and cost-risk context, warns that calls may use xAI credits, and applies changes only to the current xAI session. You can also manage one tool directly:
+The picker shows each tool's category and cost-risk context, warns that calls may use xAI credits, and applies changes only to the current xAI session. Use ↑/↓ to move, Enter or Space to toggle a tool in place, and Escape when done; the highlighted row stays put after each toggle. You can also manage one tool directly:
 
 ```text
 /xai-tools status
