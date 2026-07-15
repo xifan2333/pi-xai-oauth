@@ -14,6 +14,7 @@ const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
 );
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
 const { createXaiResponse } = jiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
+const { XAI_NETWORK_TOOL_NAMES } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "model-scope.ts"));
 const originalFetch = global.fetch;
 const requests = [];
 let nextXaiResponse;
@@ -27,6 +28,9 @@ const TEST_XAI_MODEL = {
   reasoning: true,
   input: ["text", "image"],
 };
+
+const XAI_NETWORK_TOOLS = [...XAI_NETWORK_TOOL_NAMES];
+const CUSTOM_XAI_NETWORK_TOOLS = XAI_NETWORK_TOOLS.filter((name) => name !== "WebSearch");
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -361,42 +365,45 @@ async function verifyCursorToolActivation(loadResult) {
   loadResult.setToolRegistryFailures();
 }
 
-async function verifyXaiSearchToolActivation(loadResult) {
+async function verifyXaiNetworkToolActivation(loadResult) {
   const { handlers, tools, getActiveTools, setActiveTools } = loadResult;
-  const customSearchTools = ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research"];
-  const searchTools = [...customSearchTools, "WebSearch"];
   const anthropicModel = { provider: "anthropic", id: "claude-opus-4-8" };
   const requestsBeforeLifecycle = requests.length;
 
-  assert.ok(searchTools.every((name) => getActiveTools().includes(name)), "pi activates newly registered extension tools by default");
+  assert.deepStrictEqual(
+    [...tools.keys()].filter((name) => name.startsWith("xai_")).sort(),
+    [...CUSTOM_XAI_NETWORK_TOOLS].sort(),
+    "every registered xai_* tool must be present in the network opt-in catalog",
+  );
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => getActiveTools().includes(name)), "pi activates newly registered extension tools by default");
   await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "session start must make paid xAI search tools opt-in");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)), "session start must make every network-backed xAI tool opt-in");
 
   await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
   assert.ok(
-    searchTools.every((name) => !getActiveTools().includes(name)),
-    "selecting an xAI model must not implicitly activate paid search tools",
+    XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)),
+    "selecting an xAI model must not implicitly activate network-backed tools",
   );
   assert.equal(requests.length, requestsBeforeLifecycle, "session/model lifecycle hooks must never send an xAI request");
 
-  setActiveTools([...getActiveTools(), ...searchTools]);
+  setActiveTools([...getActiveTools(), ...XAI_NETWORK_TOOLS]);
   loadResult.setToolRegistryFailures({ get: true });
   await assert.doesNotReject(
     async () => handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL }),
-    "search-tool reset should tolerate an unavailable registry",
+    "network-tool reset should tolerate an unavailable registry",
   );
   loadResult.setToolRegistryFailures();
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry read");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry read");
 
-  setActiveTools([...getActiveTools(), ...searchTools]);
+  setActiveTools([...getActiveTools(), ...XAI_NETWORK_TOOLS]);
   loadResult.setToolRegistryFailures({ set: true });
   await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
   const requestsBeforePersistentSetFailure = requests.length;
-  const persistentFailureResult = await tools.get("xai_web_search").execute(
+  const persistentFailureResult = await tools.get("xai_generate_image").execute(
     "call_persistent_registry_failure",
-    { query: "must fail closed" },
+    { prompt: "must fail closed" },
     undefined,
     () => {},
     authContext(TEST_XAI_MODEL),
@@ -405,52 +412,92 @@ async function verifyXaiSearchToolActivation(loadResult) {
   assert.equal(
     requests.length,
     requestsBeforePersistentSetFailure,
-    "persistent registry write failures must keep paid search tools fail-closed",
+    "persistent registry write failures must keep network-backed tools fail-closed",
   );
   loadResult.setToolRegistryFailures();
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry write");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)), "before_agent_start should retry a failed registry write");
 
-  setActiveTools([...getActiveTools(), ...searchTools]);
+  setActiveTools([...getActiveTools(), ...XAI_NETWORK_TOOLS]);
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
   assert.ok(
-    searchTools.every((name) => !getActiveTools().includes(name)),
-    "direct registry additions must not bypass package-owned paid-tool opt-in",
+    XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)),
+    "direct registry additions must not bypass package-owned network-tool opt-in",
   );
 
   await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "switching away from xAI must disable paid search tools immediately");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)), "switching away from xAI must disable network-backed tools immediately");
   await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "switching back to xAI must not silently restore paid search tools");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)), "switching back to xAI must not silently restore network-backed tools");
 
-  setActiveTools([...getActiveTools(), ...searchTools]);
+  setActiveTools([...getActiveTools(), ...XAI_NETWORK_TOOLS]);
   const guardedCalls = {
+    xai_generate_text: { prompt: "guard test" },
     xai_web_search: { query: "guard test" },
     xai_x_search: { query: "guard test" },
     xai_multi_agent: { query: "guard test" },
     xai_deep_research: { topic: "guard test" },
+    xai_code_execution: { code: "print('guard test')" },
+    xai_generate_image: { prompt: "guard test" },
+    xai_analyze_image: { image: "https://example.test/guard.png" },
+    xai_critique: { content: "guard test" },
   };
   const requestsBeforeGuards = requests.length;
+  let registryTouches = 0;
+  const guardedContext = {
+    model: TEST_XAI_MODEL,
+    modelRegistry: {
+      find() {
+        registryTouches += 1;
+        throw new Error("disabled tools must not resolve OAuth credentials");
+      },
+    },
+  };
   for (const [name, params] of Object.entries(guardedCalls)) {
-    const result = await tools.get(name).execute("call_guard", params, undefined, () => {}, authContext(anthropicModel));
-    assert.match(result.content[0].text, /is disabled/, `${name} should reject a stale non-xAI invocation`);
+    const result = await tools.get(name).execute("call_guard", params, undefined, () => {}, guardedContext);
+    assert.match(result.content[0].text, /is disabled/, `${name} should reject an unauthorized invocation`);
   }
-  assert.equal(requests.length, requestsBeforeGuards, "non-xAI search-tool guards must run before auth or network access");
+  assert.equal(registryTouches, 0, "disabled network tools must fail before OAuth credential lookup");
+  assert.equal(requests.length, requestsBeforeGuards, "disabled network-tool guards must run before network access");
 
   setActiveTools(getActiveTools().filter((name) => name !== "WebSearch"));
 }
 
 async function verifyXaiToolsCommand(loadResult) {
-  const { commands, handlers, getActiveTools, setToolRegistryFailures } = loadResult;
+  const { commands, handlers, tools, getActiveTools, setToolRegistryFailures } = loadResult;
   const command = commands.get("xai-tools");
   assert.ok(command, "the package should register /xai-tools");
 
   const notifications = [];
   const runCommand = (args, model, select) => command.handler(args, extensionCommandContext(model, notifications, select));
-  const searchTools = ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research", "WebSearch"];
 
   await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
-  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)));
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)));
+
+  const imageTool = tools.get("xai_generate_image");
+  assert.ok(
+    imageTool.promptGuidelines.some((guideline) => /explicitly asks to generate an image/.test(guideline)),
+    "xai_generate_image must require explicit user intent",
+  );
+  await runCommand("enable xai_generate_image", TEST_XAI_MODEL);
+  assert.ok(getActiveTools().includes("xai_generate_image"), "/xai-tools should provide a real image-generation enable path");
+  assert.match(notifications.at(-1).message, /may use xAI credits/);
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(getActiveTools().includes("xai_generate_image"), "before-agent sync should preserve deliberate image-generation opt-in");
+
+  const anthropicModel = { provider: "anthropic", id: "claude-opus-4-8" };
+  await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
+  assert.ok(!getActiveTools().includes("xai_generate_image"), "leaving xAI must disable image generation");
+  await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
+  assert.ok(!getActiveTools().includes("xai_generate_image"), "returning to xAI must not restore image generation");
+
+  await runCommand("enable xai_generate_image", TEST_XAI_MODEL);
+  await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(!getActiveTools().includes("xai_generate_image"), "a new session must reset image-generation opt-in");
+
+  await runCommand("enable xai_generate_image", TEST_XAI_MODEL);
+  await runCommand("disable xai_generate_image", TEST_XAI_MODEL);
+  assert.ok(!getActiveTools().includes("xai_generate_image"), "/xai-tools should disable image generation");
 
   await runCommand("enable xai_web_search", TEST_XAI_MODEL);
   assert.ok(getActiveTools().includes("xai_web_search"), "/xai-tools should explicitly enable an eligible tool");
@@ -472,7 +519,6 @@ async function verifyXaiToolsCommand(loadResult) {
   await handlers.get("before_agent_start")?.({}, { model: composerModel });
   assert.ok(getActiveTools().includes("WebSearch"), "Grok CLI sync should preserve command-based WebSearch opt-in");
 
-  const anthropicModel = { provider: "anthropic", id: "claude-opus-4-8" };
   await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
   await runCommand("enable xai_x_search", anthropicModel);
   assert.ok(!getActiveTools().includes("xai_x_search"), "non-xAI models must not enable paid xAI tools");
@@ -480,16 +526,33 @@ async function verifyXaiToolsCommand(loadResult) {
 
   await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
   let pickerPass = 0;
-  await runCommand("", TEST_XAI_MODEL, (_title, options) => {
+  let pickerTitle = "";
+  let pickerOptions = [];
+  await runCommand("", TEST_XAI_MODEL, (title, options) => {
+    pickerTitle = title;
+    pickerOptions = options;
     pickerPass += 1;
     return pickerPass === 1
       ? options.find((option) => option.includes("xai_web_search"))
       : "Done";
   });
-  assert.ok(getActiveTools().includes("xai_web_search"), "interactive /xai-tools should toggle the selected paid tool");
+  assert.ok(getActiveTools().includes("xai_web_search"), "interactive /xai-tools should toggle the selected network tool");
+  assert.match(pickerTitle, /explicit opt-in/);
+  assert.ok(
+    pickerOptions.some((option) => option.includes("xai_generate_image") && option.includes("image") && option.includes("per image")),
+    "interactive /xai-tools should expose image generation with category and cost-risk context",
+  );
 
   await runCommand("status", TEST_XAI_MODEL);
   assert.match(notifications.at(-1).message, /xai_web_search=enabled/);
+  assert.match(notifications.at(-1).message, /xai_generate_image=disabled/);
+  for (const toolName of XAI_NETWORK_TOOLS) {
+    assert.match(
+      notifications.at(-1).message,
+      new RegExp(`${toolName}=(?:enabled|disabled|unavailable)`),
+      `/xai-tools status must include ${toolName}`,
+    );
+  }
 
   await runCommand("disable xai_web_search", TEST_XAI_MODEL);
   setToolRegistryFailures({ get: true });
@@ -503,22 +566,22 @@ async function verifyXaiToolsCommand(loadResult) {
   assert.match(notifications.at(-1).message, /could not be updated/);
   setToolRegistryFailures();
 
-  loadResult.setActiveTools([...getActiveTools(), ...searchTools]);
+  loadResult.setActiveTools([...getActiveTools(), ...XAI_NETWORK_TOOLS]);
   setToolRegistryFailures({ set: true });
   await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
   setToolRegistryFailures();
-  assert.ok(searchTools.every((name) => getActiveTools().includes(name)), "the fixture should retain stale default-active tools after a failed reset");
+  assert.ok(XAI_NETWORK_TOOLS.every((name) => getActiveTools().includes(name)), "the fixture should retain stale default-active tools after a failed reset");
   await runCommand("enable xai_web_search", TEST_XAI_MODEL);
   assert.ok(getActiveTools().includes("xai_web_search"), "the deliberately selected tool should be enabled after registry recovery");
   assert.ok(
-    searchTools.filter((name) => name !== "xai_web_search").every((name) => !getActiveTools().includes(name)),
-    "enabling one tool after reset recovery must strip every stale unauthorized paid tool",
+    XAI_NETWORK_TOOLS.filter((name) => name !== "xai_web_search").every((name) => !getActiveTools().includes(name)),
+    "enabling one tool after reset recovery must strip every stale unauthorized network tool",
   );
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
   assert.deepStrictEqual(
-    searchTools.filter((name) => getActiveTools().includes(name)),
+    XAI_NETWORK_TOOLS.filter((name) => getActiveTools().includes(name)),
     ["xai_web_search"],
-    "lifecycle sync must preserve only individually authorized paid tools",
+    "lifecycle sync must preserve only individually authorized network tools",
   );
 }
 
@@ -985,7 +1048,7 @@ async function main() {
     assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
 
-    await verifyXaiSearchToolActivation(firstLoad);
+    await verifyXaiNetworkToolActivation(firstLoad);
     await verifyXaiToolsCommand(firstLoad);
     await verifyXaiImageLifecycle();
     await verifyXaiImageCompaction();
@@ -1005,7 +1068,12 @@ async function main() {
     await verifyOAuthManualCallbackUrlState(provider);
     await verifyOAuthManualWrongStateIgnored(provider);
 
+    await firstLoad.commands.get("xai-tools").handler(
+      "enable xai_generate_text",
+      extensionCommandContext(TEST_XAI_MODEL),
+    );
     const noAuthResult = await tools.get("xai_generate_text").execute("call_noauth", { prompt: "hi" }, undefined, () => {}, {
+      model: TEST_XAI_MODEL,
       modelRegistry: {
         find: () => undefined,
       },
@@ -1043,7 +1111,7 @@ async function main() {
     assert.equal(headerValue(buildRequest.headers, "x-grok-model-override"), "grok-build");
     assert.ok(headerValue(buildRequest.headers, "x-grok-conv-id"), "Grok Build tool calls should include a Grok conversation id");
 
-    for (const toolName of ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research"]) {
+    for (const toolName of CUSTOM_XAI_NETWORK_TOOLS) {
       await firstLoad.commands.get("xai-tools").handler(
         `enable ${toolName}`,
         extensionCommandContext(TEST_XAI_MODEL),
@@ -1088,7 +1156,9 @@ async function main() {
     assert.equal(imageContent[0].type, "input_image");
     assert.equal(imageContent[1].type, "input_text");
 
+    const requestsBeforeImageGeneration = requests.length;
     const { body: imageGenBody } = await runTool(tools, "xai_generate_image", { prompt: "a crisp diagram" }, /Generated 1 image/);
+    assert.equal(requests.length, requestsBeforeImageGeneration + 1, "enabled image generation should send exactly one xAI request");
     assert.equal(imageGenBody.model, "grok-imagine-image-quality");
     const imageTool = tools.get("xai_generate_image");
     assert.equal(Object.hasOwn(imageGenBody, "size"), false, "image generation should not send unsupported size defaults");

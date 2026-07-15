@@ -3,33 +3,38 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { XAI_PROVIDER_ID } from "../constants";
 import { isGrokCliProxyModel } from "../models";
 
-/** Paid xAI tools that invoke xAI's server-side web or X search. */
-export const XAI_SEARCH_TOOL_NAMES = [
+/** Network-backed xAI tools that make an additional authenticated API request. */
+export const XAI_NETWORK_TOOL_NAMES = [
+  "xai_generate_text",
   "xai_web_search",
   "xai_x_search",
   "xai_multi_agent",
   "xai_deep_research",
+  "xai_code_execution",
+  "xai_generate_image",
+  "xai_analyze_image",
+  "xai_critique",
   "WebSearch",
 ] as const;
 
-export type XaiSearchToolName = (typeof XAI_SEARCH_TOOL_NAMES)[number];
+export type XaiNetworkToolName = (typeof XAI_NETWORK_TOOL_NAMES)[number];
 
-export interface XaiSearchToolUpdateResult {
+export interface XaiNetworkToolUpdateResult {
   ok: boolean;
   active: boolean;
   error?: string;
 }
 
-const explicitlyEnabledXaiSearchTools = new WeakMap<object, Set<XaiSearchToolName>>();
-const xaiSearchToolNameSet = new Set<string>(XAI_SEARCH_TOOL_NAMES);
+const explicitlyEnabledXaiNetworkTools = new WeakMap<object, Set<XaiNetworkToolName>>();
+const xaiNetworkToolNameSet = new Set<string>(XAI_NETWORK_TOOL_NAMES);
 
-function activeToolsWithExplicitSearchSelection(
+function activeToolsWithExplicitNetworkSelection(
   activeTools: readonly string[],
-  enabledSearchTools: ReadonlySet<XaiSearchToolName>,
+  enabledNetworkTools: ReadonlySet<XaiNetworkToolName>,
 ): string[] {
   return [
-    ...activeTools.filter((name) => !xaiSearchToolNameSet.has(name)),
-    ...XAI_SEARCH_TOOL_NAMES.filter((name) => enabledSearchTools.has(name)),
+    ...activeTools.filter((name) => !xaiNetworkToolNameSet.has(name)),
+    ...XAI_NETWORK_TOOL_NAMES.filter((name) => enabledNetworkTools.has(name)),
   ];
 }
 
@@ -40,11 +45,11 @@ export function activeXaiModel(ctx: Pick<ExtensionContext, "model"> | undefined)
   return model as Model<Api>;
 }
 
-/** Return whether a paid search tool is deliberately active in pi's current tool set. */
-export function isXaiSearchToolActive(api: any, toolName: XaiSearchToolName): boolean {
+/** Return whether a network-backed xAI tool is deliberately active in pi's current tool set. */
+export function isXaiNetworkToolActive(api: any, toolName: XaiNetworkToolName): boolean {
   if (typeof api?.getActiveTools !== "function") return false;
   try {
-    if (!explicitlyEnabledXaiSearchTools.get(api as object)?.has(toolName)) return false;
+    if (!explicitlyEnabledXaiNetworkTools.get(api as object)?.has(toolName)) return false;
     const activeTools = api.getActiveTools();
     return Array.isArray(activeTools) && activeTools.includes(toolName);
   } catch {
@@ -52,19 +57,19 @@ export function isXaiSearchToolActive(api: any, toolName: XaiSearchToolName): bo
   }
 }
 
-/** Deliberately enable or disable one paid xAI search tool for the current model scope. */
-export function setXaiSearchToolActive(
+/** Deliberately enable or disable one network-backed xAI tool for the current model scope. */
+export function setXaiNetworkToolActive(
   api: any,
   model: Model<Api> | undefined,
-  toolName: XaiSearchToolName,
+  toolName: XaiNetworkToolName,
   active: boolean,
-): XaiSearchToolUpdateResult {
+): XaiNetworkToolUpdateResult {
   const xaiModel = activeXaiModel(model ? { model } : undefined);
   if (active && !xaiModel) {
     return {
       ok: false,
       active: false,
-      error: "Select an xAI/Grok model before enabling a paid xAI search tool.",
+      error: "Select an xAI/Grok model before enabling a network-backed xAI tool.",
     };
   }
   if (active && toolName === "WebSearch" && !isGrokCliProxyModel(xaiModel!.id)) {
@@ -83,8 +88,8 @@ export function setXaiSearchToolActive(
   }
 
   const scope = api as object;
-  const previousSelection = new Set(explicitlyEnabledXaiSearchTools.get(scope) ?? []);
-  const nextSelection = xaiModel ? new Set(previousSelection) : new Set<XaiSearchToolName>();
+  const previousSelection = new Set(explicitlyEnabledXaiNetworkTools.get(scope) ?? []);
+  const nextSelection = xaiModel ? new Set(previousSelection) : new Set<XaiNetworkToolName>();
   if (xaiModel && !isGrokCliProxyModel(xaiModel.id)) nextSelection.delete("WebSearch");
   if (active) nextSelection.add(toolName);
   else nextSelection.delete(toolName);
@@ -102,13 +107,13 @@ export function setXaiSearchToolActive(
     };
   }
 
-  const nextTools = activeToolsWithExplicitSearchSelection(activeTools, nextSelection);
+  const nextTools = activeToolsWithExplicitNetworkSelection(activeTools, nextSelection);
   try {
     const unchanged = nextTools.length === activeTools.length
       && nextTools.every((name, index) => name === activeTools[index]);
     if (!unchanged) api.setActiveTools(nextTools);
-    if (xaiModel) explicitlyEnabledXaiSearchTools.set(scope, nextSelection);
-    else explicitlyEnabledXaiSearchTools.delete(scope);
+    if (xaiModel) explicitlyEnabledXaiNetworkTools.set(scope, nextSelection);
+    else explicitlyEnabledXaiNetworkTools.delete(scope);
     return { ok: true, active };
   } catch {
     return {
@@ -120,25 +125,25 @@ export function setXaiSearchToolActive(
 }
 
 /**
- * Keep paid xAI search tools opt-in and remove them immediately outside xAI models.
+ * Keep network-backed xAI tools opt-in and remove them immediately outside xAI models.
  *
  * A session start resets them even for xAI models so installing or reloading the
  * extension cannot silently expose a credit-gated tool. Users can deliberately
  * enable an individual tool through this package's `/xai-tools` command while
  * an xAI model is active.
  */
-export function syncXaiSearchToolsForModel(api: any, model?: Model<Api>, options?: { reset?: boolean }) {
+export function syncXaiNetworkToolsForModel(api: any, model?: Model<Api>, options?: { reset?: boolean }) {
   if (typeof api?.getActiveTools !== "function" || typeof api?.setActiveTools !== "function") return;
   const scope = api as object;
   const xaiModel = activeXaiModel(model ? { model } : undefined);
-  let enabledSearchTools: Set<XaiSearchToolName>;
+  let enabledNetworkTools: Set<XaiNetworkToolName>;
   if (options?.reset || !xaiModel) {
-    explicitlyEnabledXaiSearchTools.delete(scope);
-    enabledSearchTools = new Set();
+    explicitlyEnabledXaiNetworkTools.delete(scope);
+    enabledNetworkTools = new Set();
   } else {
-    enabledSearchTools = new Set(explicitlyEnabledXaiSearchTools.get(scope) ?? []);
-    if (!isGrokCliProxyModel(xaiModel.id)) enabledSearchTools.delete("WebSearch");
-    explicitlyEnabledXaiSearchTools.set(scope, enabledSearchTools);
+    enabledNetworkTools = new Set(explicitlyEnabledXaiNetworkTools.get(scope) ?? []);
+    if (!isGrokCliProxyModel(xaiModel.id)) enabledNetworkTools.delete("WebSearch");
+    explicitlyEnabledXaiNetworkTools.set(scope, enabledNetworkTools);
   }
 
   let activeTools: string[];
@@ -149,7 +154,7 @@ export function syncXaiSearchToolsForModel(api: any, model?: Model<Api>, options
     return;
   }
 
-  const nextTools = activeToolsWithExplicitSearchSelection(activeTools, enabledSearchTools);
+  const nextTools = activeToolsWithExplicitNetworkSelection(activeTools, enabledNetworkTools);
   const unchanged = nextTools.length === activeTools.length
     && nextTools.every((name, index) => name === activeTools[index]);
   if (unchanged) return;

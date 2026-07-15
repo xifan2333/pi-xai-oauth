@@ -1,29 +1,31 @@
-# Implementation Plan: GitHub Issue #52
+# Implementation Plan: GitHub Issue #54
 
-**Branch:** feature/issue-52-xai-tools
+**Branch:** feature/issue-54-paid-xai-tools
 
 **Date:** 2026-07-15
 
-**Goal:** Give users a package-owned, fail-closed way to opt in to paid xAI search tools without depending on pi's optional `/tools` example extension.
+**Goal:** Make image generation and every other network-backed xAI helper a model-scoped explicit opt-in, with one package-owned activation policy and fail-closed execution guards.
 
-## Phase 1: Reproduce and verify
-- [x] Read issue #52 and confirm there are no follow-up comments.
-- [x] Verify that core pi 0.80.7 does not register `/tools`; it ships only as an optional example extension.
-- [x] Inspect the active-tool registry, command UI API, existing model scope, docs, and verification harness.
+## Phase 1: Audit and policy
+- [x] Read issue #54 and audit every registered custom xAI and Cursor/Grok CLI tool.
 - [x] Run clean baseline tests and TypeScript validation.
+- [x] Independently confirm the policy boundary: extra xAI requests require opt-in; local shims remain automatic.
 
-## Phase 2: Package-owned opt-in command
-- [x] Register `/xai-tools` from `pi-xai-oauth`.
-- [x] Provide an interactive paid-tool picker plus explicit `enable`, `disable`, and `status` arguments.
-- [x] Require an active xAI model for enablement and restrict `WebSearch` to Grok Build/Composer models.
-- [x] Preserve session-start reset, non-xAI model cleanup, and fail-closed registry behavior.
+## Phase 2: Activation boundary
+- [x] Expand the package-owned catalog to all ten network-backed xAI tools.
+- [x] Require an active eligible xAI model plus per-tool package authorization.
+- [x] Guard every custom executor before OAuth credential lookup or network access.
+- [x] Reset authorization on session start and when leaving xAI; never silently restore it.
+- [x] Keep `WebSearch` restricted to Grok Build/Composer models.
 
-## Phase 3: Documentation and verification
-- [x] Replace every misleading core `/tools` reference with the package-owned command.
-- [x] Add regression coverage for command registration, eligibility, toggling, lifecycle persistence, and registry failures.
-- [x] Run `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
-- [x] Smoke-test the command through pi's real extension loader.
+## Phase 3: UX, documentation, and verification
+- [x] Add category and cost-risk context to `/xai-tools`.
+- [x] Add explicit-user-intent guidance, especially for `xai_generate_image`.
+- [x] Document the activation policy for every tool and distinguish automatic local shims.
+- [x] Add catalog-completeness, no-auth/no-network, lifecycle, command, and image-generation regressions.
+- [x] Run final tests, package checks, and a real pi loader/RPC smoke.
+- [x] Complete independent diff review with no findings.
 
 **Owner:** Main agent
 
-**Next action:** Hand off the completed worktree for commit or PR publication.
+**Next action:** Hand off the completed branch for commit or PR publication.

@@ -6,17 +6,15 @@ import { grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiTextInput, xaiToolError } from "./common";
-import { activeXaiModel, isXaiSearchToolActive, XAI_SEARCH_TOOL_NAMES } from "./model-scope";
+import { activeXaiModel, isXaiNetworkToolActive, type XaiNetworkToolName } from "./model-scope";
 
-type XaiSearchToolName = (typeof XAI_SEARCH_TOOL_NAMES)[number];
-
-function activeModelForSearchTool(pi: ExtensionAPI, ctx: any, toolName: XaiSearchToolName) {
+function activeModelForXaiTool(pi: ExtensionAPI, ctx: any, toolName: XaiNetworkToolName) {
   const model = activeXaiModel(ctx);
-  if (!model || !isXaiSearchToolActive(pi, toolName)) return undefined;
+  if (!model || !isXaiNetworkToolActive(pi, toolName)) return undefined;
   return model;
 }
 
-function searchToolDisabledError(toolName: XaiSearchToolName, details: Record<string, unknown> = {}) {
+function xaiToolDisabledError(toolName: XaiNetworkToolName, details: Record<string, unknown> = {}) {
   return xaiToolError(
     `Error: ${toolName} is disabled. Select an xAI/Grok model, run /xai-tools to enable ${toolName}, and request it explicitly. No xAI request was sent.`,
     { error: true, ...details },
@@ -28,7 +26,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_generate_text",
       label: "xAI Generate Text",
-      description: "Generate text using Grok with full reasoning, structured output, and stateful conversations.",
+      description: "Opt-in text generation through a separate xAI API request. Enable via /xai-tools and call only when the user explicitly requests it.",
+      promptGuidelines: ["Call xai_generate_text only when the user explicitly requests a separate xAI text-generation request."],
       parameters: {
         type: "object",
         properties: {
@@ -47,6 +46,9 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["prompt"],
       },
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_generate_text")) {
+          return xaiToolDisabledError("xai_generate_text", { prompt: params?.prompt });
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
@@ -122,8 +124,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
-        if (!activeModelForSearchTool(pi, ctx, "xai_multi_agent")) {
-          return searchToolDisabledError("xai_multi_agent", { query: params?.query });
+        if (!activeModelForXaiTool(pi, ctx, "xai_multi_agent")) {
+          return xaiToolDisabledError("xai_multi_agent", { query: params?.query });
         }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
@@ -175,8 +177,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const activeModel = activeModelForSearchTool(pi, ctx, "xai_web_search");
-        if (!activeModel) return searchToolDisabledError("xai_web_search", { query: params?.query });
+        const activeModel = activeModelForXaiTool(pi, ctx, "xai_web_search");
+        if (!activeModel) return xaiToolDisabledError("xai_web_search", { query: params?.query });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
@@ -215,8 +217,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: { query?: string; count?: number; since?: string; until?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const activeModel = activeModelForSearchTool(pi, ctx, "xai_x_search");
-        if (!activeModel) return searchToolDisabledError("xai_x_search", { query: params?.query });
+        const activeModel = activeModelForXaiTool(pi, ctx, "xai_x_search");
+        if (!activeModel) return xaiToolDisabledError("xai_x_search", { query: params?.query });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
@@ -259,13 +261,17 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_code_execution",
       label: "xAI Code Execution",
-      description: "Execute or analyze Python code using xAI's native code interpreter tool.",
+      description: "Opt-in execution through xAI's native code interpreter. Enable via /xai-tools and call only when the user explicitly requests it.",
+      promptGuidelines: ["Call xai_code_execution only when the user explicitly requests xAI code execution."],
       parameters: {
         type: "object",
         properties: { code: { type: "string", description: "Python code to execute or analyze" } },
         required: ["code"],
       },
       execute: async (_toolCallId: string, params: { code?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_code_execution")) {
+          return xaiToolDisabledError("xai_code_execution", { code: params?.code });
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { code: params?.code });
@@ -292,7 +298,8 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_generate_image",
       label: "xAI Image Generation",
-      description: "Generate images using xAI's current image generation model.",
+      description: "Opt-in paid image generation through xAI. Enable via /xai-tools and call only when the user explicitly requests an image.",
+      promptGuidelines: ["Call xai_generate_image only when the user explicitly asks to generate an image with xAI."],
       parameters: {
         type: "object",
         properties: {
@@ -303,6 +310,9 @@ Be specific and cite examples where helpful.`;
         required: ["prompt"],
       },
       execute: async (_toolCallId: string, params: { prompt?: string; model?: string; size?: string; n?: number }, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_generate_image")) {
+          return xaiToolDisabledError("xai_generate_image", { prompt: params?.prompt });
+        }
         if (params?.size !== undefined) {
           return xaiToolError("Error: The xAI image API does not support the 'size' parameter. Omit it from the request.", {
             error: true,
@@ -348,7 +358,8 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_critique",
       label: "xAI Critique",
-      description: "Provide detailed, reasoned critique of code, designs, writing, ideas, or arguments with structured feedback.",
+      description: "Opt-in critique through a separate high-reasoning xAI API request. Enable via /xai-tools and call only when explicitly requested.",
+      promptGuidelines: ["Call xai_critique only when the user explicitly requests a separate xAI critique."],
       parameters: {
         type: "object",
         properties: {
@@ -359,6 +370,9 @@ Be specific and cite examples where helpful.`;
         required: ["content"],
       },
       execute: async (_toolCallId: string, params: { content?: string; aspect?: string; tone?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_critique")) {
+          return xaiToolDisabledError("xai_critique", { content: params?.content });
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { content: params?.content });
@@ -381,7 +395,8 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_analyze_image",
       label: "xAI Image Analysis",
-      description: "Analyze images, describe visual content, answer questions about images, or extract information using Grok's vision capabilities.",
+      description: "Opt-in image analysis through a separate xAI API request. Enable via /xai-tools and call only when explicitly requested.",
+      promptGuidelines: ["Call xai_analyze_image only when the user explicitly requests xAI image analysis."],
       parameters: {
         type: "object",
         properties: {
@@ -391,6 +406,9 @@ Be specific and cite examples where helpful.`;
         required: ["image"],
       },
       execute: async (_toolCallId: string, params: { image?: string; question?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_analyze_image")) {
+          return xaiToolDisabledError("xai_analyze_image", { image: params?.image });
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { image: params?.image });
@@ -424,8 +442,8 @@ Be specific and cite examples where helpful.`;
         required: ["topic"],
       },
       execute: async (_toolCallId: string, params: { topic?: string; depth?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const activeModel = activeModelForSearchTool(pi, ctx, "xai_deep_research");
-        if (!activeModel) return searchToolDisabledError("xai_deep_research", { topic: params?.topic });
+        const activeModel = activeModelForXaiTool(pi, ctx, "xai_deep_research");
+        if (!activeModel) return xaiToolDisabledError("xai_deep_research", { topic: params?.topic });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { topic: params?.topic });

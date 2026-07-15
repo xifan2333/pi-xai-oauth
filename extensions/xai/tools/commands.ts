@@ -3,51 +3,58 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { isGrokCliProxyModel } from "../models";
 import {
   activeXaiModel,
-  isXaiSearchToolActive,
-  setXaiSearchToolActive,
-  XAI_SEARCH_TOOL_NAMES,
-  type XaiSearchToolName,
+  isXaiNetworkToolActive,
+  setXaiNetworkToolActive,
+  XAI_NETWORK_TOOL_NAMES,
+  type XaiNetworkToolName,
 } from "./model-scope";
 
-interface PaidToolOption {
-  name: XaiSearchToolName;
+interface NetworkToolOption {
+  name: XaiNetworkToolName;
+  category: string;
+  costRisk: string;
   summary: string;
 }
 
-const PAID_TOOL_OPTIONS: readonly PaidToolOption[] = [
-  { name: "xai_web_search", summary: "native xAI web search" },
-  { name: "xai_x_search", summary: "native xAI X search" },
-  { name: "xai_multi_agent", summary: "multi-agent web/X research" },
-  { name: "xai_deep_research", summary: "deep web/X research" },
-  { name: "WebSearch", summary: "Grok Build/Composer native web search" },
+const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
+  { name: "xai_generate_text", category: "generation", costRisk: "token usage", summary: "separate Grok response" },
+  { name: "xai_web_search", category: "search", costRisk: "token + tool", summary: "native xAI web search" },
+  { name: "xai_x_search", category: "search", costRisk: "token + tool", summary: "native xAI X search" },
+  { name: "xai_multi_agent", category: "research", costRisk: "high/variable", summary: "4- or 16-agent web/X research" },
+  { name: "xai_deep_research", category: "research", costRisk: "high/variable", summary: "multi-step web/X research" },
+  { name: "xai_code_execution", category: "execution", costRisk: "token + tool", summary: "xAI code interpreter" },
+  { name: "xai_generate_image", category: "image", costRisk: "per image", summary: "generate 1-4 images" },
+  { name: "xai_analyze_image", category: "vision", costRisk: "token usage", summary: "analyze an image with Grok" },
+  { name: "xai_critique", category: "reasoning", costRisk: "token usage", summary: "separate high-reasoning critique" },
+  { name: "WebSearch", category: "search", costRisk: "token + tool", summary: "Grok Build/Composer native web search" },
 ];
 
 const XAI_TOOLS_USAGE =
   "Usage: /xai-tools [status | enable <tool> | disable <tool>]";
 
-function commandToolName(value: string | undefined): XaiSearchToolName | undefined {
+function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
-  return XAI_SEARCH_TOOL_NAMES.find((name) => name.toLowerCase() === normalized);
+  return XAI_NETWORK_TOOL_NAMES.find((name) => name.toLowerCase() === normalized);
 }
 
-function eligibleToolOptions(model: Model<Api>): readonly PaidToolOption[] {
-  return PAID_TOOL_OPTIONS.filter(
+function eligibleToolOptions(model: Model<Api>): readonly NetworkToolOption[] {
+  return NETWORK_TOOL_OPTIONS.filter(
     ({ name }) => name !== "WebSearch" || isGrokCliProxyModel(model.id),
   );
 }
 
 function activeToolStatus(pi: ExtensionAPI, model: Model<Api> | undefined): string {
-  return PAID_TOOL_OPTIONS.map(({ name }) => {
+  return NETWORK_TOOL_OPTIONS.map(({ name }) => {
     const unavailable = name === "WebSearch" && (!model || !isGrokCliProxyModel(model.id));
     if (unavailable) return `${name}=unavailable`;
-    return `${name}=${isXaiSearchToolActive(pi, name) ? "enabled" : "disabled"}`;
+    return `${name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`;
   }).join(", ");
 }
 
 function notifyUpdate(
   ctx: ExtensionCommandContext,
-  toolName: XaiSearchToolName,
+  toolName: XaiNetworkToolName,
   active: boolean,
   error?: string,
 ) {
@@ -74,34 +81,34 @@ async function showXaiToolPicker(
   }
 
   while (true) {
-    const labels = new Map<string, XaiSearchToolName>();
+    const labels = new Map<string, XaiNetworkToolName>();
     for (const option of eligibleToolOptions(model)) {
-      const active = isXaiSearchToolActive(pi, option.name);
+      const active = isXaiNetworkToolActive(pi, option.name);
       labels.set(
-        `${active ? "[x]" : "[ ]"} ${option.name} — ${option.summary}`,
+        `${active ? "[x]" : "[ ]"} ${option.name} — ${option.category}; ${option.costRisk}; ${option.summary}`,
         option.name,
       );
     }
     const done = "Done";
     const selected = await ctx.ui.select(
-      "xAI paid tools — explicit opt-in; enabled calls may use xAI credits",
+      "xAI API tools — explicit opt-in; enabled calls may use xAI credits",
       [...labels.keys(), done],
     );
     if (!selected || selected === done) return;
 
     const toolName = labels.get(selected);
     if (!toolName) continue;
-    const nextActive = !isXaiSearchToolActive(pi, toolName);
-    const result = setXaiSearchToolActive(pi, model, toolName, nextActive);
+    const nextActive = !isXaiNetworkToolActive(pi, toolName);
+    const result = setXaiNetworkToolActive(pi, model, toolName, nextActive);
     notifyUpdate(ctx, toolName, result.active, result.error);
     if (!result.ok) return;
   }
 }
 
-/** Register the package-owned command for explicitly managing paid xAI tools. */
+/** Register the package-owned command for explicitly managing network-backed xAI tools. */
 export function registerXaiToolsCommand(pi: ExtensionAPI) {
   pi.registerCommand("xai-tools", {
-    description: "Enable or disable paid xAI search tools for this session",
+    description: "Enable or disable network-backed xAI tools for this session",
     handler: async (args, ctx) => {
       const [action, rawToolName, ...extra] = args.trim().split(/\s+/).filter(Boolean);
       const model = activeXaiModel(ctx);
@@ -117,7 +124,7 @@ export function registerXaiToolsCommand(pi: ExtensionAPI) {
 
       if (action.toLowerCase() === "status" && !rawToolName) {
         ctx.ui.notify(
-          `xAI paid tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, model)}`,
+          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, model)}`,
           "info",
         );
         return;
@@ -134,7 +141,7 @@ export function registerXaiToolsCommand(pi: ExtensionAPI) {
         return;
       }
 
-      const result = setXaiSearchToolActive(
+      const result = setXaiNetworkToolActive(
         pi,
         model,
         toolName,

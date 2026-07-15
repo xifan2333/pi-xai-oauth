@@ -1,7 +1,7 @@
 # Execution Progress
 
 **Project:** pi-xai-oauth Repair + Tool Verification  
-**Branch:** feature/issue-19-api-guard
+**Branch:** feature/issue-54-paid-xai-tools
 **Started:** 2026-05-27
 
 ## Completed
@@ -221,4 +221,17 @@ Update this file frequently during execution.
 - [x] Focused closure review reported no findings.
 - [x] Final validation passed: `npm test`, `npm run typecheck`, `git diff --check`, `npm pack --dry-run`, and real pi 0.80.7 RPC command probes.
 
-**Current branch:** feature/issue-52-xai-tools
+**Branch:** feature/issue-52-xai-tools
+
+## Phase 21: Issue 54 all-network-tool opt-in policy
+- [x] Audited every custom xAI tool and separated outbound API helpers from local Cursor/Grok CLI shims.
+- [x] Generalized the package-owned activation catalog and lifecycle guard from search-only tools to all ten network-backed helpers.
+- [x] Added pre-auth execution guards and explicit-user-intent guidance to text generation, code execution, image generation, critique, and image analysis.
+- [x] Expanded `/xai-tools` with category and cost-risk context, including `xai_generate_image`.
+- [x] Documented that normal xAI chat and local shims remain available without enabling outbound helpers.
+- [x] Added regression coverage for catalog completeness, default inactivity, credential/network fail-closed behavior, image opt-in, model switching, session reset, registry recovery, and command UX.
+- [x] Passed `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+- [x] Verified through pi's real extension loader/RPC mode that `/xai-tools` registers and reports every network-backed tool disabled for a standard xAI model.
+- [x] Independent closure review reported no findings.
+
+**Current branch:** feature/issue-54-paid-xai-tools
