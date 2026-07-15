@@ -260,3 +260,13 @@ Update this file frequently during execution.
 - [x] Completed focused review of TUI navigation, toggling, close behavior, and RPC fallback.
 
 **Current branch:** feature/xai-tools-picker-focus
+
+## Phase 24: npm patch release 1.3.5
+- [x] Bumped package and lockfile versions from 1.3.4 to 1.3.5.
+- [x] Updated README release and npm upgrade guidance for the picker-focus fix.
+- [x] Confirmed npm still serves 1.3.4 and 1.3.5 is available for publication.
+- [x] Excluded the unrelated local `cat.svg` artifact from npm packages without modifying the file.
+- [x] Passed tests, typecheck, diff checks, and 1.3.5 tarball inspection.
+- [ ] Commit and push the release update to PR #57.
+
+**Current branch:** feature/xai-tools-picker-focus

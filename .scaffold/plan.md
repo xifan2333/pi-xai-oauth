@@ -19,6 +19,13 @@
 - [x] Run the extension test suite.
 - [x] Run final typecheck, diff checks, package inspection, and focused review.
 
+## Release preparation
+- [x] Bump `package.json` and `package-lock.json` to 1.3.5.
+- [x] Update README release and upgrade guidance.
+- [x] Exclude unrelated local artifacts from the npm tarball.
+- [x] Re-run tests, typecheck, diff checks, and package inspection for 1.3.5.
+- [ ] Push the release update to PR #57.
+
 **Owner:** Main agent
 
-**Next action:** Commit and open a PR when requested.
+**Next action:** Validate and push the 1.3.5 release update to PR #57.
