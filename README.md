@@ -39,12 +39,15 @@ This package adds **Grok 4.5** (default), **Grok 4.3**, **Grok Build**, and **Co
 >
 > **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
 
+See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and fix history.
+
 ---
 
 ## Table of Contents
 
 - [✨ New: Grok 4.5](#-new-grok-45)
 - [Features](#features)
+- [Changelog](CHANGELOG.md)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
 - [Authentication](#authentication)

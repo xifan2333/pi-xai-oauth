@@ -1,31 +1,21 @@
-# Implementation Plan: Preserve /xai-tools Picker Focus
+# Documentation Plan: Add Release Changelog
 
-**Branch:** feature/xai-tools-picker-focus
+**Branch:** feature/changelog
 
 **Date:** 2026-07-15
 
-**Goal:** Keep the highlighted `/xai-tools` row and scroll position stable after toggling a tool.
+**Goal:** Record notable features and fixes by release without bloating the current-usage README.
 
 ## Implementation
-- [x] Reproduce the cursor reset caused by reopening `ctx.ui.select()` after every toggle.
-- [x] Confirm pi's selector API has no supported initial-index option.
-- [x] Replace the TUI loop with one stateful custom component that toggles tools in place.
-- [x] Keep the existing selector fallback for RPC mode.
-- [x] Preserve model eligibility, per-tool authorization, credit warnings, and fail-closed updates.
+- [x] Verify published versions and publication dates from npm.
+- [x] Derive notable changes from version bumps, commits, and merged fixes.
+- [x] Add `CHANGELOG.md` with detailed 1.2.0-1.3.5 entries and a transparent initial-series summary.
+- [x] Link the changelog prominently from README.
 
 ## Verification
-- [x] Add regression coverage proving the selected image-generation row remains highlighted after toggling.
-- [x] Preserve RPC picker coverage.
-- [x] Run the extension test suite.
-- [x] Run final typecheck, diff checks, package inspection, and focused review.
-
-## Release preparation
-- [x] Bump `package.json` and `package-lock.json` to 1.3.5.
-- [x] Update README release and upgrade guidance.
-- [x] Exclude unrelated local artifacts from the npm tarball.
-- [x] Re-run tests, typecheck, diff checks, and package inspection for 1.3.5.
-- [x] Push the release update to PR #57.
+- [x] Review every release claim against repository and npm `gitHead` history.
+- [x] Run Markdown, diff, test, typecheck, and package-content checks.
 
 **Owner:** Main agent
 
-**Next action:** Merge PR #57, sync `main`, then publish `pi-xai-oauth@1.3.5`.
+**Next action:** Commit and open a PR when requested.
