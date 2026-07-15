@@ -1,22 +1,31 @@
-# Release Plan: pi-xai-oauth 1.3.4
+# Implementation Plan: Preserve /xai-tools Picker Focus
 
-**Branch:** feature/release-1.3.4
+**Branch:** feature/xai-tools-picker-focus
 
 **Date:** 2026-07-15
 
-**Goal:** Prepare the merged issue #54 safety fix for npm as patch release 1.3.4.
+**Goal:** Keep the highlighted `/xai-tools` row and scroll position stable after toggling a tool.
+
+## Implementation
+- [x] Reproduce the cursor reset caused by reopening `ctx.ui.select()` after every toggle.
+- [x] Confirm pi's selector API has no supported initial-index option.
+- [x] Replace the TUI loop with one stateful custom component that toggles tools in place.
+- [x] Keep the existing selector fallback for RPC mode.
+- [x] Preserve model eligibility, per-tool authorization, credit warnings, and fail-closed updates.
+
+## Verification
+- [x] Add regression coverage proving the selected image-generation row remains highlighted after toggling.
+- [x] Preserve RPC picker coverage.
+- [x] Run the extension test suite.
+- [x] Run final typecheck, diff checks, package inspection, and focused review.
 
 ## Release preparation
-- [x] Sync local `main` with merged PR #55.
-- [x] Create a dedicated release branch.
-- [x] Bump `package.json` and `package-lock.json` from 1.3.3 to 1.3.4.
+- [x] Bump `package.json` and `package-lock.json` to 1.3.5.
 - [x] Update README release and upgrade guidance.
-- [x] Exclude local `pi-session-*.html` exports from npm packages.
-- [x] Run tests, TypeScript validation, diff checks, and package inspection.
-- [x] Authenticate npm as `blockedredemption`.
-- [ ] Commit and publish the release branch when requested.
-- [ ] After the release PR is merged, publish `pi-xai-oauth@1.3.4` from synced `main`.
+- [x] Exclude unrelated local artifacts from the npm tarball.
+- [x] Re-run tests, typecheck, diff checks, and package inspection for 1.3.5.
+- [x] Push the release update to PR #57.
 
 **Owner:** Main agent
 
-**Next action:** Commit and open the release PR.
+**Next action:** Merge PR #57, sync `main`, then publish `pi-xai-oauth@1.3.5`.

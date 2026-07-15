@@ -1,7 +1,7 @@
 # Execution Progress
 
 **Project:** pi-xai-oauth Repair + Tool Verification  
-**Branch:** feature/release-1.3.4
+**Branch:** feature/xai-tools-picker-focus
 **Started:** 2026-05-27
 
 ## Completed
@@ -244,8 +244,29 @@ Update this file frequently during execution.
 - [x] Added a narrow npm exclusion so local pi session HTML exports cannot leak into releases.
 - [x] Passed `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
 - [x] Confirmed the 1.3.4 tarball excludes the untracked session export.
-- [x] Confirmed npm currently serves 1.3.3.
+- [x] Confirmed npm served 1.3.3 before publication.
 - [x] Confirmed npm authentication as `blockedredemption`.
-- [ ] Commit, push, and publish only when explicitly requested.
+- [x] Committed and merged release PR #56, then published and verified `pi-xai-oauth@1.3.4` as `latest`.
 
 **Current branch:** feature/release-1.3.4
+
+## Phase 23: Preserve /xai-tools picker focus
+- [x] Confirmed repeated `ctx.ui.select()` calls reset the TUI cursor to row one.
+- [x] Added a persistent custom TUI picker that toggles the highlighted tool in place.
+- [x] Kept the existing selection loop as the RPC fallback.
+- [x] Added regression coverage for cursor preservation, Escape close, activation, and RPC behavior.
+- [x] Updated README controls.
+- [x] Passed `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+- [x] Completed focused review of TUI navigation, toggling, close behavior, and RPC fallback.
+
+**Current branch:** feature/xai-tools-picker-focus
+
+## Phase 24: npm patch release 1.3.5
+- [x] Bumped package and lockfile versions from 1.3.4 to 1.3.5.
+- [x] Updated README release and npm upgrade guidance for the picker-focus fix.
+- [x] Confirmed npm still serves 1.3.4 and 1.3.5 is available for publication.
+- [x] Excluded the unrelated local `cat.svg` artifact from npm packages without modifying the file.
+- [x] Passed tests, typecheck, diff checks, and 1.3.5 tarball inspection.
+- [x] Committed and pushed the release update to PR #57.
+
+**Current branch:** feature/xai-tools-picker-focus

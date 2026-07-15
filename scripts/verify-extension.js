@@ -159,10 +159,10 @@ function authContext(model = TEST_XAI_MODEL) {
   };
 }
 
-function extensionCommandContext(model, notifications = [], select) {
+function extensionCommandContext(model, notifications = [], select, custom, mode = "tui") {
   return {
     model,
-    mode: "tui",
+    mode,
     hasUI: true,
     ui: {
       notify(message, type) {
@@ -170,6 +170,9 @@ function extensionCommandContext(model, notifications = [], select) {
       },
       async select(title, options) {
         return select?.(title, options);
+      },
+      async custom(factory) {
+        return custom?.(factory);
       },
     },
   };
@@ -469,7 +472,10 @@ async function verifyXaiToolsCommand(loadResult) {
   assert.ok(command, "the package should register /xai-tools");
 
   const notifications = [];
-  const runCommand = (args, model, select) => command.handler(args, extensionCommandContext(model, notifications, select));
+  const runCommand = (args, model, select, custom, mode) => command.handler(
+    args,
+    extensionCommandContext(model, notifications, select, custom, mode),
+  );
 
   await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
   assert.ok(XAI_NETWORK_TOOLS.every((name) => !getActiveTools().includes(name)));
@@ -498,6 +504,51 @@ async function verifyXaiToolsCommand(loadResult) {
   await runCommand("enable xai_generate_image", TEST_XAI_MODEL);
   await runCommand("disable xai_generate_image", TEST_XAI_MODEL);
   assert.ok(!getActiveTools().includes("xai_generate_image"), "/xai-tools should disable image generation");
+
+  let tuiPickerClosed = false;
+  let selectedAfterPageWrap = "";
+  let selectedBeforeToggle = "";
+  let selectedAfterToggle = "";
+  await runCommand("", TEST_XAI_MODEL, undefined, async (factory) => {
+    let component;
+    const tui = {
+      requestRender() {},
+    };
+    const theme = {
+      fg: (_color, text) => text,
+      bg: (_color, text) => text,
+      bold: (text) => text,
+    };
+    const bindings = {
+      "tui.select.up": "up",
+      "tui.select.down": "down",
+      "tui.select.pageUp": "pageup",
+      "tui.select.pageDown": "pagedown",
+      "tui.select.confirm": "enter",
+      "tui.select.cancel": "escape",
+    };
+    const keybindings = {
+      matches: (data, id) => bindings[id] === data,
+    };
+    component = await factory(tui, theme, keybindings, () => {
+      tuiPickerClosed = true;
+    });
+
+    component.handleInput("pageup");
+    selectedAfterPageWrap = component.render(160).find((line) => line.startsWith("> ")) || "";
+    component.handleInput("pagedown");
+    for (let index = 0; index < 6; index += 1) component.handleInput("down");
+    selectedBeforeToggle = component.render(160).find((line) => line.startsWith("> ")) || "";
+    component.handleInput("enter");
+    selectedAfterToggle = component.render(160).find((line) => line.startsWith("> ")) || "";
+    component.handleInput("escape");
+  });
+  assert.match(selectedAfterPageWrap, /> \[ \] xai_critique/);
+  assert.match(selectedBeforeToggle, /> \[ \] xai_generate_image/);
+  assert.match(selectedAfterToggle, /> \[x\] xai_generate_image/);
+  assert.ok(tuiPickerClosed, "Escape should close the stateful xAI tool picker");
+  assert.ok(getActiveTools().includes("xai_generate_image"), "the stateful picker should toggle image generation");
+  await runCommand("disable xai_generate_image", TEST_XAI_MODEL);
 
   await runCommand("enable xai_web_search", TEST_XAI_MODEL);
   assert.ok(getActiveTools().includes("xai_web_search"), "/xai-tools should explicitly enable an eligible tool");
@@ -535,8 +586,8 @@ async function verifyXaiToolsCommand(loadResult) {
     return pickerPass === 1
       ? options.find((option) => option.includes("xai_web_search"))
       : "Done";
-  });
-  assert.ok(getActiveTools().includes("xai_web_search"), "interactive /xai-tools should toggle the selected network tool");
+  }, undefined, "rpc");
+  assert.ok(getActiveTools().includes("xai_web_search"), "RPC /xai-tools should toggle the selected network tool");
   assert.match(pickerTitle, /explicit opt-in/);
   assert.ok(
     pickerOptions.some((option) => option.includes("xai_generate_image") && option.includes("image") && option.includes("per image")),

@@ -70,16 +70,11 @@ function notifyUpdate(
   );
 }
 
-async function showXaiToolPicker(
+async function showXaiToolSelectLoop(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   model: Model<Api>,
 ) {
-  if (!ctx.hasUI) {
-    ctx.ui.notify(`${XAI_TOOLS_USAGE} Interactive selection requires TUI or RPC mode.`, "error");
-    return;
-  }
-
   while (true) {
     const labels = new Map<string, XaiNetworkToolName>();
     for (const option of eligibleToolOptions(model)) {
@@ -103,6 +98,100 @@ async function showXaiToolPicker(
     notifyUpdate(ctx, toolName, result.active, result.error);
     if (!result.ok) return;
   }
+}
+
+async function showXaiToolTuiPicker(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  model: Model<Api>,
+) {
+  const options = eligibleToolOptions(model);
+  await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
+    let selectedIndex = 0;
+    const maxVisible = 10;
+
+    const refresh = () => tui.requestRender();
+    const moveSelection = (offset: number) => {
+      if (options.length === 0) return;
+      selectedIndex = ((selectedIndex + offset) % options.length + options.length) % options.length;
+      refresh();
+    };
+    const toggleSelected = () => {
+      const option = options[selectedIndex];
+      if (!option) return;
+      const nextActive = !isXaiNetworkToolActive(pi, option.name);
+      const result = setXaiNetworkToolActive(pi, model, option.name, nextActive);
+      notifyUpdate(ctx, option.name, result.active, result.error);
+      refresh();
+    };
+
+    return {
+      render(width: number) {
+        const lines = [
+          theme.fg("accent", theme.bold("xAI API tools — explicit opt-in; calls may use xAI credits")),
+          "",
+        ];
+        const startIndex = Math.max(
+          0,
+          Math.min(selectedIndex - Math.floor(maxVisible / 2), options.length - maxVisible),
+        );
+        const endIndex = Math.min(startIndex + maxVisible, options.length);
+        const maxRowWidth = Math.max(1, width - 2);
+
+        for (let index = startIndex; index < endIndex; index += 1) {
+          const option = options[index];
+          if (!option) continue;
+          const active = isXaiNetworkToolActive(pi, option.name);
+          const marker = index === selectedIndex ? "> " : "  ";
+          const text = `${marker}${active ? "[x]" : "[ ]"} ${option.name} — ${option.category}; ${option.costRisk}; ${option.summary}`
+            .slice(0, maxRowWidth);
+          lines.push(
+            index === selectedIndex
+              ? theme.bg("selectedBg", theme.fg("accent", text))
+              : theme.fg(active ? "success" : "text", text),
+          );
+        }
+
+        if (startIndex > 0 || endIndex < options.length) {
+          lines.push(theme.fg("dim", `  (${selectedIndex + 1}/${options.length})`));
+        }
+        lines.push("", theme.fg("muted", "  ↑/↓ move · Enter/Space toggle · Esc done"));
+        return lines;
+      },
+      invalidate() {},
+      handleInput(data: string) {
+        if (keybindings.matches(data, "tui.select.up")) {
+          moveSelection(-1);
+        } else if (keybindings.matches(data, "tui.select.down")) {
+          moveSelection(1);
+        } else if (keybindings.matches(data, "tui.select.pageUp")) {
+          moveSelection(-maxVisible);
+        } else if (keybindings.matches(data, "tui.select.pageDown")) {
+          moveSelection(maxVisible);
+        } else if (keybindings.matches(data, "tui.select.confirm") || data === " ") {
+          toggleSelected();
+        } else if (keybindings.matches(data, "tui.select.cancel")) {
+          done();
+        }
+      },
+    };
+  });
+}
+
+async function showXaiToolPicker(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  model: Model<Api>,
+) {
+  if (!ctx.hasUI) {
+    ctx.ui.notify(`${XAI_TOOLS_USAGE} Interactive selection requires TUI or RPC mode.`, "error");
+    return;
+  }
+  if (ctx.mode === "tui") {
+    await showXaiToolTuiPicker(pi, ctx, model);
+    return;
+  }
+  await showXaiToolSelectLoop(pi, ctx, model);
 }
 
 /** Register the package-owned command for explicitly managing network-backed xAI tools. */
