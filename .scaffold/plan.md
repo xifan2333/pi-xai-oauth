@@ -1,21 +1,12 @@
-# Documentation Plan: Add Release Changelog
+# Plan: Fix Page Up/Down no-op at ten items (issue #59)
 
-**Branch:** feature/changelog
+**Branch:** cursor/fix-page-keys-ten-items-7537
 
-**Date:** 2026-07-15
+**Goal:** Page Up/Down in `/xai-tools` TUI must wrap when exactly ten eligible tools are shown (Grok Build/Composer + WebSearch).
 
-**Goal:** Record notable features and fixes by release without bloating the current-usage README.
-
-## Implementation
-- [x] Verify published versions and publication dates from npm.
-- [x] Derive notable changes from version bumps, commits, and merged fixes.
-- [x] Add `CHANGELOG.md` with detailed 1.2.0-1.3.5 entries and a transparent initial-series summary.
-- [x] Link the changelog prominently from README.
-
-## Verification
-- [x] Review every release claim against repository and npm `gitHead` history.
-- [x] Run Markdown, diff, test, typecheck, and package-content checks.
-
-**Owner:** Main agent
-
-**Next action:** Review and merge the changelog PR.
+## Steps
+- [x] Reproduce: `moveSelection(±maxVisible)` with `options.length === 10` is a modulo no-op
+- [x] Fix `moveSelection` to fall back to ±1 when `offset % length === 0`
+- [x] Add Composer (10-tool) regression in `scripts/verify-extension.js`
+- [x] Run `npm run typecheck` and `npm test`
+- [x] Commit, push, open PR

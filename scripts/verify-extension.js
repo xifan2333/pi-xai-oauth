@@ -550,6 +550,46 @@ async function verifyXaiToolsCommand(loadResult) {
   assert.ok(getActiveTools().includes("xai_generate_image"), "the stateful picker should toggle image generation");
   await runCommand("disable xai_generate_image", TEST_XAI_MODEL);
 
+  // Grok Build/Composer exposes all 10 tools (including WebSearch). Page size
+  // equals list length, so Page Up/Down must still wrap rather than no-op.
+  let selectedAfterTenItemPageWrap = "";
+  let selectedAfterTenItemPageDown = "";
+  await runCommand("", { ...TEST_XAI_MODEL, id: "grok-composer-2.5-fast" }, undefined, async (factory) => {
+    const tui = { requestRender() {} };
+    const theme = {
+      fg: (_color, text) => text,
+      bg: (_color, text) => text,
+      bold: (text) => text,
+    };
+    const bindings = {
+      "tui.select.up": "up",
+      "tui.select.down": "down",
+      "tui.select.pageUp": "pageup",
+      "tui.select.pageDown": "pagedown",
+      "tui.select.confirm": "enter",
+      "tui.select.cancel": "escape",
+    };
+    const keybindings = {
+      matches: (data, id) => bindings[id] === data,
+    };
+    const component = await factory(tui, theme, keybindings, () => {});
+    component.handleInput("pageup");
+    selectedAfterTenItemPageWrap = component.render(160).find((line) => line.startsWith("> ")) || "";
+    component.handleInput("pagedown");
+    selectedAfterTenItemPageDown = component.render(160).find((line) => line.startsWith("> ")) || "";
+    component.handleInput("escape");
+  });
+  assert.match(
+    selectedAfterTenItemPageWrap,
+    /> \[ \] WebSearch/,
+    "Page Up must wrap to the last row when exactly ten tools are listed",
+  );
+  assert.match(
+    selectedAfterTenItemPageDown,
+    /> \[ \] xai_generate_text/,
+    "Page Down must wrap from the last row when exactly ten tools are listed",
+  );
+
   await runCommand("enable xai_web_search", TEST_XAI_MODEL);
   assert.ok(getActiveTools().includes("xai_web_search"), "/xai-tools should explicitly enable an eligible tool");
   assert.match(notifications.at(-1).message, /may use xAI credits/);
