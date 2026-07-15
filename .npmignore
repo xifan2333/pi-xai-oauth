@@ -13,4 +13,4 @@ node_modules/
 *.key
 auth.json
 *.local
-
+pi-session-*.html

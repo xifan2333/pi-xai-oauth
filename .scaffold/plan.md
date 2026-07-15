@@ -1,31 +1,22 @@
-# Implementation Plan: GitHub Issue #54
+# Release Plan: pi-xai-oauth 1.3.4
 
-**Branch:** feature/issue-54-paid-xai-tools
+**Branch:** feature/release-1.3.4
 
 **Date:** 2026-07-15
 
-**Goal:** Make image generation and every other network-backed xAI helper a model-scoped explicit opt-in, with one package-owned activation policy and fail-closed execution guards.
+**Goal:** Prepare the merged issue #54 safety fix for npm as patch release 1.3.4.
 
-## Phase 1: Audit and policy
-- [x] Read issue #54 and audit every registered custom xAI and Cursor/Grok CLI tool.
-- [x] Run clean baseline tests and TypeScript validation.
-- [x] Independently confirm the policy boundary: extra xAI requests require opt-in; local shims remain automatic.
-
-## Phase 2: Activation boundary
-- [x] Expand the package-owned catalog to all ten network-backed xAI tools.
-- [x] Require an active eligible xAI model plus per-tool package authorization.
-- [x] Guard every custom executor before OAuth credential lookup or network access.
-- [x] Reset authorization on session start and when leaving xAI; never silently restore it.
-- [x] Keep `WebSearch` restricted to Grok Build/Composer models.
-
-## Phase 3: UX, documentation, and verification
-- [x] Add category and cost-risk context to `/xai-tools`.
-- [x] Add explicit-user-intent guidance, especially for `xai_generate_image`.
-- [x] Document the activation policy for every tool and distinguish automatic local shims.
-- [x] Add catalog-completeness, no-auth/no-network, lifecycle, command, and image-generation regressions.
-- [x] Run final tests, package checks, and a real pi loader/RPC smoke.
-- [x] Complete independent diff review with no findings.
+## Release preparation
+- [x] Sync local `main` with merged PR #55.
+- [x] Create a dedicated release branch.
+- [x] Bump `package.json` and `package-lock.json` from 1.3.3 to 1.3.4.
+- [x] Update README release and upgrade guidance.
+- [x] Exclude local `pi-session-*.html` exports from npm packages.
+- [x] Run tests, TypeScript validation, diff checks, and package inspection.
+- [x] Authenticate npm as `blockedredemption`.
+- [ ] Commit and publish the release branch when requested.
+- [ ] After the release PR is merged, publish `pi-xai-oauth@1.3.4` from synced `main`.
 
 **Owner:** Main agent
 
-**Next action:** Hand off the completed branch for commit or PR publication.
+**Next action:** Commit and open the release PR.
