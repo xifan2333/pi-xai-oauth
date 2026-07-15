@@ -195,3 +195,17 @@ Update this file frequently during execution.
 - [x] Routed Responses streaming through the supported `@earendil-works/pi-ai/compat` dispatcher.
 - [x] Verified unit/setup tests, TypeScript diagnostics, and an actual pi extension-loader stream probe.
 - [x] Bumped the npm package and lockfile to 1.3.3 and updated release guidance.
+
+## Phase 19: GitHub issues #49 and #50
+- [x] Read both issue reports and confirmed neither has follow-up comments or an existing fix PR.
+- [x] Replaced the stale merged worktree branch with `feature/issues-49-50` at current `origin/main` (`0f1ad5a`).
+- [x] Ran parallel read-only investigations for paid-search guarding and image replay/transport mitigation.
+- [x] Confirmed baseline `npm test` and `npm run typecheck` pass before source edits.
+- [x] Implemented issue #49 search/research tool opt-in, active-model execution guards, model-switch cleanup, and active-model routing.
+- [x] Implemented issue #50 consumed-image lifecycle, 3 MiB aggregate inline-image compaction, local overflow failure, and xAI error naming.
+- [x] Added regression coverage for lifecycle registry retries, zero-network guard failures, active routing, image replay boundaries, compaction, and direct/stream transport.
+- [x] Addressed reviewer findings covering the capital `WebSearch` bypass, fail-open registry errors, post-compaction payload-hook mutation, and MIME documentation.
+- [x] Independent closure review reported no remaining findings.
+- [x] Final validation passed: `npm test`, `npm run typecheck`, `git diff --check`, `npm pack --dry-run`, real pi extension loading, and real pi session/model lifecycle probes.
+
+**Current branch:** feature/issues-49-50

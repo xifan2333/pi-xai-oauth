@@ -39,7 +39,9 @@ function isResponsesInputImagePart(value: unknown): value is Record<string, any>
   return !!value && typeof value === "object" && (value as Record<string, any>).type === "input_image";
 }
 
-function textForFunctionCallOutput(output: unknown): string {
+type ToolImageDisposition = "attached" | "omitted";
+
+function textForFunctionCallOutput(output: unknown, imageDisposition: ToolImageDisposition): string {
   if (typeof output === "string") return output;
   if (!Array.isArray(output)) return output === undefined || output === null ? "" : JSON.stringify(output);
 
@@ -53,8 +55,21 @@ function textForFunctionCallOutput(output: unknown): string {
     const text = textFromResponsesContent([part]).trim();
     if (text) chunks.push(text);
   }
-  if (imageCount > 0) chunks.push(`[${imageCount} image${imageCount === 1 ? "" : "s"} attached in the following user message]`);
-  return chunks.join("\n") || (imageCount > 0 ? `[${imageCount} image${imageCount === 1 ? "" : "s"} attached]` : "");
+  if (imageCount > 0) {
+    chunks.push(
+      imageDisposition === "attached"
+        ? `[${imageCount} image${imageCount === 1 ? "" : "s"} attached in the following user message]`
+        : `[${imageCount} historical tool image${imageCount === 1 ? "" : "s"} omitted after a later assistant response]`,
+    );
+  }
+  return chunks.join("\n");
+}
+
+function isAssistantResponseItem(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, any>;
+  if (item.role === "assistant") return true;
+  return item.type === "reasoning" || item.type === "function_call";
 }
 
 function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknown[] {
@@ -62,8 +77,16 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
   const rewritten: unknown[] = [];
   const modelInputs = Array.isArray((model as any).input) ? ((model as any).input as unknown[]) : [];
   const supportsImages = modelInputs.includes("image");
+  const hasLaterAssistantOutput = new Array<boolean>(normalizedInput.length).fill(false);
+  let assistantOutputSeen = false;
 
-  for (const item of normalizedInput) {
+  for (let index = normalizedInput.length - 1; index >= 0; index--) {
+    hasLaterAssistantOutput[index] = assistantOutputSeen;
+    if (isAssistantResponseItem(normalizedInput[index])) assistantOutputSeen = true;
+  }
+
+  for (let index = 0; index < normalizedInput.length; index++) {
+    const item = normalizedInput[index];
     if (!item || typeof item !== "object" || item.type !== "function_call_output" || !Array.isArray(item.output)) {
       rewritten.push(item);
       continue;
@@ -75,10 +98,11 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
     // output as text and replay images as a normal following user message.
     const outputParts = item.output;
     const imageParts = outputParts.filter(isResponsesInputImagePart);
-    const outputText = textForFunctionCallOutput(outputParts);
+    const imagesWereConsumed = imageParts.length > 0 && hasLaterAssistantOutput[index];
+    const outputText = textForFunctionCallOutput(outputParts, imagesWereConsumed ? "omitted" : "attached");
     rewritten.push({ ...item, output: outputText || "(tool returned no text output)" });
 
-    if (supportsImages && imageParts.length > 0) {
+    if (supportsImages && imageParts.length > 0 && !imagesWereConsumed) {
       const label = `The previous tool result${item.call_id ? ` (${item.call_id})` : ""} included ${imageParts.length} image${imageParts.length === 1 ? "" : "s"}. Use the attached image${imageParts.length === 1 ? "" : "s"} as the visual output from that tool.`;
       rewritten.push({
         role: "user",

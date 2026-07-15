@@ -1,6 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { registerCursorToolShims } from "./cursor-shims";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { registerCursorToolShims, syncCursorToolShimsForModel } from "./cursor-shims";
 import { registerCustomXaiTools } from "./custom-tools";
+import { syncXaiSearchToolsForModel } from "./model-scope";
 
 const xaiToolRegistrations = new WeakSet<object>();
 
@@ -11,4 +13,10 @@ export function registerXaiTools(pi: ExtensionAPI) {
 
   registerCursorToolShims(pi);
   registerCustomXaiTools(pi);
+}
+
+/** Synchronize all model-scoped xAI tool availability without making network requests. */
+export function syncXaiToolsForModel(pi: ExtensionAPI, model?: Model<Api>, options?: { resetSearchTools?: boolean }) {
+  syncCursorToolShimsForModel(pi, model);
+  syncXaiSearchToolsForModel(pi, model, { reset: options?.resetSearchTools });
 }

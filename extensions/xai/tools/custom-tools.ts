@@ -6,6 +6,22 @@ import { grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiTextInput, xaiToolError } from "./common";
+import { activeXaiModel, isXaiSearchToolActive, XAI_SEARCH_TOOL_NAMES } from "./model-scope";
+
+type XaiSearchToolName = (typeof XAI_SEARCH_TOOL_NAMES)[number];
+
+function activeModelForSearchTool(pi: ExtensionAPI, ctx: any, toolName: XaiSearchToolName) {
+  const model = activeXaiModel(ctx);
+  if (!model || !isXaiSearchToolActive(pi, toolName)) return undefined;
+  return model;
+}
+
+function searchToolDisabledError(toolName: XaiSearchToolName, details: Record<string, unknown> = {}) {
+  return xaiToolError(
+    `Error: ${toolName} is disabled. Select an xAI/Grok model, enable ${toolName} in pi's /tools picker, and request it explicitly. No xAI request was sent.`,
+    { error: true, ...details },
+  );
+}
 
 /** Register OAuth-backed custom xAI tools. */
 export function registerCustomXaiTools(pi: ExtensionAPI) {
@@ -94,7 +110,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_multi_agent",
       label: "xAI Multi-Agent Research",
-      description: "Run deep multi-agent research using Grok.",
+      description: "Opt-in paid multi-agent web/X research using Grok. Enable via /tools and call only when the user explicitly requests xAI research.",
+      promptGuidelines: ["Call xai_multi_agent only when the user explicitly requests xAI multi-agent research."],
       parameters: {
         type: "object",
         properties: {
@@ -105,6 +122,9 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
+        if (!activeModelForSearchTool(pi, ctx, "xai_multi_agent")) {
+          return searchToolDisabledError("xai_multi_agent", { query: params?.query });
+        }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { agents_used: 0, response_id: "" });
@@ -147,13 +167,16 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_web_search",
       label: "xAI Web Search",
-      description: "Search the web using Grok's native web knowledge and search capabilities.",
+      description: "Opt-in paid search using Grok's native web search. Enable via /tools and call only when the user explicitly requests xAI web search.",
+      promptGuidelines: ["Call xai_web_search only when the user explicitly requests xAI web search."],
       parameters: {
         type: "object",
         properties: { query: { type: "string", description: "Search query" } },
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const activeModel = activeModelForSearchTool(pi, ctx, "xai_web_search");
+        if (!activeModel) return searchToolDisabledError("xai_web_search", { query: params?.query });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
@@ -162,7 +185,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         let data: any;
         try {
           data = await createXaiResponse(apiKey, {
-            model: DEFAULT_XAI_MODEL,
+            model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: "medium" },
             tools: [{ type: "web_search", enable_image_understanding: true }],
@@ -179,7 +202,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_x_search",
       label: "xAI X Search",
-      description: "Search X (Twitter) using Grok's native real-time X search and knowledge. Supports advanced filters like count, since, until.",
+      description: "Opt-in paid X search using Grok's native real-time search. Enable via /tools and call only when the user explicitly requests xAI X search.",
+      promptGuidelines: ["Call xai_x_search only when the user explicitly requests xAI X search."],
       parameters: {
         type: "object",
         properties: {
@@ -191,6 +215,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         required: ["query"],
       },
       execute: async (_toolCallId: string, params: { query?: string; count?: number; since?: string; until?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const activeModel = activeModelForSearchTool(pi, ctx, "xai_x_search");
+        if (!activeModel) return searchToolDisabledError("xai_x_search", { query: params?.query });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
@@ -216,7 +242,7 @@ Be specific and cite examples where helpful.`;
         let data: any;
         try {
           data = await createXaiResponse(apiKey, {
-            model: DEFAULT_XAI_MODEL,
+            model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: "medium" },
             tools: [xSearchTool],
@@ -387,7 +413,8 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_deep_research",
       label: "xAI Deep Research",
-      description: "Conduct thorough multi-step research on a topic, synthesize information, cite sources, and provide comprehensive analysis with high reasoning effort.",
+      description: "Opt-in paid multi-step web/X research with Grok. Enable via /tools and call only when the user explicitly requests xAI research.",
+      promptGuidelines: ["Call xai_deep_research only when the user explicitly requests xAI deep research."],
       parameters: {
         type: "object",
         properties: {
@@ -397,6 +424,8 @@ Be specific and cite examples where helpful.`;
         required: ["topic"],
       },
       execute: async (_toolCallId: string, params: { topic?: string; depth?: string }, _signal: any, _onUpdate: any, ctx: any) => {
+        const activeModel = activeModelForSearchTool(pi, ctx, "xai_deep_research");
+        if (!activeModel) return searchToolDisabledError("xai_deep_research", { topic: params?.topic });
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { topic: params?.topic });
@@ -406,7 +435,7 @@ Be specific and cite examples where helpful.`;
         let data: any;
         try {
           data = await createXaiResponse(apiKey, {
-            model: DEFAULT_XAI_MODEL,
+            model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: depth === "high" ? "high" : "medium" },
             tools: [{ type: "web_search" }, { type: "x_search" }],

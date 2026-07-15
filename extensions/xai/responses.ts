@@ -1,6 +1,7 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
+import { compactXaiInlineImages } from "./images";
 import { isGrokCliProxyModel, xaiBaseUrlForModel, xaiModelForRequest, xaiModelRequestHeaders, xaiResponsesUrlForModel } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
 
@@ -12,6 +13,20 @@ function resultFromStreamEvent(event: AssistantStreamEvent): any {
   if (event.type === "done") return event.message;
   if (event.type === "error") return event.error;
   return undefined;
+}
+
+function normalizeXaiErrorText(value: string): string {
+  return value.replace(/^OpenAI API error\b/i, "xAI API error");
+}
+
+function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEvent {
+  if (event.type !== "error" || !event.error || typeof event.error !== "object") return event;
+  const error = event.error as Record<string, any>;
+  if (typeof error.errorMessage !== "string") return event;
+  return {
+    ...event,
+    error: { ...error, errorMessage: normalizeXaiErrorText(error.errorMessage) },
+  };
 }
 
 function createForwardingAssistantStream() {
@@ -83,7 +98,7 @@ function streamErrorMessage(model: Model<Api>, error: unknown) {
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
     stopReason: "error",
-    errorMessage: error instanceof Error ? error.message : String(error),
+    errorMessage: normalizeXaiErrorText(error instanceof Error ? error.message : String(error)),
     timestamp: Date.now(),
   };
 }
@@ -120,7 +135,8 @@ export async function postXaiJson(
 /** Create a single xAI Responses API response with model-aware routing. */
 export async function createXaiResponse(apiKey: string, body: Record<string, any>, signal?: AbortSignal): Promise<any> {
   const model = xaiModelForRequest(typeof body.model === "string" ? body.model : undefined);
-  const payload = rewriteXaiResponsesPayload(body, model) as Record<string, any>;
+  const rewritten = rewriteXaiResponsesPayload(body, model);
+  const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
   const usesGrokCliProxy = isGrokCliProxyModel(model.id);
   const grokCliSessionId = usesGrokCliProxy
     ? (typeof body.previous_response_id === "string" && body.previous_response_id) || randomUUID()
@@ -189,11 +205,11 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
             sessionId: sessionId || routingSessionId,
           });
           const userRewritten = await options?.onPayload?.(rewritten, streamModel);
-          return userRewritten === undefined ? rewritten : userRewritten;
+          return compactXaiInlineImages(userRewritten === undefined ? rewritten : userRewritten);
         },
       });
       for await (const event of inner as AsyncIterable<AssistantStreamEvent>) {
-        stream.push(event);
+        stream.push(normalizeXaiStreamEvent(event));
       }
       stream.end();
     } catch (error) {

@@ -286,9 +286,11 @@ The shims also normalize common Cursor argument names, such as `file_path`, `con
 
 ## Custom Tools
 
-This package registers OAuth-backed custom tools that use the xAI API directly. They appear alongside your other agent tools in the pi TUI and are available to any agent running with the `xai-auth` provider.
+This package registers OAuth-backed custom tools that use the xAI API directly. They appear alongside your other agent tools in the pi TUI.
 
-**How to use them:** Simply call the tool by name in your prompts or agent workflows (e.g. "use xai_web_search to find the latest Rust news"). The tools automatically use your authenticated xAI session.
+**How to use them:** Select an `xai-auth` model, then call the tool by name in your prompt or agent workflow. The tools use your authenticated xAI session.
+
+The paid server-side search tools — `xai_web_search`, `xai_x_search`, `xai_multi_agent`, `xai_deep_research`, and the Grok Build/Composer-compatible `WebSearch` shim — are deliberately **inactive by default**. Enable only the tool you want through pi's `/tools` picker, then request it explicitly in your prompt. Switching to a non-xAI model disables all five immediately; switching back does not silently re-enable them.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
@@ -304,7 +306,7 @@ Generate text with full reasoning and stateful conversations.
 ```
 
 ### `xai_multi_agent`
-Deep multi-agent research using Grok's multi-agent model plus native web and X search tools.
+Opt-in deep multi-agent research using Grok's multi-agent model plus native web and X search tools. Enable it through `/tools` first.
 
 ```json
 {
@@ -315,7 +317,7 @@ Deep multi-agent research using Grok's multi-agent model plus native web and X s
 ```
 
 ### `xai_web_search`
-Search the web using xAI's native `web_search` tool.
+Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/tools` first.
 
 ```json
 {
@@ -324,7 +326,7 @@ Search the web using xAI's native `web_search` tool.
 ```
 
 ### `xai_x_search`
-Search X (Twitter) using xAI's native `x_search` tool.
+Opt-in X (Twitter) search using xAI's native `x_search` tool and the active xAI model. Enable it through `/tools` first.
 
 ```json
 {
@@ -372,7 +374,7 @@ Get structured critique for code, designs, writing, or ideas.
 ```
 
 ### `xai_deep_research`
-Research a topic with Grok reasoning plus native web and X search tools.
+Opt-in research using the active xAI model plus native web and X search tools. Enable it through `/tools` first.
 
 ```json
 {
@@ -381,7 +383,7 @@ Research a topic with Grok reasoning plus native web and X search tools.
 }
 ```
 
-> **Note:** These tools use the xAI API under the hood — they count toward your SuperGrok rate limits.
+> **Note:** These tools use the xAI API under the hood. Search and research calls can consume paid credits or SuperGrok rate limits, which is why they require manual activation.
 
 ---
 
@@ -438,8 +440,14 @@ This means xAI rejected a multimodal Responses `input` shape. Use the latest pac
 If you call `xai_generate_text` directly, `image_url` may be either:
 
 - an `http(s)://...` URL
-- a `data:image/...;base64,...` URL
+- a `data:image/png;base64,...` or `data:image/jpeg;base64,...` URL
 - a local `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `/Users/me/My\\ Image.png`
+
+### `500 "Auth context expired"` after screenshots
+
+This xAI OAuth gateway error can be a misleading response to an oversized stateless Responses request, not an expired local token. The provider now omits consumed historical tool-result image binaries after a later assistant response and retains a text marker in their place. Current PNG/JPEG inputs are resized with high-fidelity encoding when necessary and kept within a 3 MiB aggregate base64 transport budget before any xAI request is sent.
+
+If an image cannot be decoded or compacted safely, the request fails locally with a clear image-budget error. Crop the screenshot or attach fewer current images; logging in again will not fix a payload-size failure.
 
 ### "Token expired / auth failed"
 
