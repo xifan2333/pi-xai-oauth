@@ -113,7 +113,14 @@ async function showXaiToolTuiPicker(
     const refresh = () => tui.requestRender();
     const moveSelection = (offset: number) => {
       if (options.length === 0) return;
-      selectedIndex = ((selectedIndex + offset) % options.length + options.length) % options.length;
+      // When offset is a multiple of the list length (e.g. page size === 10
+      // tools), bare `%` is a no-op. Keep paging moving by one step in the
+      // requested direction so Page Up/Down still wrap.
+      let step = offset % options.length;
+      if (step === 0 && offset !== 0) {
+        step = Math.sign(offset);
+      }
+      selectedIndex = ((selectedIndex + step) % options.length + options.length) % options.length;
       refresh();
     };
     const toggleSelected = () => {

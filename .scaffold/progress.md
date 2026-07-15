@@ -1,8 +1,15 @@
 # Execution Progress
 
 **Project:** pi-xai-oauth Repair + Tool Verification  
-**Branch:** feature/xai-tools-picker-focus
+**Branch:** cursor/fix-page-keys-ten-items-7537
 **Started:** 2026-05-27
+
+## Phase: Issue #59 Page keys at ten items
+- [x] Diagnosed modulo no-op in `moveSelection(±maxVisible)` when `options.length === 10`
+- [x] Fixed `extensions/xai/tools/commands.ts` to fall back to ±1 when step would be 0
+- [x] Added Composer 10-tool regression in `scripts/verify-extension.js`
+- [x] Verified `npm run typecheck` and `npm test`
+- [x] Opened PR #61 on `cursor/fix-page-keys-ten-items-7537`
 
 ## Completed
 - [x] Created branch `feature/improved-agent-scaffolding`
