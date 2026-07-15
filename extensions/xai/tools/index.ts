@@ -3,7 +3,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { registerXaiToolsCommand } from "./commands";
 import { registerCursorToolShims, syncCursorToolShimsForModel } from "./cursor-shims";
 import { registerCustomXaiTools } from "./custom-tools";
-import { syncXaiSearchToolsForModel } from "./model-scope";
+import { syncXaiNetworkToolsForModel } from "./model-scope";
 
 const xaiToolRegistrations = new WeakSet<object>();
 
@@ -18,7 +18,7 @@ export function registerXaiTools(pi: ExtensionAPI) {
 }
 
 /** Synchronize all model-scoped xAI tool availability without making network requests. */
-export function syncXaiToolsForModel(pi: ExtensionAPI, model?: Model<Api>, options?: { resetSearchTools?: boolean }) {
+export function syncXaiToolsForModel(pi: ExtensionAPI, model?: Model<Api>, options?: { resetNetworkTools?: boolean }) {
   syncCursorToolShimsForModel(pi, model);
-  syncXaiSearchToolsForModel(pi, model, { reset: options?.resetSearchTools });
+  syncXaiNetworkToolsForModel(pi, model, { reset: options?.resetNetworkTools });
 }

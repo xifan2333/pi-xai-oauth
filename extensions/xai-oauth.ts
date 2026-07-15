@@ -23,7 +23,7 @@ export default function (pi: ExtensionAPI) {
     // Active-tool accessors belong to the ExtensionAPI (`pi`), while models
     // are supplied by the event/context payload.
     (pi as any).on("session_start", (_event: any, ctx: any) =>
-      syncXaiToolsForModel(pi, ctx?.model, { resetSearchTools: true }),
+      syncXaiToolsForModel(pi, ctx?.model, { resetNetworkTools: true }),
     );
     (pi as any).on("model_select", (event: any, ctx: any) =>
       syncXaiToolsForModel(pi, event?.model ?? ctx?.model),

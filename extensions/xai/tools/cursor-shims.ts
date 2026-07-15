@@ -17,7 +17,7 @@ import { isGrokCliProxyModel } from "../models";
 import { createXaiResponse } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiToolError } from "./common";
-import { isXaiSearchToolActive } from "./model-scope";
+import { isXaiNetworkToolActive } from "./model-scope";
 import {
   firstString,
   normalizeDeleteArgs,
@@ -545,7 +545,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
         if (ctx?.model?.provider !== XAI_PROVIDER_ID || !isGrokCliProxyModel(ctx.model.id)) {
           return xaiToolError("Error: WebSearch requires an active xAI Grok Build or Composer model. No xAI request was sent.");
         }
-        if (!isXaiSearchToolActive(pi, "WebSearch")) {
+        if (!isXaiNetworkToolActive(pi, "WebSearch")) {
           return xaiToolError("Error: WebSearch is disabled. Run /xai-tools to enable it and request it explicitly. No xAI request was sent.");
         }
         const apiKey = await resolveXaiAuthToken(ctx);

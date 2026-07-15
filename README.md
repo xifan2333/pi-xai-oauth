@@ -280,17 +280,32 @@ Composer 2.5 and Grok Build are trained against Cursor/Grok CLI-style tool names
 | `Shell` | `bash` |
 | `WebSearch` | xAI native web search |
 
-The shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are disabled again when you switch back to non-Grok-CLI models such as `grok-4.5` or `grok-4.3`.
+The local filesystem and shell shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are enabled automatically for eligible Grok CLI models and disabled again when you switch back to models such as `grok-4.5` or `grok-4.3`. `WebSearch` is the exception: it sends an additional xAI request, so it remains inactive until you enable it through `/xai-tools`.
 
 ---
 
 ## Custom Tools
 
-This package registers OAuth-backed custom tools that use the xAI API directly. They appear alongside your other agent tools in the pi TUI.
+This package registers OAuth-backed custom tools that make additional xAI API requests. They appear alongside your other agent tools in the pi TUI, but all of them are **inactive by default**.
 
-**How to use them:** Select an `xai-auth` model, then call the tool by name in your prompt or agent workflow. The tools use your authenticated xAI session.
+This opt-in boundary applies only to the extra tools below. Normal conversation with the selected `xai-auth` model works without enabling any of them.
 
-The paid server-side search tools — `xai_web_search`, `xai_x_search`, `xai_multi_agent`, `xai_deep_research`, and the Grok Build/Composer-compatible `WebSearch` shim — are deliberately **inactive by default**. This package provides `/xai-tools` so you can explicitly enable only the tool you want, then request it by name in your prompt. Switching to a non-xAI model disables all five immediately; switching back does not silently re-enable them.
+| Tool | Category | Additional usage / cost risk |
+|------|----------|------------------------------|
+| `xai_generate_text` | Generation | Separate model-token usage |
+| `xai_web_search` | Search | Model tokens plus native tool usage |
+| `xai_x_search` | Search | Model tokens plus native tool usage |
+| `xai_multi_agent` | Research | High/variable: 4 or 16 agents plus web/X tools |
+| `xai_deep_research` | Research | High/variable model and web/X tool usage |
+| `xai_code_execution` | Execution | Model tokens plus code-interpreter usage |
+| `xai_generate_image` | Image generation | Charged per generated image; supports 1-4 images |
+| `xai_analyze_image` | Vision | Separate model-token and image-input usage |
+| `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
+| `WebSearch` | Search | Grok Build/Composer model tokens plus native tool usage |
+
+**How to use them:** Select an `xai-auth` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
+
+Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. The Grok CLI local filesystem and shell shims are automatic because they do not create a separate xAI API request.
 
 In the pi TUI, select an `xai-auth` model and run:
 
@@ -298,12 +313,13 @@ In the pi TUI, select an `xai-auth` model and run:
 /xai-tools
 ```
 
-The picker marks every entry as paid and applies changes only to the current xAI session. You can also manage one tool directly:
+The picker shows each tool's category and cost-risk context, warns that calls may use xAI credits, and applies changes only to the current xAI session. You can also manage one tool directly:
 
 ```text
 /xai-tools status
 /xai-tools enable xai_web_search
 /xai-tools disable xai_web_search
+/xai-tools enable xai_generate_image
 ```
 
 `WebSearch` appears in the picker only for Grok Build and Composer models. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
@@ -311,7 +327,7 @@ The picker marks every entry as paid and applies changes only to the current xAI
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
 ### `xai_generate_text`
-Generate text with full reasoning and stateful conversations.
+Opt-in text generation with full reasoning and stateful conversations. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -351,7 +367,7 @@ Opt-in X (Twitter) search using xAI's native `x_search` tool and the active xAI 
 ```
 
 ### `xai_code_execution`
-Run Python-oriented analysis using xAI's native `code_interpreter` tool.
+Opt-in Python-oriented analysis using xAI's native `code_interpreter` tool. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -360,7 +376,7 @@ Run Python-oriented analysis using xAI's native `code_interpreter` tool.
 ```
 
 ### `xai_generate_image`
-Generate images with xAI's current image generation model.
+Opt-in paid image generation with xAI's current image generation model. Enable it through `/xai-tools` first, and request it explicitly in your prompt.
 
 ```json
 {
@@ -370,7 +386,7 @@ Generate images with xAI's current image generation model.
 ```
 
 ### `xai_analyze_image`
-Analyze an image URL, data URL, or local `.png` / `.jpg` path with Grok vision.
+Opt-in analysis of an image URL, data URL, or local `.png` / `.jpg` path with Grok vision. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -380,7 +396,7 @@ Analyze an image URL, data URL, or local `.png` / `.jpg` path with Grok vision.
 ```
 
 ### `xai_critique`
-Get structured critique for code, designs, writing, or ideas.
+Opt-in structured critique for code, designs, writing, or ideas. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -399,7 +415,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 }
 ```
 
-> **Note:** These tools use the xAI API under the hood. Search and research calls can consume paid credits or SuperGrok rate limits, which is why they require manual activation.
+> **Note:** Every tool in this section makes a separate xAI request and can consume credits or rate limits. Image generation is charged per generated image. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
 
 ---
 
@@ -416,7 +432,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | List packages | `pi list` |
 | Set default model | `/model grok-4.5` (in TUI) |
 | Set thinking level | `/think high` (in TUI) |
-| Manage paid xAI tools | `/xai-tools` (in TUI) |
+| Manage outbound xAI tools | `/xai-tools` (in TUI) |
 
 ---
 
