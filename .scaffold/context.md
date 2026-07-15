@@ -1,7 +1,7 @@
 # Shared Agent Context
 
 **Project:** pi-xai-oauth
-**Branch:** feature/issues-49-50
+**Branch:** feature/issue-52-xai-tools
 **Date:** 2026-07-15
 
 ## Key Context
@@ -10,8 +10,8 @@
 - Persistent state lives in .scaffold/.
 
 ## Current Focus
-- GitHub #49: xAI paid search/research tools must be explicit opt-ins, guarded by the active `xai-auth` model, and routed through that model.
-- GitHub #50: consumed historical tool images must not be replayed; oversized current inline images need high-fidelity transport compaction and a hard aggregate budget.
-- Preserve OAuth-only behavior and never log credentials or inline image data.
+- GitHub #52: provide a package-owned `/xai-tools` command because core pi does not ship the optional `/tools` example.
+- Paid search tools remain session-scoped explicit opt-ins and fail closed outside active eligible `xai-auth` models.
+- Runtime messages and README instructions must point only to the command this package actually registers.
 
 See plan.md for active phases and progress.md for completed verification.

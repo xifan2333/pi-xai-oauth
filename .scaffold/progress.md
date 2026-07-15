@@ -209,3 +209,16 @@ Update this file frequently during execution.
 - [x] Final validation passed: `npm test`, `npm run typecheck`, `git diff --check`, `npm pack --dry-run`, real pi extension loading, and real pi session/model lifecycle probes.
 
 **Current branch:** feature/issues-49-50
+
+## Phase 20: Issue 52 package-owned paid-tool command
+- [x] Confirmed core pi 0.80.7 does not include `/tools`; that command exists only in an optional example extension.
+- [x] Added package-owned `/xai-tools` interactive selection plus `status`, `enable`, and `disable` arguments.
+- [x] Kept paid tools off at session start, removed them outside xAI models, and restricted `WebSearch` to Grok Build/Composer.
+- [x] Replaced misleading README, tool-description, and runtime-error references to pi's `/tools` picker.
+- [x] Added regression coverage for command registration, model eligibility, explicit toggling, lifecycle persistence, and fail-closed registry errors.
+- [x] Verified real pi 0.80.7 RPC registration, default-disabled status, explicit enablement, and credit warning.
+- [x] Fixed independent review finding by tracking explicit authorization per paid tool and stripping stale unauthorized tools after registry recovery.
+- [x] Focused closure review reported no findings.
+- [x] Final validation passed: `npm test`, `npm run typecheck`, `git diff --check`, `npm pack --dry-run`, and real pi 0.80.7 RPC command probes.
+
+**Current branch:** feature/issue-52-xai-tools

@@ -525,7 +525,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
     pi.registerTool({
       name: "WebSearch",
       label: "WebSearch",
-      description: "Opt-in paid Cursor/Grok CLI web search. Enable via /tools and call only when the user explicitly requests xAI web search.",
+      description: "Opt-in paid Cursor/Grok CLI web search. Enable via /xai-tools and call only when the user explicitly requests xAI web search.",
       promptSnippet: "Cursor-style web search backed by xAI native web_search",
       promptGuidelines: ["Call WebSearch only when the user explicitly requests xAI web search."],
       parameters: {
@@ -546,7 +546,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
           return xaiToolError("Error: WebSearch requires an active xAI Grok Build or Composer model. No xAI request was sent.");
         }
         if (!isXaiSearchToolActive(pi, "WebSearch")) {
-          return xaiToolError("Error: WebSearch is disabled. Enable it in pi's /tools picker and request it explicitly. No xAI request was sent.");
+          return xaiToolError("Error: WebSearch is disabled. Run /xai-tools to enable it and request it explicitly. No xAI request was sent.");
         }
         const apiKey = await resolveXaiAuthToken(ctx);
         if (!apiKey) return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
