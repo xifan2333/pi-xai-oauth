@@ -100,6 +100,7 @@ function loadExtension() {
   const providers = new Map();
   const tools = new Map();
   const handlers = new Map();
+  const commands = new Map();
   let activeTools = ["read", "bash", "edit", "write"];
   let throwOnGetActiveTools = false;
   let throwOnSetActiveTools = false;
@@ -114,6 +115,9 @@ function loadExtension() {
       tools.set(tool.name, tool);
       if (!activeTools.includes(tool.name)) activeTools.push(tool.name);
     },
+    registerCommand(name, command) {
+      commands.set(name, command);
+    },
     getActiveTools() {
       if (throwOnGetActiveTools) throw new Error("tool registry not ready");
       return activeTools;
@@ -127,6 +131,7 @@ function loadExtension() {
     providers,
     tools,
     handlers,
+    commands,
     getActiveTools: () => activeTools,
     setActiveTools: (toolNames) => { activeTools = toolNames; },
     setToolRegistryFailures({ get = false, set = false } = {}) {
@@ -145,6 +150,22 @@ function authContext(model = TEST_XAI_MODEL) {
       },
       async getApiKeyAndHeaders() {
         return { ok: true, apiKey: "oauth-token" };
+      },
+    },
+  };
+}
+
+function extensionCommandContext(model, notifications = [], select) {
+  return {
+    model,
+    mode: "tui",
+    hasUI: true,
+    ui: {
+      notify(message, type) {
+        notifications.push({ message, type });
+      },
+      async select(title, options) {
+        return select?.(title, options);
       },
     },
   };
@@ -179,7 +200,7 @@ async function runCursorTool(tools, name, params = {}, ctx = {}) {
 }
 
 async function verifyCursorToolShims(loadResult) {
-  const { tools, getActiveTools, setActiveTools } = loadResult;
+  const { commands, tools } = loadResult;
   for (const name of ["Read", "Write", "StrReplace", "Edit", "Delete", "LS", "Grep", "Glob", "Shell", "WebSearch"]) {
     assert.ok(tools.has(name), `${name} Cursor/Grok CLI shim should be registered`);
   }
@@ -190,7 +211,7 @@ async function verifyCursorToolShims(loadResult) {
   assert.match(disabledWebSearchResult.content[0].text, /WebSearch is disabled/);
   assert.equal(requests.length, beforeDisabledWebSearch, "inactive Cursor WebSearch must fail before network access");
 
-  setActiveTools([...getActiveTools(), "WebSearch"]);
+  await commands.get("xai-tools").handler("enable WebSearch", extensionCommandContext(composerModel));
   const beforeWebSearch = requests.length;
   const webSearchResult = await runCursorTool(tools, "WebSearch", { query: "xAI docs" }, authContext(composerModel));
   assert.equal(webSearchResult.content[0].text, "OK");
@@ -392,8 +413,10 @@ async function verifyXaiSearchToolActivation(loadResult) {
 
   setActiveTools([...getActiveTools(), ...searchTools]);
   await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
-  assert.ok(customSearchTools.every((name) => getActiveTools().includes(name)), "explicitly enabled xAI search tools should stay active for xAI models");
-  assert.ok(!getActiveTools().includes("WebSearch"), "Cursor WebSearch must remain disabled for non-CLI xAI models");
+  assert.ok(
+    searchTools.every((name) => !getActiveTools().includes(name)),
+    "direct registry additions must not bypass package-owned paid-tool opt-in",
+  );
 
   await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
   assert.ok(searchTools.every((name) => !getActiveTools().includes(name)), "switching away from xAI must disable paid search tools immediately");
@@ -415,6 +438,88 @@ async function verifyXaiSearchToolActivation(loadResult) {
   assert.equal(requests.length, requestsBeforeGuards, "non-xAI search-tool guards must run before auth or network access");
 
   setActiveTools(getActiveTools().filter((name) => name !== "WebSearch"));
+}
+
+async function verifyXaiToolsCommand(loadResult) {
+  const { commands, handlers, getActiveTools, setToolRegistryFailures } = loadResult;
+  const command = commands.get("xai-tools");
+  assert.ok(command, "the package should register /xai-tools");
+
+  const notifications = [];
+  const runCommand = (args, model, select) => command.handler(args, extensionCommandContext(model, notifications, select));
+  const searchTools = ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research", "WebSearch"];
+
+  await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(searchTools.every((name) => !getActiveTools().includes(name)));
+
+  await runCommand("enable xai_web_search", TEST_XAI_MODEL);
+  assert.ok(getActiveTools().includes("xai_web_search"), "/xai-tools should explicitly enable an eligible tool");
+  assert.match(notifications.at(-1).message, /may use xAI credits/);
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.ok(getActiveTools().includes("xai_web_search"), "before-agent sync should preserve command-based opt-in");
+
+  await runCommand("disable xai_web_search", TEST_XAI_MODEL);
+  assert.ok(!getActiveTools().includes("xai_web_search"), "/xai-tools should disable an enabled tool");
+
+  await runCommand("enable WebSearch", TEST_XAI_MODEL);
+  assert.ok(!getActiveTools().includes("WebSearch"), "standard xAI models must not enable the Grok CLI WebSearch shim");
+  assert.match(notifications.at(-1).message, /only with xAI Grok Build or Composer/);
+
+  const composerModel = { ...TEST_XAI_MODEL, id: "grok-composer-2.5-fast" };
+  await handlers.get("model_select")?.({ model: composerModel }, { model: composerModel });
+  await runCommand("enable WebSearch", composerModel);
+  assert.ok(getActiveTools().includes("WebSearch"), "Grok CLI models should allow deliberate WebSearch enablement");
+  await handlers.get("before_agent_start")?.({}, { model: composerModel });
+  assert.ok(getActiveTools().includes("WebSearch"), "Grok CLI sync should preserve command-based WebSearch opt-in");
+
+  const anthropicModel = { provider: "anthropic", id: "claude-opus-4-8" };
+  await handlers.get("model_select")?.({ model: anthropicModel }, { model: anthropicModel });
+  await runCommand("enable xai_x_search", anthropicModel);
+  assert.ok(!getActiveTools().includes("xai_x_search"), "non-xAI models must not enable paid xAI tools");
+  assert.match(notifications.at(-1).message, /Select an xAI\/Grok model/);
+
+  await handlers.get("model_select")?.({ model: TEST_XAI_MODEL }, { model: TEST_XAI_MODEL });
+  let pickerPass = 0;
+  await runCommand("", TEST_XAI_MODEL, (_title, options) => {
+    pickerPass += 1;
+    return pickerPass === 1
+      ? options.find((option) => option.includes("xai_web_search"))
+      : "Done";
+  });
+  assert.ok(getActiveTools().includes("xai_web_search"), "interactive /xai-tools should toggle the selected paid tool");
+
+  await runCommand("status", TEST_XAI_MODEL);
+  assert.match(notifications.at(-1).message, /xai_web_search=enabled/);
+
+  await runCommand("disable xai_web_search", TEST_XAI_MODEL);
+  setToolRegistryFailures({ get: true });
+  await runCommand("enable xai_web_search", TEST_XAI_MODEL);
+  setToolRegistryFailures();
+  assert.ok(!getActiveTools().includes("xai_web_search"), "registry read failures must keep command enablement fail-closed");
+  assert.match(notifications.at(-1).message, /could not be read/);
+  setToolRegistryFailures({ set: true });
+  await runCommand("enable xai_web_search", TEST_XAI_MODEL);
+  assert.ok(!getActiveTools().includes("xai_web_search"), "registry write failures must not partially enable a paid tool");
+  assert.match(notifications.at(-1).message, /could not be updated/);
+  setToolRegistryFailures();
+
+  loadResult.setActiveTools([...getActiveTools(), ...searchTools]);
+  setToolRegistryFailures({ set: true });
+  await handlers.get("session_start")?.({}, { model: TEST_XAI_MODEL });
+  setToolRegistryFailures();
+  assert.ok(searchTools.every((name) => getActiveTools().includes(name)), "the fixture should retain stale default-active tools after a failed reset");
+  await runCommand("enable xai_web_search", TEST_XAI_MODEL);
+  assert.ok(getActiveTools().includes("xai_web_search"), "the deliberately selected tool should be enabled after registry recovery");
+  assert.ok(
+    searchTools.filter((name) => name !== "xai_web_search").every((name) => !getActiveTools().includes(name)),
+    "enabling one tool after reset recovery must strip every stale unauthorized paid tool",
+  );
+  await handlers.get("before_agent_start")?.({}, { model: TEST_XAI_MODEL });
+  assert.deepStrictEqual(
+    searchTools.filter((name) => getActiveTools().includes(name)),
+    ["xai_web_search"],
+    "lifecycle sync must preserve only individually authorized paid tools",
+  );
 }
 
 function inlineImageUrls(value, urls = []) {
@@ -862,6 +967,8 @@ async function main() {
     const provider = providers.get("xai-auth");
     assert.ok(provider, "xai-auth provider should be registered");
     assert.equal(secondLoad.tools.size, tools.size, "extension reloads should register tools on the new pi API object");
+    assert.ok(firstLoad.commands.has("xai-tools"), "the xAI paid-tool command should be registered");
+    assert.equal(secondLoad.commands.size, firstLoad.commands.size, "extension reloads should register commands on the new pi API object");
     assert.equal(provider.api, "xai-responses");
     const grok45 = provider.models.find((model) => model.id === "grok-4.5");
     assert.ok(grok45, "grok-4.5 should be registered in the xAI model catalog");
@@ -879,6 +986,7 @@ async function main() {
     assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
 
     await verifyXaiSearchToolActivation(firstLoad);
+    await verifyXaiToolsCommand(firstLoad);
     await verifyXaiImageLifecycle();
     await verifyXaiImageCompaction();
 
@@ -935,13 +1043,12 @@ async function main() {
     assert.equal(headerValue(buildRequest.headers, "x-grok-model-override"), "grok-build");
     assert.ok(headerValue(buildRequest.headers, "x-grok-conv-id"), "Grok Build tool calls should include a Grok conversation id");
 
-    firstLoad.setActiveTools([
-      ...firstLoad.getActiveTools(),
-      "xai_web_search",
-      "xai_x_search",
-      "xai_multi_agent",
-      "xai_deep_research",
-    ]);
+    for (const toolName of ["xai_web_search", "xai_x_search", "xai_multi_agent", "xai_deep_research"]) {
+      await firstLoad.commands.get("xai-tools").handler(
+        `enable ${toolName}`,
+        extensionCommandContext(TEST_XAI_MODEL),
+      );
+    }
     const { body: webBody } = await runTool(tools, "xai_web_search", { query: "xAI docs" });
     assert.deepEqual(webBody.tools, [{ type: "web_search", enable_image_understanding: true }]);
     assert.equal(webBody.model, TEST_XAI_MODEL.id, "xai_web_search should use the active xAI model");

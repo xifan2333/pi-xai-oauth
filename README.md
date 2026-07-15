@@ -290,7 +290,23 @@ This package registers OAuth-backed custom tools that use the xAI API directly. 
 
 **How to use them:** Select an `xai-auth` model, then call the tool by name in your prompt or agent workflow. The tools use your authenticated xAI session.
 
-The paid server-side search tools — `xai_web_search`, `xai_x_search`, `xai_multi_agent`, `xai_deep_research`, and the Grok Build/Composer-compatible `WebSearch` shim — are deliberately **inactive by default**. Enable only the tool you want through pi's `/tools` picker, then request it explicitly in your prompt. Switching to a non-xAI model disables all five immediately; switching back does not silently re-enable them.
+The paid server-side search tools — `xai_web_search`, `xai_x_search`, `xai_multi_agent`, `xai_deep_research`, and the Grok Build/Composer-compatible `WebSearch` shim — are deliberately **inactive by default**. This package provides `/xai-tools` so you can explicitly enable only the tool you want, then request it by name in your prompt. Switching to a non-xAI model disables all five immediately; switching back does not silently re-enable them.
+
+In the pi TUI, select an `xai-auth` model and run:
+
+```text
+/xai-tools
+```
+
+The picker marks every entry as paid and applies changes only to the current xAI session. You can also manage one tool directly:
+
+```text
+/xai-tools status
+/xai-tools enable xai_web_search
+/xai-tools disable xai_web_search
+```
+
+`WebSearch` appears in the picker only for Grok Build and Composer models. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
@@ -306,7 +322,7 @@ Generate text with full reasoning and stateful conversations.
 ```
 
 ### `xai_multi_agent`
-Opt-in deep multi-agent research using Grok's multi-agent model plus native web and X search tools. Enable it through `/tools` first.
+Opt-in deep multi-agent research using Grok's multi-agent model plus native web and X search tools. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -317,7 +333,7 @@ Opt-in deep multi-agent research using Grok's multi-agent model plus native web 
 ```
 
 ### `xai_web_search`
-Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/tools` first.
+Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -326,7 +342,7 @@ Opt-in search using xAI's native `web_search` tool and the active xAI model. Ena
 ```
 
 ### `xai_x_search`
-Opt-in X (Twitter) search using xAI's native `x_search` tool and the active xAI model. Enable it through `/tools` first.
+Opt-in X (Twitter) search using xAI's native `x_search` tool and the active xAI model. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -374,7 +390,7 @@ Get structured critique for code, designs, writing, or ideas.
 ```
 
 ### `xai_deep_research`
-Opt-in research using the active xAI model plus native web and X search tools. Enable it through `/tools` first.
+Opt-in research using the active xAI model plus native web and X search tools. Enable it through `/xai-tools` first.
 
 ```json
 {
@@ -400,6 +416,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | List packages | `pi list` |
 | Set default model | `/model grok-4.5` (in TUI) |
 | Set thinking level | `/think high` (in TUI) |
+| Manage paid xAI tools | `/xai-tools` (in TUI) |
 
 ---
 

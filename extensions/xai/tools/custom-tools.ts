@@ -18,7 +18,7 @@ function activeModelForSearchTool(pi: ExtensionAPI, ctx: any, toolName: XaiSearc
 
 function searchToolDisabledError(toolName: XaiSearchToolName, details: Record<string, unknown> = {}) {
   return xaiToolError(
-    `Error: ${toolName} is disabled. Select an xAI/Grok model, enable ${toolName} in pi's /tools picker, and request it explicitly. No xAI request was sent.`,
+    `Error: ${toolName} is disabled. Select an xAI/Grok model, run /xai-tools to enable ${toolName}, and request it explicitly. No xAI request was sent.`,
     { error: true, ...details },
   );
 }
@@ -110,7 +110,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_multi_agent",
       label: "xAI Multi-Agent Research",
-      description: "Opt-in paid multi-agent web/X research using Grok. Enable via /tools and call only when the user explicitly requests xAI research.",
+      description: "Opt-in paid multi-agent web/X research using Grok. Enable via /xai-tools and call only when the user explicitly requests xAI research.",
       promptGuidelines: ["Call xai_multi_agent only when the user explicitly requests xAI multi-agent research."],
       parameters: {
         type: "object",
@@ -167,7 +167,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_web_search",
       label: "xAI Web Search",
-      description: "Opt-in paid search using Grok's native web search. Enable via /tools and call only when the user explicitly requests xAI web search.",
+      description: "Opt-in paid search using Grok's native web search. Enable via /xai-tools and call only when the user explicitly requests xAI web search.",
       promptGuidelines: ["Call xai_web_search only when the user explicitly requests xAI web search."],
       parameters: {
         type: "object",
@@ -202,7 +202,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
       name: "xai_x_search",
       label: "xAI X Search",
-      description: "Opt-in paid X search using Grok's native real-time search. Enable via /tools and call only when the user explicitly requests xAI X search.",
+      description: "Opt-in paid X search using Grok's native real-time search. Enable via /xai-tools and call only when the user explicitly requests xAI X search.",
       promptGuidelines: ["Call xai_x_search only when the user explicitly requests xAI X search."],
       parameters: {
         type: "object",
@@ -413,7 +413,7 @@ Be specific and cite examples where helpful.`;
     pi.registerTool({
       name: "xai_deep_research",
       label: "xAI Deep Research",
-      description: "Opt-in paid multi-step web/X research with Grok. Enable via /tools and call only when the user explicitly requests xAI research.",
+      description: "Opt-in paid multi-step web/X research with Grok. Enable via /xai-tools and call only when the user explicitly requests xAI research.",
       promptGuidelines: ["Call xai_deep_research only when the user explicitly requests xAI deep research."],
       parameters: {
         type: "object",

@@ -1,38 +1,29 @@
-# Implementation Plan: GitHub Issues #49 and #50
+# Implementation Plan: GitHub Issue #52
 
-**Branch:** feature/issues-49-50
+**Branch:** feature/issue-52-xai-tools
 
 **Date:** 2026-07-15
 
-**Goal:** Prevent unintended xAI paid-search calls and keep stateless Responses requests below the xAI OAuth gateway's unreliable inline-image payload range.
+**Goal:** Give users a package-owned, fail-closed way to opt in to paid xAI search tools without depending on pi's optional `/tools` example extension.
 
-## Phase 1: Issue review and baseline
-- [x] Read issues #49 and #50 and their comments through GitHub.
-- [x] Inspect the provider entrypoint, custom tool registration, payload normalization, Responses transport, setup script, tests, README, and pi extension contracts.
-- [x] Move the existing worktree from the obsolete merged branch to `feature/issues-49-50` at current `origin/main`.
-- [x] Run baseline `npm test` and `npm run typecheck`.
+## Phase 1: Reproduce and verify
+- [x] Read issue #52 and confirm there are no follow-up comments.
+- [x] Verify that core pi 0.80.7 does not register `/tools`; it ships only as an optional example extension.
+- [x] Inspect the active-tool registry, command UI API, existing model scope, docs, and verification harness.
+- [x] Run clean baseline tests and TypeScript validation.
 
-## Phase 2: Issue #49 paid-search guard
-- [x] Keep xAI search/research tools registered but inactive by default.
-- [x] Remove those tools immediately when the active model is not from `xai-auth`.
-- [x] Fail tool execution locally before auth/network resolution unless an active xAI model is present.
-- [x] Route web/X/deep-research requests through the active xAI model instead of `DEFAULT_XAI_MODEL`.
-- [x] Add regression coverage for default inactivity, model switching, local no-request rejection, active-model routing, and zero requests from lifecycle events.
+## Phase 2: Package-owned opt-in command
+- [x] Register `/xai-tools` from `pi-xai-oauth`.
+- [x] Provide an interactive paid-tool picker plus explicit `enable`, `disable`, and `status` arguments.
+- [x] Require an active xAI model for enablement and restrict `WebSearch` to Grok Build/Composer models.
+- [x] Preserve session-start reset, non-xAI model cleanup, and fail-closed registry behavior.
 
-## Phase 3: Issue #50 image lifecycle and transport mitigation
-- [x] Omit consumed historical tool-result image binaries after a later assistant response while retaining explicit text markers.
-- [x] Preserve unconsumed tool-result images until the first assistant response.
-- [x] Compact oversized inline PNG/JPEG images with high-fidelity JPEG encoding before transport and enforce an aggregate inline-image budget.
-- [x] Normalize delegated transport error prefixes from OpenAI to xAI.
-- [x] Add regression coverage for image lifecycle, compaction, dimensions, payload budget, and clear no-network overflow failure.
-
-## Phase 4: Verification and review
-- [x] Run focused tests, `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
-- [x] Run an independent reviewer agent against the final diff.
-- [x] Address all valid findings and re-run validation.
+## Phase 3: Documentation and verification
+- [x] Replace every misleading core `/tools` reference with the package-owned command.
+- [x] Add regression coverage for command registration, eligibility, toggling, lifecycle persistence, and registry failures.
+- [x] Run `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+- [x] Smoke-test the command through pi's real extension loader.
 
 **Owner:** Main agent
-
-**Research:** Parallel issue #49 and issue #50 subagents
 
 **Next action:** Hand off the completed worktree for commit or PR publication.

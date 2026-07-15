@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { registerXaiToolsCommand } from "./commands";
 import { registerCursorToolShims, syncCursorToolShimsForModel } from "./cursor-shims";
 import { registerCustomXaiTools } from "./custom-tools";
 import { syncXaiSearchToolsForModel } from "./model-scope";
@@ -13,6 +14,7 @@ export function registerXaiTools(pi: ExtensionAPI) {
 
   registerCursorToolShims(pi);
   registerCustomXaiTools(pi);
+  registerXaiToolsCommand(pi);
 }
 
 /** Synchronize all model-scoped xAI tool availability without making network requests. */
