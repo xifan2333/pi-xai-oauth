@@ -1,7 +1,7 @@
 # Execution Progress
 
 **Project:** pi-xai-oauth Repair + Tool Verification  
-**Branch:** feature/issue-54-paid-xai-tools
+**Branch:** feature/release-1.3.4
 **Started:** 2026-05-27
 
 ## Completed
@@ -235,3 +235,17 @@ Update this file frequently during execution.
 - [x] Independent closure review reported no findings.
 
 **Current branch:** feature/issue-54-paid-xai-tools
+
+## Phase 22: npm patch release 1.3.4
+- [x] Synced merged PR #55 into local `main`.
+- [x] Created `feature/release-1.3.4`.
+- [x] Bumped package and lockfile versions to 1.3.4.
+- [x] Updated README release notes and npm upgrade guidance.
+- [x] Added a narrow npm exclusion so local pi session HTML exports cannot leak into releases.
+- [x] Passed `npm test`, `npm run typecheck`, `git diff --check`, and `npm pack --dry-run`.
+- [x] Confirmed the 1.3.4 tarball excludes the untracked session export.
+- [x] Confirmed npm currently serves 1.3.3.
+- [x] Confirmed npm authentication as `blockedredemption`.
+- [ ] Commit, push, and publish only when explicitly requested.
+
+**Current branch:** feature/release-1.3.4
