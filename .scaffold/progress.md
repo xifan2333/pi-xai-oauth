@@ -278,5 +278,6 @@ Update this file frequently during execution.
 - [x] Linked the changelog from the README introduction and table of contents.
 - [x] Corrected release assignments using npm `gitHead` ranges rather than version strings alone.
 - [x] Passed changelog structure, README link, `git diff --check`, `npm test`, `npm run typecheck`, and npm tarball checks.
+- [x] Committed, pushed, and opened the changelog PR.
 
 **Current branch:** feature/changelog

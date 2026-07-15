@@ -18,4 +18,4 @@
 
 **Owner:** Main agent
 
-**Next action:** Commit and open a PR when requested.
+**Next action:** Review and merge the changelog PR.
