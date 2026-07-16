@@ -1,32 +1,35 @@
-# Shared Agent Context — Issue #83
+# Shared Agent Context — Issue #82
 
-**Branch:** feature/issue-83-image-editing
-**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/83
-**Original commits:** `4a61389`, `e31303f`
-**Post-PR-90 baseline:** `b0556a8`
-**Safety branch:** `safety/issue-83-pre-pr90-rebase`
+**Branch:** feature/issue-82-xai-usage
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/82
+**Upstream pin:** xai-org/grok-build@b189869b7755d2b482969acf6c92da3ecfeffd36
+**Rebase baseline:** `af31e83`
+**Safety branch:** `safety/issue-82-pre-main-rebase`
 
-## Evidence and decisions
+## Approved architecture
 
-- Pinned source: `xai-org/grok-build@b189869b7755d2b482969acf6c92da3ecfeffd36`.
-- Current first-party documentation limits edits to three source images, so the final package contract is one to three.
-- Use Pi's public worker-backed `resizeImage`; add no image dependency.
-- Keep the source-backed 400 KiB pass-through, 768 px compression maximum, 256 px floor, and quality steps inside stricter package-owned byte/pixel budgets.
-- Route both credential provenance tags to the pinned public edit endpoint without adding API-key environment fallback.
-- Persist one verified output under hashed Pi session storage and return only safe metadata.
+Use the existing Pi-resolved OAuth bearer for a pinned authenticated `GET /v1/user`; transiently validate `userId`; only then request pinned `GET /v1/billing?format=credits` with `x-userid`. Fail closed before billing on every identity error. Never persist/cache/log/display identity, authenticated headers, or raw bodies.
 
-## Integration focus
+## Implementation map
 
-- PR #90 is merged exactly as reviewed. Preserve its catalog modality, payload canonicalization, retry, canonical-model, and privacy behavior.
-- Adopt shared direct-JSON header construction and route classification from `wire.ts`; edits remain direct public media requests, never proxy requests.
-- Keep disabled zero-I/O behavior and permit explicitly enabled edits under an authenticated text-only active Responses model.
-- Reapply decoded output side and pixel limits after codec verification and redact all codec/compression failures.
+- `extensions/xai/usage.ts`: bounded JSON transport/parser, safe rendering, `/xai-usage`, and session status controller.
+- `extensions/xai/auth.ts`: pi-model-registry-only OAuth resolver for usage; unrelated active-model API keys and file fallbacks are excluded.
+- `extensions/xai/constants.ts`: pinned URLs and usage limits.
+- `extensions/xai-oauth.ts`: thin account/session/model/turn lifecycle wiring.
+- `tests/fixtures/usage/*.json`: identity plus observed new/legacy credits shapes.
+- `tests/usage/*.test.ts`: parser/bounds, identity-first transport/errors/cancellation, and command/status lifecycle.
 
 ## Validation state
 
-- Rebase started from clean `e31303f` after verifying `origin/main=b0556a8` contains the exact reviewed PR #90 tree.
-- No live xAI request is part of deterministic validation.
+- `/xai-usage` works as an explicit one-shot lookup without enabling background behavior.
+- `/xai-usage status on` requires an active `xai-auth` model, refreshes immediately, then only after completed turns with a one-minute minimum interval.
+- Any model/provider/account/session change disables and clears status. Non-xAI contexts never refresh.
+- New `creditUsagePercent` and `currentPeriod` fields take precedence; legacy `used`/`monthlyLimit` and billing-period timestamps are conservative fallbacks.
+- Missing optional fields are omitted. Unsupported/out-of-range optional fields are ignored; malformed root/history or over-limit structures fail safely.
+- PR #89 has no reviews or review threads; its three conversation comments are bot usage-limit notices.
+- The old policy failure was only the now-obsolete Pi 0.80.7 registry-drift check; merged PR #94 pins and validates 0.80.10.
+- The original clean remote head was `53b8013`; the rebase onto `af31e83` is in progress.
 
 ## Delivery
 
-The original implementation (`4a61389`) and delivery record (`e31303f`) were pushed to unmerged PR #91. The branch is now being rebased and revalidated before its next push: https://github.com/BlockedPath/pi-xai-oauth/pull/91
+Revalidate the cumulative branch against the current merged baseline, complete independent review, and replace the known old remote head with exact force-with-lease. PR #89 remains unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/89

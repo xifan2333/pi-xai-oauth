@@ -1,30 +1,32 @@
-# Constraints & Safety Rules — Issue #83
+# Constraints & Safety Rules — Issue #82
 
-## Image-edit boundary
+## Identity and credentials
 
-- `xai_edit_image` remains disabled by default and session-scoped through `/xai-tools`.
-- Disabled calls fail before parameter/context reads, credential lookup, filesystem/codecs, fetch, or output writes.
-- Accept one to three byte-validated PNG/JPEG references from workspace-contained regular files or strict canonical data URLs.
-- Reject four references before credential, filesystem, codec, or network access.
-- Reject remote/file URLs, attachment or Files API identifiers, WebP, caller endpoints, and caller output paths.
-- Require a supported aspect ratio for multiple references; validate any supplied singular ratio but omit it from the wire.
-- Pin `/v1/images/edits`, fixed model/count/resolution/response format, redirect rejection, cancellation, timeout, and bounded bodies.
-- Verify exactly one canonical base64 PNG/JPEG output, including decoded byte/pixel/side limits, before atomic 0700/0600 session storage.
-- Never reflect prompts, source paths/data URLs/images, credentials, headers, raw bodies, or lower-layer codec messages.
+- Resolve the OAuth bearer through Pi's existing credential path; never accept API-key provenance for this surface.
+- Obtain `x-userid` only from pinned authenticated `GET https://cli-chat-proxy.grok.com/v1/user`.
+- Keep identity transient within one fetch call. Never persist, cache, log, display, fingerprint, or copy it into catalog/auth state.
+- On any identity transport, auth, redirect, timeout, cancellation, byte, JSON, shape, or validation failure, stop before billing.
+- Never log or reflect bearer tokens, authenticated headers, user identity, raw bodies, or transport exception details.
 
-## Inherited main invariants
+## Billing and parsing
 
-- Preserve exact authenticated catalog membership, schema-2 modality provenance, cache migration, refresh locking, and privacy behavior.
-- Preserve inert final Responses payload canonicalization, canonical runtime model binding, computer-screenshot detection, zero SDK retries, and pre/post-compaction modality enforcement.
-- Preserve centralized route-aware wire headers, reserved-header scrubbing, redirect rejection, safe errors, and generic-affinity suppression.
-- Image editing is independent of the active Responses model's authenticated text/image modality.
-- Preserve OAuth PKCE/state/nonce/OIDC and bounded device authorization behavior.
-- Keep Pi peers at `>=0.80.1 <0.81.0` with exact packed 0.80.1/0.80.10 boundaries.
+- Pin `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`; never accept a caller/catalog endpoint.
+- Reject redirects; use a 15-second per-request timeout and 64 KiB response limit.
+- Bound JSON depth, node count, array size, object keys, history periods, user ID, labels, timestamps, percentages, billing cycles, and cent values.
+- Treat config fields as optional. Support only observed new fields and documented legacy fallbacks.
+- Billing errors and optional status must never affect chat.
+
+## Status lifecycle
+
+- One-shot `/xai-usage` is explicit and does not enable status.
+- Status is off by default and requires `/xai-usage status on` with an active `xai-auth` model.
+- Status is in-memory/session-only, refreshes only after completed turns, and never more often than once per minute.
+- Clear and disable status on model, provider, account, session start/shutdown, and non-xAI context changes.
 
 ## Delivery
 
-- The issue-83 worktree has one writer; delegated agents are read-only.
-- Base the rebased branch on merged PR #90 at `b0556a8`; preserve safety branch `safety/issue-83-pre-pr90-rebase`.
-- Update scaffold state after major phases.
-- Run focused, strict full, typecheck, coverage, package, loader, and exact boundary validation before publishing.
-- Do not merge PR #91 or make live paid xAI calls.
+- Keep implementation changes in the isolated issue-82 worktree; delegated audits are read-only.
+- Preserve `safety/issue-82-pre-main-rebase` and use exact force-with-lease against the known old remote head.
+- Use locked npm dependencies; use UV instead of pip if Python becomes necessary.
+- Preserve merged wire, modality, image-edit, catalog, OAuth, and Pi 0.80.1/0.80.10 compatibility behavior.
+- Update scaffold after major phases. Push only after full validation and independent review; do not merge PR #89.

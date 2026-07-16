@@ -8,6 +8,7 @@ import { createXaiOAuth } from "./xai/oauth";
 import { streamSimpleXaiResponses } from "./xai/responses";
 import { resolveXaiRoute } from "./xai/routing";
 import { registerXaiTools, syncXaiToolsForModel } from "./xai/tools";
+import { registerXaiUsage } from "./xai/usage";
 
 /** Register the xAI OAuth provider and its authenticated model catalog. */
 export default async function (pi: ExtensionAPI) {
@@ -20,6 +21,7 @@ export default async function (pi: ExtensionAPI) {
   let activeLoginRefreshes = 0;
   let refreshAbortController: AbortController | undefined;
   let oauth: ReturnType<typeof createXaiOAuth>;
+  const xaiUsage = registerXaiUsage(pi);
 
   const providerModels = (models: readonly XaiCatalogModel[]) =>
     models.map(({ apiBackend: _apiBackend, inputProvenance: _inputProvenance, ...model }) => model);
@@ -86,6 +88,9 @@ export default async function (pi: ExtensionAPI) {
   oauth = createXaiOAuth({
     getExistingCredentials: getGrokAuthCredentials,
     onLoginCredentials: async (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => {
+      // A successful login can replace the account. Drop any prior session
+      // usage display before performing other authenticated work.
+      xaiUsage.reset();
       const loginGeneration = ++loginCatalogGeneration;
       activeLoginRefreshes++;
       try {
@@ -171,10 +176,12 @@ export default async function (pi: ExtensionAPI) {
     // Active-tool accessors belong to the ExtensionAPI (`pi`), while models
     // and pi-managed credentials are supplied by the event/context payload.
     (pi as any).on("session_start", async (_event: any, ctx: any) => {
+      xaiUsage.reset(ctx);
       await refreshDeferredCatalog(ctx);
       syncXaiToolsForModel(pi, ctx?.model, { resetNetworkTools: true });
     });
     (pi as any).on("input", async (_event: any, ctx: any) => {
+      xaiUsage.clearIfInactive(ctx);
       await refreshDeferredCatalog(ctx);
       const activeModel = ctx?.model;
       const entitled =
@@ -198,10 +205,14 @@ export default async function (pi: ExtensionAPI) {
       );
       return { action: "handled" };
     });
-    (pi as any).on("model_select", (event: any, ctx: any) =>
-      syncXaiToolsForModel(pi, event?.model ?? ctx?.model),
-    );
+    (pi as any).on("model_select", (event: any, ctx: any) => {
+      // Model changes invalidate the account/model association of a compact
+      // usage display. Require an explicit opt-in again.
+      xaiUsage.reset(ctx);
+      return syncXaiToolsForModel(pi, event?.model ?? ctx?.model);
+    });
     (pi as any).on("before_agent_start", async (_event: any, ctx: any) => {
+      xaiUsage.clearIfInactive(ctx);
       await refreshDeferredCatalog(ctx);
       let activeModel = ctx?.model;
       const entitled =
@@ -227,6 +238,12 @@ export default async function (pi: ExtensionAPI) {
         }
       }
       return syncXaiToolsForModel(pi, activeModel);
+    });
+    (pi as any).on("turn_end", async (_event: any, ctx: any) => {
+      await xaiUsage.refreshStatus(ctx);
+    });
+    (pi as any).on("session_shutdown", (_event: any, ctx: any) => {
+      xaiUsage.reset(ctx);
     });
   }
 }

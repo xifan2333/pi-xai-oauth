@@ -77,6 +77,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Grok 4.5 fast mode** — same model with `low` reasoning effort (`/think low` or `grok-4.5:low`); not a separate model ID
 - **Long-context metadata when entitled** — known Grok 4.3 behavior is preserved when xAI returns it, with authenticated limits taking precedence
 - **Authenticated model catalog** — fetches the OAuth-visible `/models-v2` list from the official CLI proxy, so additions and removals track the signed-in account
+- **Explicit subscription usage** — `/xai-usage` performs a bounded, identity-first lookup against the revision-pinned unofficial Grok billing surface without retaining account identity
 - **Coding models when entitled** — Grok Build, Composer, and other models appear only when xAI includes them in the account catalog
 - **Reasoning support** — parses supplied reasoning capability and thinking levels while preserving known model compatibility
 - **Bounded last-known-good cache** — avoids routine startup delay and falls back safely when discovery is offline or unavailable
@@ -236,6 +237,28 @@ Or use a specific model:
 ```bash
 pi --model grok-4.5 "Write a poem about Rust"
 ```
+
+### Subscription usage (unofficial)
+
+Run an explicit one-shot usage lookup from pi:
+
+```text
+/xai-usage
+```
+
+The command displays only validated fields that xAI actually returned, such as included usage percentage, legacy included-credit totals, current reset time, on-demand usage/cap, prepaid balance, and bounded history count. Missing optional fields stay omitted.
+
+The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
+
+The compact footer status is off by default and requires a separate per-session opt-in while an `xai-auth` model is active:
+
+```text
+/xai-usage status
+/xai-usage status on
+/xai-usage status off
+```
+
+Enabling status performs one immediate lookup. Later refreshes are event-driven after completed turns and occur no more than once per minute. The status disables and clears on model, provider, account, or session changes; it never refreshes for non-xAI models. Status failures clear silently and never interfere with chat. Every request rejects redirects, has a 15-second timeout, reads at most 64 KiB, and applies bounded JSON depth, collection counts, history length, and numeric ranges.
 
 ### Switching Models
 
@@ -526,6 +549,8 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | List packages | `pi list` |
 | Set default model | `/model grok-4.5` (in TUI) |
 | Set thinking level | `/think high` (in TUI) |
+| Show subscription usage | `/xai-usage` (unofficial, explicit request) |
+| Manage optional usage status | `/xai-usage status on\|off` (off by default) |
 | Manage outbound xAI tools | `/xai-tools` (in TUI) |
 | Recreate extension/catalog state | `/reload` (respects the 15-minute cache TTL) |
 

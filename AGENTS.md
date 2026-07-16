@@ -5,7 +5,7 @@
 ## Project Overview
 pi-xai-oauth is a pi-package that registers the xAI OAuth provider (`xai-auth`) and the authenticated account's OAuth-visible Grok model catalog for the pi coding agent framework, with Grok 4.5 as the curated offline fallback.
 
-Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `extensions/xai/catalog.ts` → provider registration in `extensions/xai-oauth.ts` → browser PKCE or bounded device authorization in `extensions/xai/oauth.ts` / `extensions/xai/device-auth.ts` → pinned browser OIDC/JWKS validation in `extensions/xai/oidc.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`.
+Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `extensions/xai/catalog.ts` → provider registration in `extensions/xai-oauth.ts` → browser PKCE or bounded device authorization in `extensions/xai/oauth.ts` / `extensions/xai/device-auth.ts` → pinned browser OIDC/JWKS validation in `extensions/xai/oidc.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`; explicit revision-pinned subscription usage lives in `extensions/xai/usage.ts`.
 
 ## Key Commands (Exact, Copy-Paste Ready)
 - Install / setup: `node bin/setup.js` or `npm run setup`
@@ -18,7 +18,7 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Verify Pi policy/package metadata: `npm run compatibility:check`
 - Verify exact packed Pi boundaries: `npm run compatibility:boundaries`
 - Evaluate an unadvertised Pi candidate: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-83-image-editing`
+- Git: Always work on feature branches and confirm the active branch before edits.
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
@@ -37,6 +37,8 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Keep both Pi peers aligned to the checked-in bounded range in `compatibility/pi-versions.json`
 - Install/report exact Pi matrix versions from a clean packed package; never reuse the repository lockfile for boundary jobs
 - Keep normal Pi dev dependencies exact at the policy's latest tested release and review candidate releases before widening support
+- Resolve `x-userid` transiently from the pinned authenticated CLI-proxy `/user` endpoint before any billing request
+- Keep `/xai-usage` explicit, and keep its optional status off by default, session-scoped, bounded, and inactive outside xAI models
 
 **MUST NOT:**
 - Hardcode API keys (use OAuth only)
@@ -44,6 +46,8 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Trust arbitrary `*.x.ai` discovery, device, token, verification, or JWKS endpoints
 - Log or reflect authorization codes, opaque device codes, tokens, PKCE verifiers, state, nonce, device/token response bodies, or authenticated request headers
 - Cache raw `/models-v2` responses, credentials, identity fields, endpoint URLs, or known API-key-only models
+- Persist, cache, log, or display `/user` identity, authenticated usage headers, or raw authenticated usage bodies
+- Send `/billing?format=credits` when the transient authenticated `/user` lookup is missing, malformed, cancelled, oversized, redirected, or unsuccessful
 - Trust catalog-provided endpoints or route non-Responses models through the OAuth provider
 - Delete or revoke existing user credentials during validation
 - Modify core pi-coding-agent internals
@@ -71,6 +75,7 @@ pi-xai-oauth/
 │       ├── wire.ts       # Route-aware headers, scrubbing, identity, safe errors
 │       ├── image-edit.ts # Bounded pinned image-edit orchestration
 │       ├── media/        # Reusable strict media/path/compression/storage primitives
+│       ├── usage.ts      # Explicit bounded identity-first subscription usage command/status
 │       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
 ├── compatibility/
 │   ├── pi-versions.json # Peer range plus exact minimum/latest matrix policy
@@ -112,6 +117,8 @@ Start any task by reading:
 - Keep caller/model reserved headers scrubbed before appending the route-specific contract; never reflect raw transport error bodies
 - Reject malformed, hidden, unsupported-backend, secret-bearing, and known API-key-only catalog entries
 - Keep startup catalog network behavior bounded and use pi's credential lock for expired stored-token refresh
+- Keep usage redirects, timeouts, response bytes, JSON complexity, history counts, and numeric ranges bounded; redact every usage error
+- Clear optional usage status on model, provider, account, and session changes, and never refresh it for non-xAI models
 - Keep compatibility policy/registry/pack/resolver verification in plain Node; behavior tests use focused Vitest suites
 - Isolate fetch, timers, environment, temp HOME/filesystem, module state, runtime models, credentials, and active-tool registries per test
 - Keep real callback tests sequential with real timers and guaranteed listener cleanup

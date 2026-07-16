@@ -40,12 +40,15 @@ describe("provider registration", () => {
     expect(harness.tools.size).toBe(20);
     expect(harness.tools.has("xai_edit_image")).toBe(true);
     expect(harness.commands.has("xai-tools")).toBe(true);
+    expect(harness.commands.has("xai-usage")).toBe(true);
     expect([...harness.handlers.keys()]).toEqual(
       expect.arrayContaining([
         "session_start",
         "input",
         "model_select",
         "before_agent_start",
+        "turn_end",
+        "session_shutdown",
       ]),
     );
   });
