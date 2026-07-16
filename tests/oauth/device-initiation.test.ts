@@ -6,6 +6,7 @@ import {
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_DEVICE_URL,
   XAI_OAUTH_SCOPE,
+  XAI_USER_AGENT,
 } from "../../extensions/xai/constants";
 import { devicePayload, jsonResponse } from "../fixtures/device";
 
@@ -42,6 +43,7 @@ describe("device authorization initiation", () => {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": XAI_USER_AGENT,
         "X-Grok-Client-Version": XAI_CLIENT_VERSION,
         "X-Grok-Client-Surface": "ui",
       },

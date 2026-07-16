@@ -82,6 +82,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Bounded last-known-good cache** — avoids routine startup delay and falls back safely when discovery is offline or unavailable
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
 - **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint for every Grok model; the public `api.x.ai` Responses endpoint is reserved for a future explicit API-key path
+- **Revision-pinned wire contract** — route-specific headers, truthful package identity, protected request metadata, and the upstream Grok Build review procedure are documented without impersonating the official client
 
 > **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `xai_web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
 
@@ -94,7 +95,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Browser login (default):** starts a loopback callback listener, opens xAI authorization with PKCE S256, requires matching state for HTTP or pasted full-redirect callbacks, and verifies the fresh ID token against the pinned issuer/JWKS, ES256 policy, audience, expiry, and nonce.
 - **Device code login:** requests a challenge from the pinned first-party device endpoint, shows the verification URL and user code through pi's device UI, and polls the pinned token endpoint only after the server interval. It handles pending/slow-down, denial, expiry, cancellation, malformed responses, and a bounded timeout without displaying the opaque device code or token responses.
 
-Only a completed selected login returns access + refresh credentials for pi to persist. It then performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, filters unsafe/API-key-only entries, and immediately replaces the provider catalog. All OAuth-backed Responses traffic uses xAI's session-token proxy; proxy requests identify this package and include the required auth, client-mode, request, conversation, session, and model metadata.
+Only a completed selected login returns access + refresh credentials for pi to persist. It then performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, filters unsafe/API-key-only entries, and immediately replaces the provider catalog. All OAuth-backed Responses traffic uses xAI's session-token proxy; proxy requests truthfully identify `pi-xai-oauth`, protect internally owned metadata from caller overrides, and include the required auth, client-mode, request, conversation, session, and model fields. Streaming requests explicitly negotiate server-sent events; direct Responses requests remain JSON.
 
 Browser login still supports the **complete redirect URL** paste fallback when localhost is unreachable. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted. Device login is the cleaner choice when the browser cannot reach the pi process.
 
@@ -171,6 +172,8 @@ The lower boundary is **0.80.1**, the first published Pi 0.80 release. It provid
 The exclusive `<0.81.0` upper bound is deliberate. Pi is pre-1.0, so a new minor line may contain breaking API or loader changes; this project does not claim support until that line passes the packed compatibility suite. npm therefore reports a peer-resolution warning or error during installation for older releases such as 0.79.10 and for the untested 0.81 line, rather than allowing a later runtime loader failure.
 
 Older `pi-xai-oauth` 1.2.4 builds supported Pi 0.79.8's then-current Responses guard. Current code uses the Pi 0.80 compat dispatcher after the 1.3.2 export migration and 1.3.3 loader-resolution fix, so that historical statement is not the current minimum.
+
+The xAI transport contract is tracked separately from Pi package compatibility. See [Grok Build wire-protocol compatibility](compatibility/grok-build-wire-protocol.md) for the pinned upstream revision, route/header matrix, identity and ID-ownership policy, safe gate errors, and repeatable review procedure. Encrypted reasoning replay is recorded there but remains deferred to issue #79.
 
 ---
 
@@ -774,11 +777,13 @@ pi-xai-oauth/
 │       ├── payload.ts        # xAI Responses payload normalization
 │       ├── responses.ts      # xAI request + streaming helpers
 │       ├── routing.ts        # Credential-aware Responses and Images endpoints
+│       ├── wire.ts           # Route-aware headers, scrubbing, identity, safe errors
 │       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
 ├── compatibility/
-│   └── pi-versions.json      # Peer range plus exact minimum/latest CI policy
+│   ├── pi-versions.json      # Peer range plus exact minimum/latest CI policy
+│   └── grok-build-wire-protocol.md # Pinned xAI route/header review
 ├── tests/                     # Focused typed Vitest domain suites
 │   ├── fixtures/              # Isolated ExtensionAPI, OAuth, fetch, model, and temp fixtures
 │   ├── catalog/               # Normalization, authenticated fetch, and cache policy

@@ -38,7 +38,11 @@ export const XAI_MODEL_CATALOG_TIMEOUT_MS = 5 * 1000;
 export const XAI_MODEL_CATALOG_MAX_BYTES = 1024 * 1024;
 
 export const XAI_CLIENT_IDENTIFIER = packageMetadata.name;
-export const XAI_CLIENT_VERSION = packageMetadata.version;
+export const XAI_PACKAGE_VERSION = packageMetadata.version;
+export const XAI_PROXY_CLIENT_VERSION = XAI_PACKAGE_VERSION;
+export const XAI_CLIENT_VERSION = XAI_PROXY_CLIENT_VERSION;
+export const XAI_USER_AGENT = `${XAI_CLIENT_IDENTIFIER}/${XAI_PACKAGE_VERSION}`;
+export const XAI_GROK_BUILD_REVIEWED_REVISION = "b189869b7755d2b482969acf6c92da3ecfeffd36";
 export const XAI_PROVIDER_ID = "xai-auth";
 export const DEFAULT_XAI_MODEL = "grok-4.5";
 export const DEFAULT_XAI_IMAGE_MODEL = "grok-imagine-image-quality";

@@ -2,9 +2,16 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { isXaiRuntimeModelEntitled, xaiModelForRequest, xaiProxyRequestHeaders } from "./models";
+import { isXaiRuntimeModelEntitled, xaiModelForRequest } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
+import {
+  safeXaiTransportErrorMessage,
+  scrubXaiReservedHeaders,
+  xaiHttpErrorFromResponse,
+  xaiJsonPostHeaders,
+  xaiProxyRequestHeaders,
+} from "./wire";
 
 type AssistantStreamEvent = Record<string, any>;
 
@@ -17,7 +24,9 @@ function resultFromStreamEvent(event: AssistantStreamEvent): any {
 }
 
 function normalizeXaiErrorText(value: string): string {
-  return value.replace(/^OpenAI API error\b/i, "xAI API error");
+  return /^OpenAI API error\b/i.test(value)
+    ? safeXaiTransportErrorMessage(value, undefined, "responses-proxy")
+    : value;
 }
 
 function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEvent {
@@ -26,16 +35,15 @@ function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEv
   if (typeof error.errorMessage !== "string") return event;
   return {
     ...event,
-    error: { ...error, errorMessage: normalizeXaiErrorText(error.errorMessage) },
+    error: {
+      ...error,
+      errorMessage: safeXaiTransportErrorMessage(
+        error.errorMessage,
+        typeof error.status === "number" ? error.status : undefined,
+        "responses-proxy",
+      ),
+    },
   };
-}
-
-function withoutAuthorizationHeader(
-  headers: Record<string, string | null> | undefined,
-): Record<string, string | null> {
-  return Object.fromEntries(
-    Object.entries(headers || {}).filter(([name]) => name.toLowerCase() !== "authorization"),
-  );
 }
 
 function createForwardingAssistantStream() {
@@ -118,24 +126,17 @@ export async function postXaiJson(
   url: string,
   body: Record<string, any>,
   signal?: AbortSignal,
-  headers: Record<string, string> = {},
+  contractHeaders: Record<string, string> = {},
 ): Promise<any> {
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
-      ...headers,
-    },
+    headers: xaiJsonPostHeaders(authToken, contractHeaders),
     body: JSON.stringify(body),
     signal,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown error");
-    const error = new Error(errorText);
-    (error as any).status = response.status;
-    throw error;
+    throw await xaiHttpErrorFromResponse(response, url);
   }
 
   return response.json();
@@ -203,15 +204,20 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
   const sessionId = options?.sessionId;
   const routingSessionId = sessionId || randomUUID();
-  const requestHeaders = xaiProxyRequestHeaders(model.id, credentialKind, {
-    conversationId: routingSessionId,
-    requestId: randomUUID(),
-    sessionId: routingSessionId,
-  });
+  const requestHeaders = xaiProxyRequestHeaders(
+    model.id,
+    credentialKind,
+    {
+      conversationId: routingSessionId,
+      requestId: randomUUID(),
+      sessionId: routingSessionId,
+    },
+    { streaming: true },
+  );
   const streamModel = {
     ...model,
     baseUrl: route.baseUrl,
-    headers: withoutAuthorizationHeader((model as any).headers) as Record<string, string>,
+    headers: scrubXaiReservedHeaders((model as any).headers) as Record<string, string>,
   };
   // Keep the xAI stream model for routing/payload rewriting, but delegate with
   // the API tag expected by pi's OpenAI Responses transport.
@@ -221,7 +227,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   };
   // The OAuth bearer comes only from options.apiKey. Required proxy metadata
   // is merged last so callers cannot spoof authentication or attribution.
-  const headers = { ...withoutAuthorizationHeader(options?.headers), ...requestHeaders };
+  const headers = { ...scrubXaiReservedHeaders(options?.headers), ...requestHeaders };
 
   const stream = createForwardingAssistantStream();
   void (async () => {

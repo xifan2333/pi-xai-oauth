@@ -16,6 +16,7 @@ import {
   type XaiDeviceAuthDependencies,
 } from "./device-auth";
 import { discoverXaiOidc, validateXaiIdToken, type XaiOidcDiscovery } from "./oidc";
+import { xaiOAuthFormHeaders } from "./wire";
 
 type XaiTokenPayload = {
   access_token?: string;
@@ -343,10 +344,7 @@ async function exchangeXaiToken(
 
   const response = await fetch(tokenEndpoint, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: xaiOAuthFormHeaders(),
     body: new URLSearchParams(body).toString(),
     redirect: "error",
     signal,

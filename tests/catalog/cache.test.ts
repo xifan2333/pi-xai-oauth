@@ -9,6 +9,9 @@ import {
 } from "../../extensions/xai/catalog";
 import {
   XAI_CLI_MODELS_URL,
+  XAI_CLIENT_IDENTIFIER,
+  XAI_PROXY_CLIENT_VERSION,
+  XAI_USER_AGENT,
   XAI_MODEL_CATALOG_CACHE_SCHEMA,
   XAI_MODEL_CATALOG_FRESH_TTL_MS,
   XAI_MODEL_CATALOG_MAX_BYTES,
@@ -111,6 +114,36 @@ describe("catalog cache selection", () => {
     expect(headerValue(request?.init.headers, "Authorization")).toBe(
       `Bearer ${token}`,
     );
+    expect(headerValue(request?.init.headers, "Accept")).toBe(
+      "application/json",
+    );
+    expect(headerValue(request?.init.headers, "User-Agent")).toBe(
+      XAI_USER_AGENT,
+    );
+    expect(headerValue(request?.init.headers, "x-authenticateresponse")).toBe(
+      "authenticate-response",
+    );
+    expect(headerValue(request?.init.headers, "x-grok-client-identifier")).toBe(
+      XAI_CLIENT_IDENTIFIER,
+    );
+    expect(headerValue(request?.init.headers, "x-grok-client-version")).toBe(
+      XAI_PROXY_CLIENT_VERSION,
+    );
+    expect(headerValue(request?.init.headers, "x-grok-client-mode")).toMatch(
+      /^(interactive|headless)$/,
+    );
+    for (const name of [
+      "x-grok-conv-id",
+      "x-grok-req-id",
+      "x-grok-session-id",
+      "x-grok-model-override",
+      "x-grok-agent-id",
+      "x-grok-turn-idx",
+      "x-grok-user-id",
+      "x-grok-deployment-id",
+    ]) {
+      expect(headerValue(request?.init.headers, name)).toBeUndefined();
+    }
     const text = await readFile(path, "utf8");
     expect(text).not.toContain(token);
     expect(JSON.parse(text).models.map((model: any) => model.id)).toEqual([

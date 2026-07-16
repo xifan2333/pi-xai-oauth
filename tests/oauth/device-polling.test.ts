@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { pollXaiDeviceAuthorization } from "../../extensions/xai/device-auth";
 import {
+  XAI_CLIENT_VERSION,
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_DEVICE_GRANT_TYPE,
   XAI_OAUTH_TOKEN_URL,
+  XAI_USER_AGENT,
 } from "../../extensions/xai/constants";
 import {
   deviceFixture,
@@ -41,6 +43,22 @@ describe("device token polling", () => {
     for (const request of requests) {
       expect(request.url).toBe(XAI_OAUTH_TOKEN_URL);
       expect(request.init).toMatchObject({ method: "POST", redirect: "error" });
+      expect(new Headers(request.init.headers).get("Accept")).toBe(
+        "application/json",
+      );
+      expect(new Headers(request.init.headers).get("Content-Type")).toBe(
+        "application/x-www-form-urlencoded",
+      );
+      expect(new Headers(request.init.headers).get("User-Agent")).toBe(
+        XAI_USER_AGENT,
+      );
+      expect(new Headers(request.init.headers).get("X-Grok-Client-Version")).toBe(
+        XAI_CLIENT_VERSION,
+      );
+      expect(new Headers(request.init.headers).get("X-Grok-Client-Surface")).toBe(
+        "ui",
+      );
+      expect(new Headers(request.init.headers).get("X-XAI-Token-Auth")).toBeNull();
       expect(
         Object.fromEntries(new URLSearchParams(String(request.init.body))),
       ).toEqual({

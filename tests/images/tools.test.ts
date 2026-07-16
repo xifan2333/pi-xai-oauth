@@ -9,6 +9,7 @@ import {
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { authContext, TEST_MODEL } from "../fixtures/models";
 import { jsonResponse, requestBody } from "../fixtures/http";
+import { XAI_USER_AGENT } from "../../extensions/xai/constants";
 let h: ReturnType<typeof createExtensionHarness>;
 let requests: any[];
 beforeEach(() => {
@@ -56,6 +57,14 @@ describe("xAI image generation tool", () => {
     expect(new Headers(requests[0].init.headers).get("Authorization")).toBe(
       "Bearer oauth-token",
     );
+    expect(new Headers(requests[0].init.headers).get("Accept")).toBe(
+      "application/json",
+    );
+    expect(new Headers(requests[0].init.headers).get("User-Agent")).toBe(
+      XAI_USER_AGENT,
+    );
+    expect(new Headers(requests[0].init.headers).get("X-XAI-Token-Auth")).toBeNull();
+    expect(new Headers(requests[0].init.headers).get("x-grok-client-mode")).toBeNull();
     expect(requests[0].init.signal).toBe(controller.signal);
     const schema = h.tools.get("xai_generate_image").parameters.properties;
     expect(schema).not.toHaveProperty("size");

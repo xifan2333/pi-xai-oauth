@@ -85,6 +85,8 @@ node scripts/run-compatibility-matrix.js X.Y.Z --candidate
 
 This changes metadata only inside a temporary extracted tarball. For a patch inside the allowed line, update the policy `latest`, both exact Pi dev dependencies, and `package-lock.json` only after the candidate passes. For a new pre-1.0 minor, keep the existing upper bound during evaluation and widen it only after the exact candidate passes the full packed tests/typecheck and review. If the minimum changes, test the immediately previous published release as unsupported and document the support break.
 
+The xAI wire contract has an independent review process in [`compatibility/grok-build-wire-protocol.md`](compatibility/grok-build-wire-protocol.md). Pin an immutable upstream Grok Build commit, trace header/ID ownership from source, preserve the package's truthful identity and pinned routes, update request-shape/privacy tests, and never copy an official client version merely to bypass a gate. Encrypted reasoning implementation belongs to issue #79.
+
 Every dependency/compatibility PR and release must run:
 
 ```bash
