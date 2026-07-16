@@ -1,40 +1,36 @@
-# Implementation Plan: Issue #65 OAuth scopes and proxy metadata
+# Implementation Plan: Issue #67 OAuth state and OIDC validation
 
-**Branch:** feature/issue-65-proxy-headers
+**Branch:** feature/issue-67-oauth-state-oidc
 **Date:** 2026-07-16
 
 ## Goal
-Align fresh xAI OAuth grants and every OAuth Responses request with the pinned official Grok Build scope and CLI-proxy metadata contracts without changing credential-aware endpoint routing.
+Remove the unbound raw authorization-code fallback and make fresh xAI browser OAuth completion fail closed on transaction state plus validated first-party OIDC identity metadata.
 
 ## Implementation
-- [x] Request the frozen eight-scope OAuth contract for fresh browser logins.
-- [x] Preserve legacy refresh behavior without scope renegotiation.
-- [x] Derive the truthful `pi-xai-oauth` client identifier and version from package metadata.
-- [x] Add required auth-response and interactive/headless client-mode headers to every OAuth proxy request.
-- [x] Add request, conversation, session, and model headers for streaming and direct Responses calls.
-- [x] Keep required proxy metadata authoritative over caller-supplied headers.
-- [x] Keep API-key Responses free of OAuth proxy-only metadata.
-- [x] Add exact outgoing-request, OAuth-scope, refresh-body, spoof-protection, and client-mode regression coverage.
-- [x] Document refresh compatibility and the fresh re-login path for new scopes.
+- [x] Remove `trustedManualCode` and reject raw-code-only manual input with a safe migration message.
+- [x] Require the expected state on every HTTP or pasted callback before token exchange.
+- [x] Pin and validate xAI OIDC issuer, authorization endpoint, token endpoint, JWKS endpoint, ES256, and S256 metadata.
+- [x] Validate fresh-login ID tokens before retaining credentials: compact JWS shape, ES256 signature, matching P-256 signing key, issuer, audience/authorized party, expiry, required claims, and nonce.
+- [x] Preserve existing Grok CLI credential reuse and refresh compatibility without retaining unvalidated refresh ID tokens.
+- [x] Stop reflecting authorization/token endpoint response data in errors.
+- [x] Add focused wrong/missing-state, raw-code migration, code-substitution, cancellation/cleanup, discovery/JWKS, ID-token failure, and valid-completion tests.
+- [x] Update README, CHANGELOG, AGENTS.md, and scaffold security guidance.
+
+## Non-goals
+- Do not implement device authorization; full device-code UX, polling, and cancellation remain tracked by issue #66.
+- Do not revoke, delete, migrate, or rewrite existing user credentials.
+- Do not change model routing, scopes, tools, payloads, or xAI API behavior outside issue #67.
 
 ## Validation Contract
-- [x] Focused extension verification passes.
+- [x] LSP diagnostics pass for changed TypeScript files.
+- [x] `npm test` passes.
 - [x] `npm run typecheck` passes.
-- [x] Full `npm test` passes.
-- [x] `git diff --check` passes after documentation/scaffold updates.
-- [x] Parent-owned LSP diagnostics pass on the final TypeScript source (the persistent server cache was cross-checked with fresh exact-source copies).
-- [x] `npm pack --dry-run --json` contains package metadata and changed runtime files while excluding scaffold, subagent, credential, and session artifacts.
-- [x] Parent-owned safe live OAuth smoke returned `OAUTH_PROXY_OK` for Grok 4.5, Grok Build, and Composer; no image generation was invoked.
-- [x] Independent focused review/fix passes completed; client-mode parsing and authorization-spoof findings were fixed and revalidated.
-
-## Scope Decisions
-- Endpoint selection remains credential-aware in `extensions/xai/routing.ts`; model checks do not select transport.
-- Grok Build/Composer payload and local tool compatibility remain model-specific and unchanged.
-- Existing refresh tokens continue using their original grant; only a fresh login can add newly requested scopes.
-- Direct Responses calls mint their own coherent conversation/session UUID instead of treating `previous_response_id` as a session identifier.
-- The OAuth-only provider does not add API-key fallback and never logs or exposes bearer tokens.
+- [x] `git diff --check` passes.
+- [x] `npm pack --dry-run --json` contains intended runtime/docs files and no local artifacts or credentials.
+- [x] Independent security, correctness, and test reviews complete; accepted fixes are applied and revalidated.
+- [x] Live OAuth was not attempted because this tool pane cannot safely hand browser/TUI interaction to the user; existing credentials were not read, removed, rewritten, or revoked.
 
 ## Delivery
-- [x] Committed and pushed `feature/issue-65-proxy-headers`.
-- [x] Opened PR #71 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/71
-- [x] Left the PR unmerged for external review.
+- [x] Committed the reviewed implementation as `3721691`.
+- [x] Pushed `feature/issue-67-oauth-state-oidc`.
+- [x] Opened PR #72 against `main` without merging it: https://github.com/BlockedPath/pi-xai-oauth/pull/72

@@ -5,24 +5,30 @@
 ## Project Overview
 pi-xai-oauth is a pi-package that registers the xAI OAuth provider ("xai-auth") and Grok models (including grok-4.5 and grok-4.3 with reasoning) for the pi coding agent framework.
 
-Core flow: `bin/setup.js` → `pi install` → provider registration in `extensions/xai-oauth.ts` → OAuth PKCE login in `extensions/xai/oauth.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`.
+Core flow: `bin/setup.js` → `pi install` → provider registration in `extensions/xai-oauth.ts` → OAuth PKCE transaction in `extensions/xai/oauth.ts` → pinned OIDC/JWKS validation in `extensions/xai/oidc.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`.
 
 ## Key Commands (Exact, Copy-Paste Ready)
 - Install / setup: `node bin/setup.js` or `npm run setup` (if added)
 - Install as pi extension: `pi install npm:pi-xai-oauth`
 - Run TypeScript: `npx tsc --noEmit` (validate)
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-63-auth-aware-routing`
+- Git: Always work on feature branches. Current branch for this work: `feature/issue-67-oauth-state-oidc`
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
 - Register providers via `pi.registerProvider("xai-auth", { ... })`
-- Use PKCE OAuth flow with local callback server
+- Use PKCE S256 OAuth flow with local callback server
+- Require matching state for every HTTP or pasted authorization callback before token exchange
+- Validate retained fresh-login ID tokens against pinned first-party discovery/JWKS, ES256, issuer, audience, expiry, and nonce
 - Support reasoning levels: none / low / medium / high
-- Reuse `~/.grok/auth.json` when possible
+- Reuse `~/.grok/auth.json` when possible without deleting or revoking it
 - Keep models list in sync with xAI releases
 
 **MUST NOT:**
 - Hardcode API keys (use OAuth only)
+- Accept raw authorization codes or callbacks with missing/mismatched state
+- Trust arbitrary `*.x.ai` discovery, token, or JWKS endpoints
+- Log or reflect authorization codes, tokens, PKCE verifiers, state, nonce, or token response bodies
+- Delete or revoke existing user credentials during validation
 - Modify core pi-coding-agent internals
 - Touch unrelated extensions or skills
 - Skip error handling on OAuth refresh
@@ -37,7 +43,8 @@ pi-xai-oauth/
 │   └── xai/              # Focused implementation modules
 │       ├── constants.ts  # URLs, defaults, OAuth constants
 │       ├── models.ts     # Model catalog + model compatibility helpers
-│       ├── oauth.ts      # OAuth discovery/login/refresh/callback helpers
+│       ├── oauth.ts      # OAuth login/refresh/callback transaction helpers
+│       ├── oidc.ts       # Pinned discovery/JWKS + ID-token validation
 │       ├── auth.ts       # Credential reuse + token resolution helpers
 │       ├── payload.ts    # Responses payload normalization
 │       ├── responses.ts  # xAI request/stream helpers
@@ -66,7 +73,8 @@ Start any task by reading:
 - Prefer async/await for OAuth and API calls
 - Add JSDoc for all exported functions
 - Keep OAuth callback server minimal and secure
-- Never log sensitive tokens
+- Treat raw-code/device-code migration as separate from issue #66's full device authorization implementation
+- Never log OAuth codes, tokens, token response bodies, verifiers, state, or nonce
 
 ## Safety Gates
 - Before any file edit: run `git status` and confirm on correct branch

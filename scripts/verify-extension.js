@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const assert = require("assert");
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs/promises");
 const { createJiti } = require("jiti");
@@ -20,6 +21,21 @@ const { resolveXaiRoute } = jiti(path.join(repoRoot, "extensions", "xai", "routi
 const { XAI_NETWORK_TOOL_NAMES } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "model-scope.ts"));
 const originalFetch = global.fetch;
 const requests = [];
+const oauthTokenResponses = new Map();
+const { privateKey: oidcPrivateKey, publicKey: oidcPublicKey } = crypto.generateKeyPairSync("ec", {
+  namedCurve: "prime256v1",
+});
+const TEST_OIDC_KID = "test-xai-es256-key";
+const TEST_OIDC_PUBLIC_JWK = {
+  ...oidcPublicKey.export({ format: "jwk" }),
+  use: "sig",
+  alg: "ES256",
+  kid: TEST_OIDC_KID,
+};
+let nextDiscoveryDocument;
+let nextJwksDocument;
+let nextRefreshTokenResponse;
+let abortNextOAuthFetch;
 let nextXaiResponse;
 
 const TEST_XAI_MODEL = {
@@ -78,6 +94,53 @@ function jsonResponse(body, init = {}) {
   });
 }
 
+function validOidcDiscovery(overrides = {}) {
+  return {
+    issuer: "https://auth.x.ai",
+    authorization_endpoint: "https://auth.x.ai/oauth2/authorize",
+    token_endpoint: "https://auth.x.ai/oauth2/token",
+    jwks_uri: "https://auth.x.ai/.well-known/jwks.json",
+    id_token_signing_alg_values_supported: ["ES256"],
+    code_challenge_methods_supported: ["S256"],
+    ...overrides,
+  };
+}
+
+function signTestIdToken({ nonce, claims = {}, header = {}, key = oidcPrivateKey } = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const encodedHeader = Buffer.from(JSON.stringify({ alg: "ES256", kid: TEST_OIDC_KID, typ: "JWT", ...header })).toString("base64url");
+  const encodedClaims = Buffer.from(JSON.stringify({
+    iss: "https://auth.x.ai",
+    sub: "test-user",
+    aud: "b1a00492-073a-47ea-816f-4c329264a828",
+    exp: now + 300,
+    iat: now,
+    nonce,
+    ...claims,
+  })).toString("base64url");
+  const signingInput = `${encodedHeader}.${encodedClaims}`;
+  const signature = crypto.sign("sha256", Buffer.from(signingInput, "ascii"), {
+    key,
+    dsaEncoding: "ieee-p1363",
+  });
+  return `${signingInput}.${signature.toString("base64url")}`;
+}
+
+function queueOAuthTokenResponse(code, response) {
+  oauthTokenResponses.set(code, response);
+}
+
+function queueValidOAuthToken(code, authUrl, options = {}) {
+  const idToken = signTestIdToken({
+    nonce: authUrl.searchParams.get("nonce"),
+    claims: options.claims,
+    header: options.header,
+    key: options.key,
+  });
+  queueOAuthTokenResponse(code, { ...options.token, id_token: idToken });
+  return idToken;
+}
+
 function installFetchMock() {
   global.fetch = async (url, init = {}) => {
     const href = String(url);
@@ -85,21 +148,49 @@ function installFetchMock() {
       return originalFetch(url, init);
     }
 
+    if (abortNextOAuthFetch?.url === href) {
+      const pendingAbort = abortNextOAuthFetch;
+      abortNextOAuthFetch = undefined;
+      assert.strictEqual(init.signal, pendingAbort.controller.signal, `${href} should receive the login abort signal`);
+      pendingAbort.controller.abort();
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+
     if (href === "https://auth.x.ai/.well-known/openid-configuration") {
-      return jsonResponse({
-        authorization_endpoint: "https://auth.x.ai/oauth2/authorize",
-        token_endpoint: "https://auth.x.ai/oauth2/token",
-      });
+      assert.equal(init.redirect, "error", "OIDC discovery must not follow redirects away from the pinned URL");
+      const document = nextDiscoveryDocument ?? validOidcDiscovery();
+      nextDiscoveryDocument = undefined;
+      return jsonResponse(document);
+    }
+
+    if (href === "https://auth.x.ai/.well-known/jwks.json") {
+      assert.equal(init.redirect, "error", "JWKS fetch must not follow redirects away from the pinned URL");
+      const document = nextJwksDocument ?? { keys: [TEST_OIDC_PUBLIC_JWK] };
+      nextJwksDocument = undefined;
+      return jsonResponse(document);
     }
 
     if (href === "https://auth.x.ai/oauth2/token") {
+      assert.equal(init.redirect, "error", "token requests must not follow redirects away from the pinned endpoint");
       const params = new URLSearchParams(String(init.body || ""));
-      requests.push({ url: href, method: init.method, body: Object.fromEntries(params) });
+      const body = Object.fromEntries(params);
+      requests.push({ url: href, method: init.method, body });
+      const code = params.get("code");
+      const queued = code ? oauthTokenResponses.get(code) : nextRefreshTokenResponse;
+      if (code) {
+        oauthTokenResponses.delete(code);
+      } else {
+        nextRefreshTokenResponse = undefined;
+      }
+      if (queued?.status) {
+        return jsonResponse(queued.body ?? {}, { status: queued.status });
+      }
       return jsonResponse({
-        access_token: `access-${params.get("code") || "refresh"}`,
+        access_token: `access-${code || "refresh"}`,
         refresh_token: "refresh-token",
         expires_in: 3600,
         token_type: "Bearer",
+        ...(queued || {}),
       });
     }
 
@@ -1216,7 +1307,9 @@ function verifyXaiClientModeResolution() {
 }
 
 async function verifyOAuthCallbackState(provider) {
+  const before = requests.length;
   let authUrl;
+  let expectedIdToken;
   const login = provider.oauth.login({
     onPrompt: async () => "n",
     onProgress: () => {},
@@ -1224,7 +1317,13 @@ async function verifyOAuthCallbackState(provider) {
       authUrl = new URL(auth.url);
       const redirectUri = authUrl.searchParams.get("redirect_uri");
       const expectedState = authUrl.searchParams.get("state");
+      expectedIdToken = queueValidOAuthToken("good-code", authUrl);
       setTimeout(async () => {
+        const missing = new URL(redirectUri);
+        missing.searchParams.set("code", "missing-state-code");
+        const missingResponse = await originalFetch(missing);
+        assert.equal(missingResponse.status, 400, "missing OAuth state should be rejected without resolving login");
+
         const bad = new URL(redirectUri);
         bad.searchParams.set("code", "bad-code");
         bad.searchParams.set("state", "wrong-state");
@@ -1241,16 +1340,23 @@ async function verifyOAuthCallbackState(provider) {
 
   const credentials = await login;
   assert.equal(credentials.access, "access-good-code", "login should ignore the bad callback and exchange the good code");
+  assert.strictEqual(credentials.idToken, expectedIdToken, "valid completion should retain the exact verified ID token");
   assert.ok(authUrl, "login should provide an authorization URL");
   assert.deepStrictEqual(
     authUrl.searchParams.get("scope")?.split(" "),
     XAI_OAUTH_SCOPES,
     "fresh xAI login should request the frozen eight-scope contract in order",
   );
+  const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
+  assert.deepStrictEqual(exchanges.map((entry) => entry.body.code), ["good-code"], "wrong-state code substitution must not reach token exchange");
 }
 
 async function verifyLegacyOAuthRefresh(provider) {
   const before = requests.length;
+  nextRefreshTokenResponse = {
+    refresh_token: undefined,
+    id_token: "unvalidated-refresh-id-token-must-not-be-retained",
+  };
   const credentials = await provider.oauth.refreshToken({
     access: "legacy-access-token",
     refresh: "legacy-refresh-token",
@@ -1270,36 +1376,51 @@ async function verifyLegacyOAuthRefresh(provider) {
   });
   assert.equal(Object.hasOwn(refreshRequest.body, "scope"), false, "refresh must not renegotiate fresh-login scopes");
   assert.equal(credentials.access, "access-refresh");
+  assert.equal(credentials.refresh, "legacy-refresh-token", "refresh should preserve the previous token when rotation omits one");
+  assert.equal(Object.hasOwn(credentials, "idToken"), false, "refresh must not retain an unvalidated ID token");
+
+  await assert.rejects(
+    provider.oauth.refreshToken({
+      access: "legacy-access-token",
+      refresh: "legacy-refresh-token",
+      expires: Date.now() - 1,
+      tokenEndpoint: "https://evil.x.ai/oauth2/token",
+    }),
+    /untrusted token endpoint/,
+  );
 }
 
-async function verifyOAuthManualRawCode(provider) {
+async function verifyOAuthManualRawCodeRejected(provider) {
   const rawCode = "bMmOusw8w9arz1aNEuDCY02jhiOs22O5j-92yEKTzMCbPShyToONJWSc2KITti2CgoM0clOeFMUosJm76y_2MA";
-  const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), 500);
+  const before = requests.length;
+  const progress = [];
   let authUrl;
 
-  try {
-    const credentials = await provider.oauth.login({
+  await assert.rejects(
+    provider.oauth.login({
       onPrompt: async () => "n",
-      onProgress: () => {},
+      onProgress(message) {
+        progress.push(message);
+      },
       onAuth(auth) {
         authUrl = new URL(auth.url);
       },
       onManualCodeInput: async () => rawCode,
-      signal: controller.signal,
-    });
+    }),
+    /Raw xAI authorization codes are no longer accepted.*complete redirect URL.*issue #66/s,
+  );
 
-    assert.equal(credentials.access, `access-${rawCode}`, "raw pasted xAI authorization code should be accepted and exchanged");
-    assert.ok(authUrl, "login should provide an authorization URL before accepting manual code");
-  } finally {
-    clearTimeout(abortTimer);
-  }
+  assert.ok(authUrl, "login should provide an authorization URL before rejecting raw code");
+  assert.ok(progress.some((message) => /complete redirect URL/.test(message)), "raw-code users should receive safe migration guidance");
+  const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
+  assert.equal(exchanges.length, 0, "raw authorization code must never reach token exchange");
 }
 
 async function verifyOAuthManualCallbackUrlState(provider) {
   const controller = new AbortController();
   const abortTimer = setTimeout(() => controller.abort(), 500);
   let callbackUrl;
+  let expectedIdToken;
 
   try {
     const credentials = await provider.oauth.login({
@@ -1310,18 +1431,21 @@ async function verifyOAuthManualCallbackUrlState(provider) {
         callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
         callbackUrl.searchParams.set("code", "manual-url-code");
         callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+        expectedIdToken = queueValidOAuthToken("manual-url-code", authUrl);
       },
       onManualCodeInput: async () => callbackUrl.toString(),
       signal: controller.signal,
     });
 
     assert.equal(credentials.access, "access-manual-url-code", "manual callback URL with matching state should be exchanged");
+    assert.strictEqual(credentials.idToken, expectedIdToken, "manual completion should retain the exact verified ID token");
   } finally {
     clearTimeout(abortTimer);
   }
 }
 
 async function verifyOAuthManualWrongStateIgnored(provider) {
+  const before = requests.length;
   const progress = [];
   const controller = new AbortController();
   const abortTimer = setTimeout(() => controller.abort(), 5_000);
@@ -1337,6 +1461,7 @@ async function verifyOAuthManualWrongStateIgnored(provider) {
         authUrl = new URL(auth.url);
         const redirectUri = authUrl.searchParams.get("redirect_uri");
         const expectedState = authUrl.searchParams.get("state");
+        queueValidOAuthToken("manual-wrong-state-fallback-good", authUrl);
         setTimeout(async () => {
           const good = new URL(redirectUri);
           good.searchParams.set("code", "manual-wrong-state-fallback-good");
@@ -1349,11 +1474,449 @@ async function verifyOAuthManualWrongStateIgnored(provider) {
     });
 
     assert.equal(credentials.access, "access-manual-wrong-state-fallback-good", "manual callback query with wrong state should be ignored");
-    assert.ok(progress.some((message) => /OAuth state did not match/.test(message)), "wrong-state manual callback should log that it was ignored");
+    assert.ok(progress.some((message) => /matching OAuth state/.test(message)), "wrong-state manual callback should report that it was ignored");
     assert.ok(authUrl, "login should provide an authorization URL");
+    const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
+    assert.deepStrictEqual(
+      exchanges.map((entry) => entry.body.code),
+      ["manual-wrong-state-fallback-good"],
+      "wrong-state pasted code must not be substituted into token exchange",
+    );
   } finally {
     clearTimeout(abortTimer);
   }
+}
+
+async function verifyOAuthManualMissingStateIgnored(provider) {
+  const before = requests.length;
+  const progress = [];
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const credentials = await provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress(message) {
+        progress.push(message);
+      },
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        const redirectUri = authUrl.searchParams.get("redirect_uri");
+        queueValidOAuthToken("manual-missing-state-fallback-good", authUrl);
+        setTimeout(async () => {
+          const good = new URL(redirectUri);
+          good.searchParams.set("code", "manual-missing-state-fallback-good");
+          good.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(good);
+        }, 10);
+      },
+      onManualCodeInput: async () => "code=manual-missing-state-code",
+      signal: controller.signal,
+    });
+
+    assert.equal(credentials.access, "access-manual-missing-state-fallback-good");
+    assert.ok(progress.some((message) => /missing the matching OAuth state/.test(message)), "missing-state manual callback should be ignored clearly");
+    const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
+    assert.deepStrictEqual(
+      exchanges.map((entry) => entry.body.code),
+      ["manual-missing-state-fallback-good"],
+      "missing-state pasted code must not reach token exchange",
+    );
+  } finally {
+    clearTimeout(abortTimer);
+  }
+}
+
+async function verifyOAuthDiscoveryPolicy(provider) {
+  const cases = [
+    ["issuer", { issuer: "https://auth.x.ai/" }, /issuer did not match/],
+    ["authorization endpoint", { authorization_endpoint: "https://accounts.x.ai/oauth2/authorize" }, /authorization endpoint did not match/],
+    ["token endpoint", { token_endpoint: "https://evil.x.ai/oauth2/token" }, /token endpoint did not match/],
+    ["JWKS endpoint", { jwks_uri: "https://evil.x.ai/.well-known/jwks.json" }, /JWKS endpoint did not match/],
+    ["ID-token algorithm", { id_token_signing_alg_values_supported: ["RS256"] }, /ES256 ID-token signing/],
+    ["PKCE method", { code_challenge_methods_supported: ["plain"] }, /S256 PKCE/],
+  ];
+
+  for (const [label, override, pattern] of cases) {
+    nextDiscoveryDocument = validOidcDiscovery(override);
+    let openedBrowser = false;
+    await assert.rejects(
+      provider.oauth.login({
+        onPrompt: async () => "n",
+        onProgress: () => {},
+        onAuth() {
+          openedBrowser = true;
+        },
+      }),
+      pattern,
+      `${label} discovery policy should fail closed`,
+    );
+    assert.equal(openedBrowser, false, `${label} discovery failure must happen before browser authorization`);
+  }
+}
+
+async function expectOidcLoginFailure(provider, name, options, expectedError) {
+  const code = `oidc-${name}`;
+  const before = requests.length;
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        if (options.jwks) nextJwksDocument = options.jwks;
+        if (options.tokenResponse) {
+          queueOAuthTokenResponse(code, options.tokenResponse);
+        } else {
+          queueValidOAuthToken(code, authUrl, options.tokenOptions);
+        }
+        setTimeout(async () => {
+          const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+          callbackUrl.searchParams.set("code", code);
+          callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callbackUrl);
+        }, 0);
+      },
+    }),
+    expectedError,
+    `${name} ID token should be rejected`,
+  );
+  const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
+  assert.deepStrictEqual(exchanges.map((entry) => entry.body.code), [code], `${name} should fail only after its bound code exchange`);
+}
+
+async function verifyOAuthOidcValidation(provider) {
+  const now = Math.floor(Date.now() / 1000);
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-issuer",
+    { tokenOptions: { claims: { iss: "https://accounts.x.ai" } } },
+    /issuer did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-audience",
+    { tokenOptions: { claims: { aud: "another-client" } } },
+    /audience did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-authorized-party",
+    { tokenOptions: { claims: { azp: "another-client" } } },
+    /authorized party did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "multi-audience-missing-authorized-party",
+    {
+      tokenOptions: {
+        claims: {
+          aud: ["b1a00492-073a-47ea-816f-4c329264a828", "another-valid-audience"],
+          azp: undefined,
+        },
+      },
+    },
+    /authorized party did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-nonce",
+    { tokenOptions: { claims: { nonce: "wrong-nonce" } } },
+    /nonce did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "expired",
+    { tokenOptions: { claims: { exp: now - 120 } } },
+    /has expired/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "missing-subject",
+    { tokenOptions: { claims: { sub: undefined } } },
+    /subject was invalid/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "missing-expiry",
+    { tokenOptions: { claims: { exp: undefined } } },
+    /expiry was invalid/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "future-issued-at",
+    { tokenOptions: { claims: { iat: now + 120 } } },
+    /issued in the future/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "missing-nonce",
+    { tokenOptions: { claims: { nonce: undefined } } },
+    /nonce did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-algorithm",
+    { tokenOptions: { header: { alg: "RS256" } } },
+    /did not use ES256/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "unknown-key",
+    { tokenOptions: { header: { kid: "unknown-key" } } },
+    /unknown signing key/,
+  );
+
+  const { privateKey: wrongPrivateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  await expectOidcLoginFailure(
+    provider,
+    "bad-signature",
+    { tokenOptions: { key: wrongPrivateKey } },
+    /signature was invalid/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-jwks-use",
+    { jwks: { keys: [{ ...TEST_OIDC_PUBLIC_JWK, use: "enc" }] } },
+    /public-key policy/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "wrong-jwks-curve",
+    { jwks: { keys: [{ ...TEST_OIDC_PUBLIC_JWK, crv: "P-384" }] } },
+    /public-key policy/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "duplicate-signing-key",
+    { jwks: { keys: [TEST_OIDC_PUBLIC_JWK, { ...TEST_OIDC_PUBLIC_JWK }] } },
+    /ambiguous signing key/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "malformed-id-token",
+    { tokenResponse: { id_token: "not-a-compact-jwt" } },
+    /compact signed JWT/,
+  );
+  await expectOidcLoginFailure(
+    provider,
+    "missing-id-token",
+    { tokenResponse: {} },
+    /did not include an ID token/,
+  );
+}
+
+async function verifyOAuthMultiAudience(provider) {
+  let expectedIdToken;
+  const credentials = await provider.oauth.login({
+    onPrompt: async () => "n",
+    onProgress: () => {},
+    onAuth(auth) {
+      const authUrl = new URL(auth.url);
+      expectedIdToken = queueValidOAuthToken("multi-audience", authUrl, {
+        claims: {
+          aud: ["b1a00492-073a-47ea-816f-4c329264a828", "another-valid-audience"],
+          azp: "b1a00492-073a-47ea-816f-4c329264a828",
+        },
+      });
+      setTimeout(async () => {
+        const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+        callbackUrl.searchParams.set("code", "multi-audience");
+        callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+        await originalFetch(callbackUrl);
+      }, 0);
+    },
+  });
+  assert.strictEqual(credentials.idToken, expectedIdToken, "multi-audience token should require and accept this client as azp");
+}
+
+async function verifyOAuthOptionalJwkHints(provider) {
+  const { use: _use, alg: _alg, ...keyWithoutOptionalHints } = TEST_OIDC_PUBLIC_JWK;
+  let expectedIdToken;
+  const credentials = await provider.oauth.login({
+    onPrompt: async () => "n",
+    onProgress: () => {},
+    onAuth(auth) {
+      const authUrl = new URL(auth.url);
+      expectedIdToken = queueValidOAuthToken("optional-jwk-hints", authUrl);
+      nextJwksDocument = { keys: [keyWithoutOptionalHints] };
+      setTimeout(async () => {
+        const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+        callbackUrl.searchParams.set("code", "optional-jwk-hints");
+        callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+        await originalFetch(callbackUrl);
+      }, 0);
+    },
+  });
+  assert.strictEqual(credentials.idToken, expectedIdToken, "optional JWK alg/use hints may be omitted when key and signature are valid");
+}
+
+async function verifyOAuthAuthorizationErrorRedaction(provider) {
+  const sentinel = "AUTHORIZATION_ERROR_MUST_NOT_LEAK_\u001b[31m";
+  const before = requests.length;
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        setTimeout(async () => {
+          const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+          callbackUrl.searchParams.set("error", sentinel);
+          callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callbackUrl);
+        }, 0);
+      },
+    }),
+    (error) => {
+      assert.equal(error.message, "xAI authorization failed");
+      assert.doesNotMatch(error.message, /AUTHORIZATION_ERROR_MUST_NOT_LEAK/);
+      return true;
+    },
+  );
+  assert.equal(
+    requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code").length,
+    0,
+    "authorization errors must not trigger token exchange",
+  );
+}
+
+async function verifyOAuthTokenErrorRedaction(provider) {
+  const sentinel = "TOKEN_RESPONSE_BODY_MUST_NOT_LEAK";
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        queueOAuthTokenResponse("redacted-error", {
+          status: 400,
+          body: { error: "invalid_grant", error_description: sentinel },
+        });
+        setTimeout(async () => {
+          const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+          callbackUrl.searchParams.set("code", "redacted-error");
+          callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callbackUrl);
+        }, 0);
+      },
+    }),
+    (error) => {
+      assert.match(error.message, /status 400/);
+      assert.doesNotMatch(error.message, new RegExp(sentinel));
+      return true;
+    },
+  );
+}
+
+async function verifyOAuthCancellationAndCleanup(provider) {
+  const preAborted = new AbortController();
+  preAborted.abort();
+  let preAbortedBrowserOpened = false;
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth() {
+        preAbortedBrowserOpened = true;
+      },
+      signal: preAborted.signal,
+    }),
+    /cancelled/,
+  );
+  assert.equal(preAbortedBrowserOpened, false, "pre-aborted login must stop before discovery/browser authorization");
+
+  const discoveryAbort = new AbortController();
+  abortNextOAuthFetch = {
+    url: "https://auth.x.ai/.well-known/openid-configuration",
+    controller: discoveryAbort,
+  };
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth() {
+        throw new Error("browser should not open after discovery cancellation");
+      },
+      signal: discoveryAbort.signal,
+    }),
+    /cancelled/,
+  );
+
+  const callbackWaitAbort = new AbortController();
+  let waitingRedirectUri;
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        waitingRedirectUri = new URL(auth.url).searchParams.get("redirect_uri");
+        queueMicrotask(() => callbackWaitAbort.abort());
+      },
+      signal: callbackWaitAbort.signal,
+    }),
+    /cancelled/,
+  );
+  assert.ok(waitingRedirectUri, "callback-wait cancellation test should capture the listener URL");
+  await assert.rejects(originalFetch(waitingRedirectUri), "callback listener must close when login is cancelled while waiting");
+
+  const tokenAbort = new AbortController();
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        queueValidOAuthToken("cancel-token", authUrl);
+        abortNextOAuthFetch = { url: "https://auth.x.ai/oauth2/token", controller: tokenAbort };
+        setTimeout(async () => {
+          const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+          callbackUrl.searchParams.set("code", "cancel-token");
+          callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callbackUrl);
+        }, 0);
+      },
+      signal: tokenAbort.signal,
+    }),
+    /cancelled/,
+  );
+  oauthTokenResponses.delete("cancel-token");
+
+  const jwksAbort = new AbortController();
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        const authUrl = new URL(auth.url);
+        queueValidOAuthToken("cancel-jwks", authUrl);
+        abortNextOAuthFetch = { url: "https://auth.x.ai/.well-known/jwks.json", controller: jwksAbort };
+        setTimeout(async () => {
+          const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+          callbackUrl.searchParams.set("code", "cancel-jwks");
+          callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callbackUrl);
+        }, 0);
+      },
+      signal: jwksAbort.signal,
+    }),
+    /cancelled/,
+  );
+
+  let leakedRedirectUri;
+  await assert.rejects(
+    provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        leakedRedirectUri = new URL(auth.url).searchParams.get("redirect_uri");
+        throw new Error("simulated pi UI callback failure");
+      },
+    }),
+    /simulated pi UI callback failure/,
+  );
+  assert.ok(leakedRedirectUri, "cleanup test should capture the callback listener URL");
+  await assert.rejects(originalFetch(leakedRedirectUri), "callback listener must close when a pi UI callback throws");
 }
 
 async function main() {
@@ -1408,9 +1971,17 @@ async function main() {
 
     await verifyOAuthCallbackState(provider);
     await verifyLegacyOAuthRefresh(provider);
-    await verifyOAuthManualRawCode(provider);
+    await verifyOAuthManualRawCodeRejected(provider);
     await verifyOAuthManualCallbackUrlState(provider);
     await verifyOAuthManualWrongStateIgnored(provider);
+    await verifyOAuthManualMissingStateIgnored(provider);
+    await verifyOAuthDiscoveryPolicy(provider);
+    await verifyOAuthOidcValidation(provider);
+    await verifyOAuthMultiAudience(provider);
+    await verifyOAuthOptionalJwkHints(provider);
+    await verifyOAuthAuthorizationErrorRedaction(provider);
+    await verifyOAuthTokenErrorRedaction(provider);
+    await verifyOAuthCancellationAndCleanup(provider);
 
     await firstLoad.commands.get("xai-tools").handler(
       "enable xai_generate_text",

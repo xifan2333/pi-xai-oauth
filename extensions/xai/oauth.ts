@@ -3,18 +3,14 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import { createServer, type Server } from "http";
 import {
   XAI_OAUTH_CLIENT_ID,
-  XAI_OAUTH_DISCOVERY_URL,
   XAI_OAUTH_REDIRECT_HOST,
   XAI_OAUTH_REDIRECT_PATH,
   XAI_OAUTH_REDIRECT_PORT,
   XAI_OAUTH_REFRESH_SKEW_MS,
   XAI_OAUTH_SCOPE,
+  XAI_OAUTH_TOKEN_URL,
 } from "./constants";
-
-type XaiDiscovery = {
-  authorization_endpoint: string;
-  token_endpoint: string;
-};
+import { discoverXaiOidc, validateXaiIdToken, type XaiOidcDiscovery } from "./oidc";
 
 type XaiTokenPayload = {
   access_token?: string;
@@ -28,9 +24,15 @@ type CallbackResult = {
   code?: string;
   state?: string;
   error?: string;
-  error_description?: string;
-  trustedManualCode?: boolean;
 };
+
+type ManualCallbackInput =
+  | { kind: "callback"; result: CallbackResult }
+  | { kind: "raw-code" }
+  | { kind: "invalid" };
+
+const RAW_CODE_MIGRATION_MESSAGE =
+  "Raw xAI authorization codes are no longer accepted because they do not include the OAuth state that binds the code to this login. Run /login xai-auth again, then paste the complete redirect URL containing both code and state. Device-code login for remote/headless environments is tracked separately in issue #66.";
 
 type XaiOAuthOptions = {
   getExistingCredentials: () => OAuthCredentials | null;
@@ -40,38 +42,26 @@ function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+function assertLoginNotCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+}
+
+async function runAbortableLoginStep<T>(signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> {
+  assertLoginNotCancelled(signal);
+  try {
+    const result = await operation();
+    assertLoginNotCancelled(signal);
+    return result;
+  } catch (error) {
+    if (signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+    throw error;
+  }
+}
+
 function pkcePair(): { verifier: string; challenge: string } {
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   return { verifier, challenge };
-}
-
-function validateXaiEndpoint(url: string): string {
-  const parsed = new URL(url);
-  const host = parsed.hostname.toLowerCase();
-  if (parsed.protocol !== "https:" || (host !== "x.ai" && !host.endsWith(".x.ai"))) {
-    throw new Error(`xAI OAuth discovery returned an unexpected endpoint: ${url}`);
-  }
-  return url;
-}
-
-async function xaiDiscovery(): Promise<XaiDiscovery> {
-  const response = await fetch(XAI_OAUTH_DISCOVERY_URL, {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(`xAI OAuth discovery failed: ${response.status} ${await response.text()}`);
-  }
-
-  const data = (await response.json()) as Partial<XaiDiscovery>;
-  if (!data.authorization_endpoint || !data.token_endpoint) {
-    throw new Error("xAI OAuth discovery response did not include authorization/token endpoints");
-  }
-
-  return {
-    authorization_endpoint: validateXaiEndpoint(data.authorization_endpoint),
-    token_endpoint: validateXaiEndpoint(data.token_endpoint),
-  };
 }
 
 function callbackCorsOrigin(origin: string | undefined): string | undefined {
@@ -79,28 +69,41 @@ function callbackCorsOrigin(origin: string | undefined): string | undefined {
 }
 
 /** Refresh xAI OAuth credentials using their refresh token. */
-export async function refreshXaiCredentials(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+export async function refreshXaiCredentials(
+  credentials: OAuthCredentials,
+  signal?: AbortSignal,
+): Promise<OAuthCredentials> {
   if (!credentials.refresh) {
     throw new Error("xAI credentials are expired and do not include a refresh token");
   }
 
   const tokenEndpoint =
     typeof credentials.tokenEndpoint === "string" && credentials.tokenEndpoint
-      ? validateXaiEndpoint(credentials.tokenEndpoint)
-      : (await xaiDiscovery()).token_endpoint;
-  const data = await exchangeXaiToken(tokenEndpoint, {
-    grant_type: "refresh_token",
-    refresh_token: credentials.refresh,
-    client_id: XAI_OAUTH_CLIENT_ID,
-  });
+      ? credentials.tokenEndpoint
+      : (await discoverXaiOidc(signal)).token_endpoint;
+  if (tokenEndpoint !== XAI_OAUTH_TOKEN_URL) {
+    throw new Error("xAI credentials reference an untrusted token endpoint; run /login xai-auth again");
+  }
+  const data = await exchangeXaiToken(
+    tokenEndpoint,
+    {
+      grant_type: "refresh_token",
+      refresh_token: credentials.refresh,
+      client_id: XAI_OAUTH_CLIENT_ID,
+    },
+    signal,
+  );
 
   return credentialsFromTokenPayload(data, tokenEndpoint, credentials.refresh);
 }
 
 /** Return credentials as-is when fresh, otherwise refresh them. */
-export async function ensureFreshXaiCredentials(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+export async function ensureFreshXaiCredentials(
+  credentials: OAuthCredentials,
+  signal?: AbortSignal,
+): Promise<OAuthCredentials> {
   if (!credentials.expires || credentials.expires > Date.now()) return credentials;
-  return refreshXaiCredentials(credentials);
+  return refreshXaiCredentials(credentials, signal);
 }
 
 async function startCallbackServer(expectedState: string): Promise<{
@@ -144,7 +147,6 @@ async function startCallbackServer(expectedState: string): Promise<{
         code: url.searchParams.get("code") || undefined,
         state: url.searchParams.get("state") || undefined,
         error: url.searchParams.get("error") || undefined,
-        error_description: url.searchParams.get("error_description") || undefined,
       };
       if (result.state !== expectedState) {
         writeCors();
@@ -204,6 +206,10 @@ async function startCallbackServer(expectedState: string): Promise<{
       let timer: NodeJS.Timeout | undefined;
       let abortHandler: (() => void) | undefined;
       const timeout = new Promise<CallbackResult>((_, reject) => {
+        if (signal?.aborted) {
+          reject(new Error("xAI OAuth login was cancelled"));
+          return;
+        }
         timer = setTimeout(() => reject(new Error("Timed out waiting for xAI OAuth callback")), 180_000);
         abortHandler = () => {
           if (timer) clearTimeout(timer);
@@ -223,7 +229,13 @@ async function startCallbackServer(expectedState: string): Promise<{
   };
 }
 
-function buildAuthorizeUrl(discovery: XaiDiscovery, redirectUri: string, challenge: string, state: string, nonce: string): string {
+function buildAuthorizeUrl(
+  discovery: XaiOidcDiscovery,
+  redirectUri: string,
+  challenge: string,
+  state: string,
+  nonce: string,
+): string {
   // Match the official Grok CLI authorize URL. Extra query params such as
   // `plan=generic` can change xAI's routing/branding and send users toward
   // the API-console SSO surface instead of the Grok OAuth consent surface.
@@ -240,30 +252,37 @@ function buildAuthorizeUrl(discovery: XaiDiscovery, redirectUri: string, challen
   return `${discovery.authorization_endpoint}?${params.toString()}`;
 }
 
-function parseCallbackInput(input: string): CallbackResult | undefined {
+function parseCallbackInput(input: string): ManualCallbackInput {
   const value = input.trim();
-  if (!value) return undefined;
-
-  // xAI may show only the authorization code when localhost redirect fails,
-  // especially when pi runs in WSL and the browser runs on Windows.
-  if (/^[A-Za-z0-9_-]{20,}$/.test(value)) return { code: value, trustedManualCode: true };
+  if (!value) return { kind: "invalid" };
+  if (/^[A-Za-z0-9_-]{20,}$/.test(value)) return { kind: "raw-code" };
 
   try {
     const url = value.startsWith("http")
       ? new URL(value)
       : new URL(`http://${XAI_OAUTH_REDIRECT_HOST}${XAI_OAUTH_REDIRECT_PATH}?${value.replace(/^\?/, "")}`);
     return {
-      code: url.searchParams.get("code") || undefined,
-      state: url.searchParams.get("state") || undefined,
-      error: url.searchParams.get("error") || undefined,
-      error_description: url.searchParams.get("error_description") || undefined,
+      kind: "callback",
+      result: {
+        code: url.searchParams.get("code") || undefined,
+        state: url.searchParams.get("state") || undefined,
+        error: url.searchParams.get("error") || undefined,
+      },
     };
   } catch {
-    return undefined;
+    return { kind: "invalid" };
   }
 }
 
-async function exchangeXaiToken(tokenEndpoint: string, body: Record<string, string>): Promise<XaiTokenPayload> {
+async function exchangeXaiToken(
+  tokenEndpoint: string,
+  body: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<XaiTokenPayload> {
+  if (tokenEndpoint !== XAI_OAUTH_TOKEN_URL) {
+    throw new Error("Refusing to send xAI credentials to an untrusted token endpoint");
+  }
+
   const response = await fetch(tokenEndpoint, {
     method: "POST",
     headers: {
@@ -271,30 +290,49 @@ async function exchangeXaiToken(tokenEndpoint: string, body: Record<string, stri
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(body).toString(),
+    redirect: "error",
+    signal,
   });
   if (!response.ok) {
-    throw new Error(`xAI token request failed: ${response.status} ${await response.text()}`);
+    throw new Error(`xAI token request failed with status ${response.status}`);
   }
-  return (await response.json()) as XaiTokenPayload;
+  try {
+    const payload = (await response.json()) as unknown;
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      throw new Error("invalid payload");
+    }
+    return payload as XaiTokenPayload;
+  } catch {
+    throw new Error("xAI token request returned invalid JSON");
+  }
 }
 
-function credentialsFromTokenPayload(data: XaiTokenPayload, tokenEndpoint: string, fallbackRefresh = ""): OAuthCredentials {
-  if (!data.access_token) {
+function credentialsFromTokenPayload(
+  data: XaiTokenPayload,
+  tokenEndpoint: string,
+  fallbackRefresh = "",
+  validatedIdToken?: string,
+): OAuthCredentials {
+  if (typeof data.access_token !== "string" || !data.access_token) {
     throw new Error("xAI token response did not include an access token");
   }
 
-  const refresh = data.refresh_token || fallbackRefresh;
+  const refresh = typeof data.refresh_token === "string" && data.refresh_token ? data.refresh_token : fallbackRefresh;
   if (!refresh) {
     throw new Error("xAI token response did not include a refresh token");
   }
+  const expiresIn =
+    typeof data.expires_in === "number" && Number.isFinite(data.expires_in) && data.expires_in > 0
+      ? data.expires_in
+      : 3600;
 
   return {
     refresh,
     access: data.access_token,
-    expires: Date.now() + (data.expires_in || 3600) * 1000 - XAI_OAUTH_REFRESH_SKEW_MS,
+    expires: Date.now() + expiresIn * 1000 - XAI_OAUTH_REFRESH_SKEW_MS,
     tokenEndpoint,
-    idToken: data.id_token || "",
-    tokenType: data.token_type || "Bearer",
+    ...(validatedIdToken ? { idToken: validatedIdToken } : {}),
+    tokenType: typeof data.token_type === "string" && data.token_type ? data.token_type : "Bearer",
   };
 }
 
@@ -305,6 +343,7 @@ export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
     name: "xAI (Grok)",
 
     async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+      assertLoginNotCancelled(callbacks.signal);
       const existingCredentials = getExistingCredentials();
       if (existingCredentials) {
         const useExisting = await callbacks.onPrompt({
@@ -312,7 +351,9 @@ export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
         });
         if (useExisting.toLowerCase().startsWith("y")) {
           try {
-            return await ensureFreshXaiCredentials(existingCredentials);
+            return await runAbortableLoginStep(callbacks.signal, () =>
+              ensureFreshXaiCredentials(existingCredentials, callbacks.signal),
+            );
           } catch (error) {
             callbacks.onProgress?.(
               `Existing Grok CLI credentials could not be refreshed (${messageFromError(error)}). Starting a fresh xAI OAuth login...`,
@@ -322,66 +363,100 @@ export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
       }
 
       callbacks.onProgress?.("Starting xAI SuperGrok OAuth login...");
-      const discovery = await xaiDiscovery();
+      const discovery = await runAbortableLoginStep(callbacks.signal, () => discoverXaiOidc(callbacks.signal));
       const { verifier, challenge } = pkcePair();
       const state = randomUUID().replace(/-/g, "");
       const nonce = randomUUID().replace(/-/g, "");
       const callbackServer = await startCallbackServer(state);
-      const authorizeUrl = buildAuthorizeUrl(discovery, callbackServer.redirectUri, challenge, state, nonce);
+      let callback: CallbackResult;
+      try {
+        const authorizeUrl = buildAuthorizeUrl(discovery, callbackServer.redirectUri, challenge, state, nonce);
 
-      // Trigger automatic browser open via pi's onAuth handler.
-      // pi's login dialog runs `open <url>` on macOS / `xdg-open` on Linux,
-      // AND when usesCallbackServer:true it also shows a built-in manual input
-      // field that resolves via onManualCodeInput. We race both paths below.
-      callbacks.onAuth?.({
-        url: authorizeUrl,
-        instructions:
-          "If the automatic open uses the wrong browser/profile, copy the URL and paste it into the field below (or open it manually in your preferred browser).",
-      });
-
-      callbacks.onProgress?.(`Waiting for xAI OAuth callback on ${callbackServer.redirectUri}...`);
-
-      // Race the local callback server against pi's built-in manual input
-      // (shown automatically when usesCallbackServer: true). If the HTTP
-      // callback fires first (browser reaches localhost), the manual input
-      // is simply a no-op since resolveCallback already ran.
-      const manualCodePromise = callbacks.onManualCodeInput?.();
-      if (manualCodePromise) {
-        manualCodePromise.then((input: string) => {
-          if (input) {
-            const manual = parseCallbackInput(input);
-            if (manual?.trustedManualCode || manual?.state === state || manual?.error) {
-              callbackServer.resolveCallback(manual);
-            } else if (manual) {
-              callbacks.onProgress?.("Ignored pasted xAI callback because the OAuth state did not match. Try the login again if needed.");
-            }
-          }
-        }).catch(() => {
-          // Cancellation is handled by callbacks.signal / the login dialog.
+        // Trigger automatic browser open via pi's onAuth handler.
+        // pi's login dialog runs `open <url>` on macOS / `xdg-open` on Linux,
+        // AND when usesCallbackServer:true it also shows a built-in manual input
+        // field that resolves via onManualCodeInput. We race both paths below.
+        callbacks.onAuth?.({
+          url: authorizeUrl,
+          instructions:
+            "If the automatic open uses the wrong browser/profile, copy the authorization URL and open it manually. If the redirect cannot reach pi, paste the complete redirect URL (including code and state) below; raw codes are not accepted.",
         });
-      }
 
-      const callback = await callbackServer.waitForCallback(callbacks.signal);
-      if (callback.error) {
-        throw new Error(`xAI authorization failed: ${callback.error_description || callback.error}`);
+        callbacks.onProgress?.(`Waiting for xAI OAuth callback on ${callbackServer.redirectUri}...`);
+
+        // Race the local callback server against pi's built-in manual input
+        // (shown automatically when usesCallbackServer: true). If the HTTP
+        // callback fires first (browser reaches localhost), the manual input
+        // is simply a no-op since resolveCallback already ran.
+        const manualCodePromise = callbacks.onManualCodeInput?.();
+        if (manualCodePromise) {
+          manualCodePromise
+            .then((input: string) => {
+              if (!input) return;
+              const manual = parseCallbackInput(input);
+              if (manual.kind === "raw-code") {
+                callbacks.onProgress?.(RAW_CODE_MIGRATION_MESSAGE);
+                callbackServer.resolveCallback({ error: "raw_code_not_supported", state });
+                return;
+              }
+              if (manual.kind === "invalid") {
+                callbacks.onProgress?.("Ignored pasted xAI OAuth input because it was not a complete redirect URL.");
+                return;
+              }
+              if (manual.result.state !== state) {
+                callbacks.onProgress?.(
+                  "Ignored pasted xAI callback because it was missing the matching OAuth state. Paste the complete redirect URL from this login attempt.",
+                );
+                return;
+              }
+              callbackServer.resolveCallback(manual.result);
+            })
+            .catch(() => {
+              // Cancellation is handled by callbacks.signal / the login dialog.
+            });
+        }
+
+        callback = await callbackServer.waitForCallback(callbacks.signal);
+      } finally {
+        callbackServer.close();
       }
-      if (!callback.trustedManualCode && callback.state !== state) {
+      if (callback.error === "raw_code_not_supported") {
+        throw new Error(RAW_CODE_MIGRATION_MESSAGE);
+      }
+      if (callback.state !== state) {
         throw new Error("xAI authorization failed: state mismatch");
+      }
+      if (callback.error) {
+        throw new Error("xAI authorization failed");
       }
       if (!callback.code) {
         throw new Error("xAI authorization failed: no authorization code returned");
       }
 
+      assertLoginNotCancelled(callbacks.signal);
       callbacks.onProgress?.("Exchanging xAI authorization code...");
-      const data = await exchangeXaiToken(discovery.token_endpoint, {
-        grant_type: "authorization_code",
-        code: callback.code,
-        redirect_uri: callbackServer.redirectUri,
-        client_id: XAI_OAUTH_CLIENT_ID,
-        code_verifier: verifier,
-      });
+      const data = await runAbortableLoginStep(callbacks.signal, () =>
+        exchangeXaiToken(
+          discovery.token_endpoint,
+          {
+            grant_type: "authorization_code",
+            code: callback.code!,
+            redirect_uri: callbackServer.redirectUri,
+            client_id: XAI_OAUTH_CLIENT_ID,
+            code_verifier: verifier,
+          },
+          callbacks.signal,
+        ),
+      );
+      if (typeof data.id_token !== "string" || !data.id_token) {
+        throw new Error("xAI token response did not include an ID token");
+      }
+      await runAbortableLoginStep(callbacks.signal, () =>
+        validateXaiIdToken(data.id_token!, discovery, nonce, callbacks.signal),
+      );
+      assertLoginNotCancelled(callbacks.signal);
 
-      return credentialsFromTokenPayload(data, discovery.token_endpoint);
+      return credentialsFromTokenPayload(data, discovery.token_endpoint, "", data.id_token);
     },
 
     async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
