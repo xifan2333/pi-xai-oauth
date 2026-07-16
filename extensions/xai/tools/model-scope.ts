@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { XAI_PROVIDER_ID } from "../constants";
-import { isGrokCliProxyModel } from "../models";
+import { isGrokCliCompatibilityModel } from "../models";
 
 /** Network-backed xAI tools that make an additional authenticated API request. */
 export const XAI_NETWORK_TOOL_NAMES = [
@@ -72,7 +72,7 @@ export function setXaiNetworkToolActive(
       error: "Select an xAI/Grok model before enabling a network-backed xAI tool.",
     };
   }
-  if (active && toolName === "WebSearch" && !isGrokCliProxyModel(xaiModel!.id)) {
+  if (active && toolName === "WebSearch" && !isGrokCliCompatibilityModel(xaiModel!.id)) {
     return {
       ok: false,
       active: false,
@@ -93,7 +93,7 @@ export function setXaiNetworkToolActive(
   // remove only the named tool — never replace the whole authorization set with
   // an empty set or delete every remaining opt-in.
   const nextSelection = new Set(previousSelection);
-  if (xaiModel && !isGrokCliProxyModel(xaiModel.id)) nextSelection.delete("WebSearch");
+  if (xaiModel && !isGrokCliCompatibilityModel(xaiModel.id)) nextSelection.delete("WebSearch");
   if (active) nextSelection.add(toolName);
   else nextSelection.delete(toolName);
 
@@ -145,7 +145,7 @@ export function syncXaiNetworkToolsForModel(api: any, model?: Model<Api>, option
     enabledNetworkTools = new Set();
   } else {
     enabledNetworkTools = new Set(explicitlyEnabledXaiNetworkTools.get(scope) ?? []);
-    if (!isGrokCliProxyModel(xaiModel.id)) enabledNetworkTools.delete("WebSearch");
+    if (!isGrokCliCompatibilityModel(xaiModel.id)) enabledNetworkTools.delete("WebSearch");
     explicitlyEnabledXaiNetworkTools.set(scope, enabledNetworkTools);
   }
 

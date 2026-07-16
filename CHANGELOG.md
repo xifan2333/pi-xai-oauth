@@ -6,6 +6,16 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+### Changed
+
+- Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
+- Kept Grok Build and Composer payload, header, and tool compatibility separate from transport routing.
+
+### Fixed
+
+- Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
+- Preserved the official direct `api.x.ai` Images endpoint for OAuth-backed image generation while keeping a future explicit API-key Responses route on the public API.
+
 ## 1.3.5 - 2026-07-15
 
 ### Changed

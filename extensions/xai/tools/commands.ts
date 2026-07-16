@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { isGrokCliProxyModel } from "../models";
+import { isGrokCliCompatibilityModel } from "../models";
 import {
   activeXaiModel,
   isXaiNetworkToolActive,
@@ -40,13 +40,13 @@ function commandToolName(value: string | undefined): XaiNetworkToolName | undefi
 
 function eligibleToolOptions(model: Model<Api>): readonly NetworkToolOption[] {
   return NETWORK_TOOL_OPTIONS.filter(
-    ({ name }) => name !== "WebSearch" || isGrokCliProxyModel(model.id),
+    ({ name }) => name !== "WebSearch" || isGrokCliCompatibilityModel(model.id),
   );
 }
 
 function activeToolStatus(pi: ExtensionAPI, model: Model<Api> | undefined): string {
   return NETWORK_TOOL_OPTIONS.map(({ name }) => {
-    const unavailable = name === "WebSearch" && (!model || !isGrokCliProxyModel(model.id));
+    const unavailable = name === "WebSearch" && (!model || !isGrokCliCompatibilityModel(model.id));
     if (unavailable) return `${name}=unavailable`;
     return `${name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`;
   }).join(", ");
