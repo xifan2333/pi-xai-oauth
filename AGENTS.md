@@ -129,3 +129,12 @@ When complex work is needed:
 4. Use parallel subagents for heavy lifting
 
 This file should be updated whenever architecture, commands, or rules change.
+
+## Cursor Cloud specific instructions
+
+This repo is a **pi extension package (a library/CLI), not a standalone server**. There is nothing to "boot" — dependency install happens automatically via the startup update script (`npm ci`). Node engine note: the pi peer deps request Node `>=22.19.0` and the pod ships `22.14.0`, so `npm ci` prints `EBADENGINE` warnings; these are non-blocking — typecheck, tests, and extension load all pass.
+
+- Build / typecheck gate: `npm run typecheck` (`tsc --noEmit`). There is **no separate lint tool** configured; typecheck is the static gate.
+- Tests: `npm test` runs `scripts/verify-*.js` (catalog normalization/cache, extension load, setup CLI). Note `verify-setup.js` writes to temp dirs only.
+- Running the "app": full end-to-end use (`pi`, `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. To exercise the real extension offline, load `extensions/xai-oauth.ts` via `jiti` with a mock `ExtensionAPI` (implement `registerProvider`/`unregisterProvider`/`registerTool`/`registerCommand`/`on`/`setModel`); logged-out load registers the `xai-auth` provider with the curated `grok-4.5` fallback plus all tools/commands. Mock the authenticated catalog by passing `fetchImpl` to `selectXaiModelCatalog` (see `scripts/verify-catalog.js` and `scripts/fixtures/models-v2/`).
+- Any temporary demo script that imports deps must live inside the repo root (so it resolves `node_modules`), not `/tmp`.
