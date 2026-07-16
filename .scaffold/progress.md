@@ -32,4 +32,7 @@
 - [x] Live OAuth was not attempted because this tool pane cannot safely transfer browser/TUI interaction to the user. Existing credentials were never read, removed, rewritten, or revoked.
 
 ## Delivery
-- [ ] Commit, push, and open an unmerged PR against `main`.
+- [x] Committed the reviewed implementation as `3721691`.
+- [x] Pushed `feature/issue-67-oauth-state-oidc` to `origin`.
+- [x] Opened PR #72 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/72
+- [x] Left the PR unmerged for external review.

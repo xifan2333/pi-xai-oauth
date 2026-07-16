@@ -31,6 +31,6 @@ Remove the unbound raw authorization-code fallback and make fresh xAI browser OA
 - [x] Live OAuth was not attempted because this tool pane cannot safely hand browser/TUI interaction to the user; existing credentials were not read, removed, rewritten, or revoked.
 
 ## Delivery
-- [ ] Commit reviewed implementation.
-- [ ] Push `feature/issue-67-oauth-state-oidc`.
-- [ ] Open a PR against `main` without merging it.
+- [x] Committed the reviewed implementation as `3721691`.
+- [x] Pushed `feature/issue-67-oauth-state-oidc`.
+- [x] Opened PR #72 against `main` without merging it: https://github.com/BlockedPath/pi-xai-oauth/pull/72

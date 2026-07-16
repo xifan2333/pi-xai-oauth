@@ -33,3 +33,6 @@ Use generated ES256/P-256 test keys and local JWT fixtures. Exercise HTTP and pa
 - Dry-run package inspection includes `extensions/xai/oidc.ts` and excludes scaffold, subagent, credential, key, and local artifacts.
 - Two independent review rounds completed; accepted findings were fixed and the final security review reported no blockers.
 - Live interactive OAuth was not attempted because browser/TUI interaction is not safely available through this tool pane. Existing credentials were not read, removed, rewritten, or revoked.
+
+## Delivery
+The reviewed implementation was committed as `3721691`, pushed on `feature/issue-67-oauth-state-oidc`, and opened against `main` as unmerged PR #72: https://github.com/BlockedPath/pi-xai-oauth/pull/72
