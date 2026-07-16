@@ -221,11 +221,15 @@ function validateIdTokenClaims(claims: XaiIdTokenClaims, expectedNonce: string, 
   if (
     !Array.isArray(audiences) ||
     audiences.length === 0 ||
-    audiences.some((audience) => audience !== XAI_OAUTH_CLIENT_ID)
+    audiences.some((audience) => typeof audience !== "string") ||
+    !audiences.includes(XAI_OAUTH_CLIENT_ID)
   ) {
     throw new Error("xAI ID token audience did not match this OAuth client");
   }
-  if (claims.azp !== undefined && claims.azp !== XAI_OAUTH_CLIENT_ID) {
+  if (
+    (audiences.length > 1 && claims.azp !== XAI_OAUTH_CLIENT_ID) ||
+    (claims.azp !== undefined && claims.azp !== XAI_OAUTH_CLIENT_ID)
+  ) {
     throw new Error("xAI ID token authorized party did not match this OAuth client");
   }
 

@@ -29,6 +29,7 @@
 - [x] `git diff --check` and npm dry-run package assertions pass; `oidc.ts` is included and scaffold/subagent/credential/key artifacts are excluded.
 - [x] Independent security/correctness/test review completed. Accepted fixes added cancellation propagation, callback-listener cleanup, authorization-error redaction, raw-code retry guidance, optional JWK-hint compatibility, exact valid-token retention checks, refresh fallback/discard checks, and broader negative coverage.
 - [x] Final re-review found no source/package blockers; the requested callback-wait cancellation regression was added and passes.
+- [x] Post-PR Codex feedback was rechecked and addressed: multi-audience ID tokens now require client membership plus this client as `azp`; positive and missing-`azp` regressions pass.
 - [x] Live OAuth was not attempted because this tool pane cannot safely transfer browser/TUI interaction to the user. Existing credentials were never read, removed, rewritten, or revoked.
 
 ## Delivery

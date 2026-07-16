@@ -1607,6 +1607,19 @@ async function verifyOAuthOidcValidation(provider) {
   );
   await expectOidcLoginFailure(
     provider,
+    "multi-audience-missing-authorized-party",
+    {
+      tokenOptions: {
+        claims: {
+          aud: ["b1a00492-073a-47ea-816f-4c329264a828", "another-valid-audience"],
+          azp: undefined,
+        },
+      },
+    },
+    /authorized party did not match/,
+  );
+  await expectOidcLoginFailure(
+    provider,
     "wrong-nonce",
     { tokenOptions: { claims: { nonce: "wrong-nonce" } } },
     /nonce did not match/,
@@ -1691,6 +1704,30 @@ async function verifyOAuthOidcValidation(provider) {
     { tokenResponse: {} },
     /did not include an ID token/,
   );
+}
+
+async function verifyOAuthMultiAudience(provider) {
+  let expectedIdToken;
+  const credentials = await provider.oauth.login({
+    onPrompt: async () => "n",
+    onProgress: () => {},
+    onAuth(auth) {
+      const authUrl = new URL(auth.url);
+      expectedIdToken = queueValidOAuthToken("multi-audience", authUrl, {
+        claims: {
+          aud: ["b1a00492-073a-47ea-816f-4c329264a828", "another-valid-audience"],
+          azp: "b1a00492-073a-47ea-816f-4c329264a828",
+        },
+      });
+      setTimeout(async () => {
+        const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri"));
+        callbackUrl.searchParams.set("code", "multi-audience");
+        callbackUrl.searchParams.set("state", authUrl.searchParams.get("state"));
+        await originalFetch(callbackUrl);
+      }, 0);
+    },
+  });
+  assert.strictEqual(credentials.idToken, expectedIdToken, "multi-audience token should require and accept this client as azp");
 }
 
 async function verifyOAuthOptionalJwkHints(provider) {
@@ -1940,6 +1977,7 @@ async function main() {
     await verifyOAuthManualMissingStateIgnored(provider);
     await verifyOAuthDiscoveryPolicy(provider);
     await verifyOAuthOidcValidation(provider);
+    await verifyOAuthMultiAudience(provider);
     await verifyOAuthOptionalJwkHints(provider);
     await verifyOAuthAuthorizationErrorRedaction(provider);
     await verifyOAuthTokenErrorRedaction(provider);
