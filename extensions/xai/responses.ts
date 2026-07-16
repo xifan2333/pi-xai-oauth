@@ -2,7 +2,7 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { isGrokCliCompatibilityModel, xaiModelForRequest, xaiModelRequestHeaders } from "./models";
+import { xaiModelForRequest, xaiProxyRequestHeaders } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
 
@@ -28,6 +28,14 @@ function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEv
     ...event,
     error: { ...error, errorMessage: normalizeXaiErrorText(error.errorMessage) },
   };
+}
+
+function withoutAuthorizationHeader(
+  headers: Record<string, string | null> | undefined,
+): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(headers || {}).filter(([name]) => name.toLowerCase() !== "authorization"),
+  );
 }
 
 function createForwardingAssistantStream() {
@@ -143,18 +151,13 @@ export async function createXaiResponse(
   const route = resolveXaiRoute(credential.kind, "responses");
   const rewritten = rewriteXaiResponsesPayload(body, model);
   const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
-  const usesGrokCliCompatibility =
-    credential.kind === "oauth-session" && isGrokCliCompatibilityModel(model.id);
-  const grokCliSessionId = usesGrokCliCompatibility
-    ? (typeof body.previous_response_id === "string" && body.previous_response_id) || randomUUID()
-    : undefined;
-  return postXaiJson(
-    credential.token,
-    route.url,
-    payload,
-    signal,
-    xaiModelRequestHeaders(model.id, credential.kind, grokCliSessionId),
-  );
+  const requestSessionId = randomUUID();
+  const requestHeaders = xaiProxyRequestHeaders(model.id, credential.kind, {
+    conversationId: requestSessionId,
+    requestId: randomUUID(),
+    sessionId: requestSessionId,
+  });
+  return postXaiJson(credential.token, route.url, payload, signal, requestHeaders);
 }
 
 /**
@@ -176,24 +179,24 @@ export async function createXaiResponse(
 export function streamSimpleXaiResponses(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
   // The registered xai-auth provider is OAuth-only, so bind its stream to
   // session-token routing instead of inferring credential provenance from the
-  // bearer string. Build/Composer keep their separate compatibility headers.
+  // bearer string.
   const credentialKind = "oauth-session" as const;
   const route = resolveXaiRoute(credentialKind, "responses");
 
-  // Prefer pi's stable session id for cache routing. For Grok CLI compatibility
-  // models, fall back to a per-stream id so x-grok-conv-id is always present.
-  // Docs: Responses API uses body.prompt_cache_key; the proxy also benefits
-  // from the x-grok-conv-id header.
+  // Prefer pi's stable session id for cache and proxy routing. A UUID fallback
+  // keeps every OAuth proxy request fully attributed when pi has no session id.
   // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
   const sessionId = options?.sessionId;
-  const routingSessionId = sessionId || (isGrokCliCompatibilityModel(model.id) ? randomUUID() : undefined);
+  const routingSessionId = sessionId || randomUUID();
+  const requestHeaders = xaiProxyRequestHeaders(model.id, credentialKind, {
+    conversationId: routingSessionId,
+    requestId: randomUUID(),
+    sessionId: routingSessionId,
+  });
   const streamModel = {
     ...model,
     baseUrl: route.baseUrl,
-    headers: {
-      ...(model as any).headers,
-      ...xaiModelRequestHeaders(model.id, credentialKind, routingSessionId),
-    },
+    headers: withoutAuthorizationHeader((model as any).headers) as Record<string, string>,
   };
   // Keep the xAI stream model for routing/payload rewriting, but delegate with
   // the API tag expected by pi's OpenAI Responses transport.
@@ -201,8 +204,9 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
     ...streamModel,
     api: "openai-responses" as const,
   };
-  const headers = { ...(options?.headers || {}) };
-  if (routingSessionId && !headers["x-grok-conv-id"]) headers["x-grok-conv-id"] = routingSessionId;
+  // The OAuth bearer comes only from options.apiKey. Required proxy metadata
+  // is merged last so callers cannot spoof authentication or attribution.
+  const headers = { ...withoutAuthorizationHeader(options?.headers), ...requestHeaders };
 
   const stream = createForwardingAssistantStream();
   void (async () => {

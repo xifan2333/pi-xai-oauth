@@ -1,34 +1,36 @@
 # Execution Progress
 
-**Project:** pi-xai-oauth Issue #63 OAuth-aware endpoint routing
-**Branch:** feature/issue-63-auth-aware-routing
+**Project:** pi-xai-oauth Issue #65 OAuth scopes and proxy metadata
+**Branch:** feature/issue-65-proxy-headers
 **Started:** 2026-07-16
 
-## Inherited Mainline Fixes
-- [x] Rebased onto current `origin/main`.
-- [x] Preserved PR #62's fix so disabling one xAI tool without an active xAI model does not clear sibling authorizations.
+## Research and Baseline
+- [x] Started from current `main` after merged PR #70.
+- [x] Read issue #65, provider/OAuth/routing/Responses code, tests, setup, and package documentation.
+- [x] Read pinned official Grok Build scope, proxy middleware, sampling-header, and client-mode sources at commit `b189869b7755d2b482969acf6c92da3ecfeffd36`.
+- [x] Confirmed baseline `npm test` and `npm run typecheck` pass.
 
-## Issue #63 Implementation
-- [x] Read issue #63, current provider/request paths, pi custom-provider docs/examples, and official Grok Build routing source.
-- [x] Confirmed baseline `npm run typecheck` and `npm test` pass.
-- [x] Completed parallel local audit, official-source research, and implementation planning.
-- [x] Clarified the image-generation exception: official Grok Build sends OAuth and BYOK Imagine requests directly to `api.x.ai`.
-- [x] Implemented credential-aware Responses routing: OAuth/session traffic uses the CLI proxy and an explicit future API-key path uses `api.x.ai`.
-- [x] Routed image generation through the same abstraction while preserving its official direct `api.x.ai` exception.
-- [x] Renamed the Build/Composer predicate so compatibility behavior remains separate from endpoint selection.
-- [x] Added table-driven actual-request coverage for OAuth streaming/direct helpers across Grok 4.5, Grok 4.3, Grok 4.20, Grok Build, and Composer.
-- [x] Added explicit API-key Responses and OAuth/API-key image-route coverage while preserving Build/Composer-only compatibility headers.
-- [x] Corrected TUI `/login` documentation and documented the subscription-only smoke flow.
-- [x] Completed two fresh-context review rounds and applied accepted documentation/metadata findings.
-- [x] Passed LSP diagnostics, `npm test`, `npm run typecheck`, `git diff --check`, and npm package inspection before the final rebase.
+## Implementation
+- [x] Added `conversations:read` and `conversations:write` to fresh OAuth authorization requests in official order.
+- [x] Preserved legacy refresh forms with no scope renegotiation.
+- [x] Replaced the stale Grok CLI version with package-derived `pi-xai-oauth` identity/version.
+- [x] Added complete auth, client-mode, conversation, request, model, and session metadata for every OAuth Responses proxy request.
+- [x] Kept explicit API-key Responses free of proxy-only metadata.
+- [x] Added stable stream IDs, UUID fallback, coherent direct-call IDs, and caller-spoof protection.
+- [x] Kept endpoint routing independent from model compatibility checks.
+- [x] Added exact actual-request and OAuth regression coverage.
+- [x] Updated README re-login guidance, Unreleased changelog, and scaffold state.
 
-## Live Smoke
-- [x] Installed the local checkout as the only `pi-xai-oauth` package.
-- [x] Verified OAuth credentials are present while `XAI_API_KEY` is absent.
-- [x] Grok Build and Composer returned `OAUTH_PROXY_OK`.
-- [x] Confirmed Grok 4.5, Grok 4.3, Grok 4.20 reasoning, and the direct Grok 4.5 helper reach the proxy.
-- [ ] Standard-model requests currently fail HTTP 426 because the required Grok client-version header is absent; GitHub issue #65 tracks header/scope alignment.
+## Validation
+- [x] Focused `node scripts/verify-extension.js` passes after implementation and review fixes.
+- [x] Locked TypeScript 7.0.2 `npm run typecheck` passes.
+- [x] Full `npm test` passes.
+- [x] Parent-owned LSP diagnostics pass on final TypeScript source; fresh exact-source copies bypassed a stale persistent-server buffer after the locked dependency reinstall.
+- [x] `git diff --check` passes after final edits.
+- [x] npm package inspection includes package metadata and runtime files and excludes scaffold, subagent, credential, and session artifacts.
+- [x] Safe live OAuth smoke with `XAI_API_KEY` unset returned `OAUTH_PROXY_OK` for Grok 4.5, Grok Build, and Composer; Grok Build recovered from one transient upstream 503.
+- [x] Independent focused review/fix passes completed; fixed truthful pi mode resolution and case-insensitive Authorization spoofing.
+- [x] No paid image generation was invoked.
 
 ## Next
-- [ ] Re-run full validation after rebase, push the branch, and open the issue #63 PR.
-- [ ] Address issue #65 separately before claiming all standard-model OAuth traffic is end-to-end operational.
+- [ ] Commit, push, and open a PR against `main` without merging it.
