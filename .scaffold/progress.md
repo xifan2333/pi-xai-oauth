@@ -35,4 +35,6 @@
 - [x] No live device flow was attempted; deterministic mocks plus registered-provider and real pi AuthStorage integration supplied validation without touching credentials.
 
 ## Delivery
-- [ ] Commit, push, and open unmerged PR against main.
+- [x] Committed reviewed implementation as `9968f3b` (`Add xAI device-code authentication`).
+- [x] Pushed `feature/issue-66-device-code-auth` to origin.
+- [x] Opened unmerged PR #75 against `main`, closing #66: https://github.com/BlockedPath/pi-xai-oauth/pull/75

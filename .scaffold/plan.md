@@ -33,6 +33,6 @@ Add secure, cancellable xAI device authorization for remote/headless human login
 - [x] Focused re-review reported `CLEAN`; final full validation passed.
 
 ## Delivery
-- [ ] Commit on `feature/issue-66-device-code-auth`.
-- [ ] Push to origin.
-- [ ] Open an unmerged PR against `main` closing #66.
+- [x] Committed reviewed implementation as `9968f3b` on `feature/issue-66-device-code-auth`.
+- [x] Pushed the feature branch to origin.
+- [x] Opened unmerged PR #75 against `main`, closing #66: https://github.com/BlockedPath/pi-xai-oauth/pull/75

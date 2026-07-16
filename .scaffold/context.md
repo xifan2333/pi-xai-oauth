@@ -26,6 +26,11 @@ Add device authorization as a clear `/login xai-auth` option for SSH, WSL, conta
 ## Preservation Boundaries
 Browser state/raw-code/PKCE/OIDC validation from #67; scopes/proxy headers from #65; credential-aware routing from #63/#70; exact authenticated catalog/cache/account isolation from #64/#73; and refresh-token rotation/preservation all remain unchanged.
 
+## Delivery
+Reviewed implementation commit `9968f3b` was pushed on `feature/issue-66-device-code-auth`; unmerged PR #75 targets `main` and closes issue #66: https://github.com/BlockedPath/pi-xai-oauth/pull/75
+
+No live device flow was attempted. Deterministic protocol, registered-provider/catalog, and real pi AuthStorage integration tests validated behavior without touching existing credentials.
+
 ## Research Artifacts
 - `/tmp/issue66-official-research.md`
 - `/tmp/issue66-local-scout.md`
