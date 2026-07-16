@@ -16,6 +16,7 @@
 - [x] Tightened usage credential resolution to pi's managed xAI model registry only and added a regression proving an unrelated active-model API key is never sent to xAI.
 - [x] Confirmed PR #89 has no reviews or review threads; its comments are bot usage-limit notices.
 - [x] Confirmed the old policy failure was obsolete Pi 0.80.7 registry drift already fixed by merged PR #94.
+- [x] Preserved the original reviewed implementation/docs commits (`d7ccd17`, `53b8013`) and open PR #89 on `safety/issue-82-pre-main-rebase`.
 - [x] Fetched `origin/main=af31e83`, verified the worktree was clean at remote head `53b8013`, and created `safety/issue-82-pre-main-rebase`.
 - [x] Started the semantic rebase onto current merged main while preserving #90/#91/#92/#94 behavior.
 
