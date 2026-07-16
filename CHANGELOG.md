@@ -8,6 +8,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Added
 
+- Added 246 focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
+- Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.
 - Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
 - Added pinned, bounded, cancellable RFC 8628 polling with initial wait, server interval plus cumulative `slow_down`, denial/expiry handling, strict secret-safe schema validation, and deterministic timing tests.
 - Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
@@ -18,6 +20,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Changed
 
+- Replaced the shared-state monolithic behavior verifiers with isolated per-domain suites and closure-local fixtures; production runtime behavior is unchanged.
+- Made the repository CI job run the full unit suite once under coverage and the loader smoke separately; packed compatibility jobs rerun unit, loader, and TypeScript checks at each exact Pi boundary.
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
 - Kept Grok Build and Composer payload, header, and tool compatibility separate from transport routing.
 - Updated fresh OAuth logins to request xAI's current eight-scope Grok client grant, including conversation read/write access, while leaving existing refresh grants compatible.

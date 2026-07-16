@@ -10,11 +10,15 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 ## Key Commands (Exact, Copy-Paste Ready)
 - Install / setup: `node bin/setup.js` or `npm run setup`
 - Install as pi extension: `pi install npm:pi-xai-oauth`
-- Run TypeScript: `npm run typecheck` (validate)
+- Full policy/unit/loader gate: `npm test`
+- Focused Vitest suite: `npm run test:unit -- tests/oauth/browser-login.test.ts`
+- V8 coverage: `npm run test:coverage`
+- Real Pi loader smoke: `npm run test:loader`
+- Run TypeScript: `npm run typecheck` (production, tests, fixtures, config)
 - Verify Pi policy/package metadata: `npm run compatibility:check`
 - Verify exact packed Pi boundaries: `npm run compatibility:boundaries`
 - Evaluate an unadvertised Pi candidate: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-69-pi-peer-range`
+- Git: Always work on feature branches. Current branch for this work: `feature/issue-68-vitest-suites`
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
@@ -67,7 +71,10 @@ pi-xai-oauth/
 │       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
 ├── compatibility/
 │   └── pi-versions.json # Peer range plus exact minimum/latest matrix policy
+├── tests/                    # Focused typed Vitest domain suites + isolated fixtures
+├── vitest.config.ts          # Node isolation and measured V8 coverage floors
 ├── scripts/
+│   ├── verify-extension-loader.mjs # Small real Pi loader smoke
 │   ├── verify-compatibility.js # Policy/range/registry/pack/unsupported-peer checks
 │   └── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner
 ├── .github/workflows/
@@ -100,7 +107,9 @@ Start any task by reading:
 - Never retain a device-flow ID token without a device-specific validation policy; browser ID tokens keep nonce-bound OIDC validation
 - Reject malformed, hidden, unsupported-backend, secret-bearing, and known API-key-only catalog entries
 - Keep startup catalog network behavior bounded and use pi's credential lock for expired stored-token refresh
-- Keep compatibility verification in the existing plain-Node test style; do not migrate frameworks for issue #69
+- Keep compatibility policy/registry/pack/resolver verification in plain Node; behavior tests use focused Vitest suites
+- Isolate fetch, timers, environment, temp HOME/filesystem, module state, runtime models, credentials, and active-tool registries per test
+- Keep real callback tests sequential with real timers and guaranteed listener cleanup
 - Use strict peer resolution for supported versions; `--force` is allowed only in isolated negative fixtures that assert npm peer warnings
 
 ## Safety Gates
@@ -135,6 +144,6 @@ This file should be updated whenever architecture, commands, or rules change.
 This repo is a **pi extension package (a library/CLI), not a standalone server**. There is nothing to "boot" — dependency install happens automatically via the startup update script (`npm ci`). Node engine note: the pi peer deps request Node `>=22.19.0` and the pod ships `22.14.0`, so `npm ci` prints `EBADENGINE` warnings; these are non-blocking — typecheck, tests, and extension load all pass.
 
 - Build / typecheck gate: `npm run typecheck` (`tsc --noEmit`). There is **no separate lint tool** configured; typecheck is the static gate.
-- Tests: `npm test` runs `scripts/verify-*.js` (catalog normalization/cache, extension load, setup CLI). Note `verify-setup.js` writes to temp dirs only.
-- Running the "app": full end-to-end use (`pi`, `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. To exercise the real extension offline, load `extensions/xai-oauth.ts` via `jiti` with a mock `ExtensionAPI` (implement `registerProvider`/`unregisterProvider`/`registerTool`/`registerCommand`/`on`/`setModel`); logged-out load registers the `xai-auth` provider with the curated `grok-4.5` fallback plus all tools/commands. Mock the authenticated catalog by passing `fetchImpl` to `selectXaiModelCatalog` (see `scripts/verify-catalog.js` and `scripts/fixtures/models-v2/`).
+- Tests: `npm test` runs compatibility policy, 246 focused Vitest regressions, and the small real Pi loader smoke. Use `npm run test:coverage` for V8 output and `npm run test:unit -- <path> -t <name>` for focus.
+- Running the "app": full end-to-end use (`pi`, `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. Offline behavior lives in focused `tests/` suites with isolated fixtures; `npm run test:loader` exercises the real Pi loader without live xAI access. Catalog fixtures live under `tests/fixtures/models-v2/`.
 - Any temporary demo script that imports deps must live inside the repo root (so it resolves `node_modules`), not `/tmp`.

@@ -1,36 +1,31 @@
-# Execution Progress
+# Execution Progress — Issue #68
 
-**Project:** pi-xai-oauth Issue #69 bounded Pi peer compatibility
-**Branch:** feature/issue-69-pi-peer-range
-**Started:** 2026-07-17
+**Branch:** feature/issue-68-vitest-suites
+**Baseline:** 97ac7c9
 
-## Research and Baseline
-- [x] Confirmed clean requested branch at current `origin/main` merge commit `665c036` containing PRs #70/#71/#72/#73/#75.
-- [x] Read AGENTS.md, complete issue #69 (no comments), package/lock metadata, all current workflows and verification scripts, README, CHANGELOG, CONTRIBUTING, and scaffold state.
-- [x] Read Pi's complete package, extension, and custom-provider docs plus linked extension/provider/dependency examples.
-- [x] Read official npm peer/lock/`npm ci` guidance, node-semver pre-1.0 caret behavior, and SemVer major-zero policy through delegated primary-source research.
-- [x] Audited compatibility history: 1.2.4 adapted to Pi 0.79.8's Responses guard; 1.3.2 adapted to Pi 0.80's export move; 1.3.3 adapted to the 0.80 extension-loader alias; historical commit `eb3a700` proposed `>=0.80.3 <0.81.0` but did not land on main.
-- [x] Confirmed both Pi packages publish aligned releases through 0.80.7 and no 0.81 release currently exists.
+## Completed
 
-## Current Findings
-- Baseline wildcard peers overclaimed support; caret dev ranges and the old lock silently tested only resolved 0.80.6.
-- A test-only hard-coded nested Pi dependency path failed clean exact-version installs regardless of API compatibility. It now resolves the public OAuth export from the same Pi dependency context as coding-agent `AuthStorage`, including npm 11 nested layouts.
-- Pi 0.80.1 is the selected real minimum: it is the first published 0.80 release, provides the required compat/loader contract, and passes the full packed tests/typecheck. Pi 0.80.7 is the exact latest allowed/tested endpoint; `<0.81.0` remains the safe upper bound.
-
-## Implementation
-- [x] Added central compatibility policy and aligned `>=0.80.1 <0.81.0` peer plus exact 0.80.7 development/lock metadata.
-- [x] Added plain-Node range/drift/pack/unsupported-install verifiers and exact packed matrix runner.
-- [x] Added PR/main CI matrix generated from checked-in exact policy endpoints.
-- [x] Added compatibility, widening, contribution/release, AGENTS, changelog, and scaffold documentation.
-
-## Review and Validation
-- [x] Exact 0.80.1/0.80.7 packed runs passed with requested/resolved pair reporting under the initial local resolver.
-- [x] Policy/range, registry drift, packed manifest, unsupported lower/upper diagnostics, full tests, typecheck, LSP hints, diff check, and YAML parse passed before independent review.
-- [x] Four independent dependency, CI, correctness, and docs reviews completed; accepted blockers cover npm 11 nested OAuth module identity, candidate-mode policy validation, unreleased README wording, release-gate ordering, and scaffold accuracy.
-- [x] Re-ran exact 0.80.1 and 0.80.7 packed boundaries under pinned npm 11.6.2; both reported the requested/resolved pair and passed full tests/typecheck.
-- [x] Final `npm test`, `npm run typecheck`, `npm run compatibility:check`, 49-file dry-run package inspection, LSP diagnostics, workflow YAML/schema checks, and `git diff --check` passed.
-- [x] Three focused independent re-reviewers validated npm 11 module identity, candidate mode, CI/script behavior, and docs/scaffold fixes; all reported `CLEAN`.
+- [x] Created the branch before edits and recorded the 549-call legacy assertion map.
+- [x] Read the complete issue, runtime, verifiers, package/lock/CI/policy, Pi patterns, and Vitest 4/Node 24 guidance.
+- [x] Added exact Vitest/V8 4.1.10, typed configuration, strict test typechecking, and isolated fixtures.
+- [x] Added 29 domain files / 246 named tests covering catalog/cache; browser/device/OIDC/refresh/AuthStorage; provider registration/credentials/lifecycle/races/routing; payload/stream/error/image transport; image codec/tools; network-tool command/lifecycle; custom tools; Cursor args/shims; setup/settings.
+- [x] Ran old and new suites together under strict unhandled rejection handling before deleting equivalent legacy behavior verifiers.
+- [x] Replaced the monolith with `scripts/verify-extension-loader.mjs`, a small real Pi internal-loader smoke resolved from the package ESM main (shared by Pi 0.80.1/0.80.7).
+- [x] Completed independent parity, isolation/flakiness, CI/compatibility, and simplicity reviews.
+- [x] Applied accepted parity/isolation fixes: sandboxed Pi agent state, serialized callback files, restored OAuth/OIDC, Responses, Cursor WebSearch, catalog, tool lifecycle, command edge, device race, and real compat transport assertions.
+- [x] Reformatted typed tests and re-measured final V8 coverage at 83.37% statements, 75.01% branches, 85.79% functions, and 86.93% lines with evidence-based 82/74/84/85 floors.
+- [x] Updated npm scripts, CI, pack requirements, README, CONTRIBUTING, CHANGELOG, AGENTS, parity, and coverage docs.
+- [x] Local focused, strict full, loader, coverage, and TypeScript gates pass after review fixes.
+- [x] Independent CI review and final parent run proved exact packed Pi 0.80.1/0.80.7 matrices, pack boundaries, npm 11 lock install, unsupported peers, and workflow YAML.
+- [x] Follow-up parity, isolation/flakiness, and simplicity/CI reviews completed; the final focused re-review reported CLEAN.
+- [x] Final package dry run (85 files), diff/staging check, production-boundary check, and workflow parse passed.
+- [x] Rechecked PR automation and applied Cursor Bugbot's accepted fix so the CI coverage run also uses strict unhandled-rejection handling.
 
 ## Delivery
-- [x] Committed the reviewed implementation as `4ec249e` (`fix: bound and test Pi peer compatibility`).
-- [x] Pushed `feature/issue-69-pi-peer-range` and opened unmerged PR #77 against main, closing #69: https://github.com/BlockedPath/pi-xai-oauth/pull/77
+
+- [x] Committed the reviewed implementation as `7adfb88` (`test: split verifier into Vitest suites`).
+- [x] Pushed `feature/issue-68-vitest-suites` and opened unmerged PR #87 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/87
+
+## Residual
+
+- Pi 0.80.8 is now published inside the allowed range. The deliberate registry-drift gate reports it; reviewing/updating compatibility policy is out of scope for issue #68, whose required exact matrix remains 0.80.1/0.80.7.

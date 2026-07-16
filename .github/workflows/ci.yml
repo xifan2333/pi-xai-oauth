@@ -35,9 +35,11 @@ jobs:
         run: node scripts/verify-compatibility.js policy
       - name: Detect unreviewed releases inside the allowed range
         run: node scripts/verify-compatibility.js registry
-      - name: Run tests
-        run: npm test
-      - name: Type-check
+      - name: Run focused unit suites with V8 coverage
+        run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:coverage
+      - name: Run real Pi extension-loader smoke
+        run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:loader
+      - name: Type-check production and test TypeScript
         run: npm run typecheck
       - name: Verify packed manifest and contents
         run: node scripts/verify-compatibility.js pack
