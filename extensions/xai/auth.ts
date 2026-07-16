@@ -1,5 +1,6 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
-import { existsSync, readFileSync } from "fs";
+import { AuthStorage, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { existsSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import {
@@ -76,6 +77,42 @@ export function getGrokAuthCredentials(): OAuthCredentials | null {
   }
 
   return null;
+}
+
+export interface StartupXaiCatalogAuth {
+  credential: { access: string } | null;
+  /** True when pi has an expired stored OAuth token that session_start should refresh under AuthStorage's lock. */
+  needsRegistryRefresh: boolean;
+  credentialChangedAt?: number;
+}
+
+/**
+ * Resolve a fresh startup-only OAuth bearer without refreshing or modifying
+ * pi's credential store. Expired pi credentials are deferred to the bound
+ * model registry so refresh-token rotation remains lock protected.
+ */
+export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAuth {
+  try {
+    const authPath = join(getAgentDir(), "auth.json");
+    const stored = AuthStorage.create(authPath).get(XAI_PROVIDER_ID);
+    const credentialChangedAt = existsSync(authPath) ? statSync(authPath).mtimeMs : undefined;
+    if (stored?.type === "oauth" && typeof stored.access === "string" && stored.access) {
+      if (typeof stored.expires === "number" && stored.expires > now) {
+        return { credential: { access: stored.access }, needsRegistryRefresh: false, credentialChangedAt };
+      }
+      return { credential: null, needsRegistryRefresh: true, credentialChangedAt };
+    }
+  } catch {
+    // Fall through to read-only official Grok CLI credential reuse.
+  }
+
+  const grok = getGrokAuthCredentials();
+  if (grok?.access && typeof grok.expires === "number" && grok.expires > now) {
+    const grokPath = join(homedir(), ".grok", "auth.json");
+    const credentialChangedAt = existsSync(grokPath) ? statSync(grokPath).mtimeMs : undefined;
+    return { credential: { access: grok.access }, needsRegistryRefresh: false, credentialChangedAt };
+  }
+  return { credential: null, needsRegistryRefresh: false };
 }
 
 /** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */

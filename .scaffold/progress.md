@@ -1,39 +1,50 @@
 # Execution Progress
 
-**Project:** pi-xai-oauth Issue #67 OAuth state and OIDC validation
-**Branch:** feature/issue-67-oauth-state-oidc
+**Project:** pi-xai-oauth Issue #64 authenticated OAuth model catalog
+**Branch:** feature/issue-64-oauth-model-catalog
 **Started:** 2026-07-16
 
 ## Research and Baseline
-- [x] Started from clean current `main` after merged PRs #70 and #71.
-- [x] Created `feature/issue-67-oauth-state-oidc` before editing.
-- [x] Read AGENTS.md, issues #67 and #66, provider entrypoint, setup, all OAuth discovery/login/callback/token/reuse code, and current OAuth tests.
-- [x] Read current pi provider/OAuth APIs, types, interactive manual-input behavior, extension docs, and provider examples.
-- [x] Read authoritative OIDC Core/Discovery, OAuth metadata/PKCE/security guidance, and live first-party xAI OIDC discovery/JWKS behavior.
-- [x] Confirmed xAI OIDC metadata currently pins issuer `https://auth.x.ai`, `/oauth2/authorize`, `/oauth2/token`, `/.well-known/jwks.json`, ES256, and S256.
-- [x] Confirmed baseline LSP diagnostics, `npm test`, and `npm run typecheck` pass.
+- [x] Updated clean `main` through merged PRs #70/#71/#72 and created the requested feature branch before editing.
+- [x] Read AGENTS.md, complete issue #64 (no comments), PR #70/#71/#72 summaries, provider/setup/model/auth/routing/OAuth/OIDC/payload/Responses/tool code, current tests, README, changelog, and scaffold state.
+- [x] Read pi's complete custom-provider, models, providers, SDK/model-registry, and extensions docs plus complete custom-provider/OAuth/model selection/reload examples.
+- [x] Read the pinned official Grok Build `/models-v2` refresh/parser and API-key-only catalog sources at commit `b189869...`.
+- [x] Confirmed baseline changed-file diagnostics, `npm test`, and `npm run typecheck` pass (test script retains only pre-existing CommonJS/jiti hints).
+- [x] Performed a safe GET-only authenticated live `/models-v2` smoke: HTTP 200, two OAuth-visible Responses models, no token/header/body logging and no paid tool invocation.
+
+## Current Findings
+- The live authenticated catalog currently exposes `grok-4.5` and `grok-composer-2.5-fast` for this account; the response supplies backend/context/reasoning metadata but currently omits max-completion tokens.
+- pi requires dynamic model discovery in an async extension factory so models exist at startup and `--list-models`; post-start `registerProvider` calls apply immediately.
+- Successful login can force-refresh and immediately re-register the provider; `/reload` reruns the async factory and respects the explicit cache TTL.
+- The cache must store normalized model definitions only and must not reuse stale entitlements after 401/403.
 
 ## Implementation
-- [x] Removed `trustedManualCode`; raw-code-only input now fails with full-redirect-URL migration guidance and issue #66 remains separate.
-- [x] Required matching state for HTTP and pasted callbacks before any authorization-code exchange.
-- [x] Added exact first-party issuer/authorization/token/JWKS policy plus ES256/S256 discovery validation.
-- [x] Added generated-key ES256 ID-token verification for signing key, signature, issuer, audience/authorized party, expiry, issued-at, subject, and nonce before credential retention.
-- [x] Preserved Grok CLI credential reuse and refresh responses without retaining unvalidated refresh ID tokens.
-- [x] Removed token response body reflection from errors.
-- [x] Added focused state, raw-code, code-substitution, discovery/JWKS, claims, unknown-key, bad-signature, valid-completion, and redaction tests.
-- [x] Updated README, CHANGELOG, AGENTS.md, and scaffold security guidance.
+- [x] Completed independent research and planning review; accepted forced-login no-stale behavior, durable invalidation, exact empty-catalog replacement, a 5-second official-aligned bound, and lock-safe expired-token handling.
+- [x] Added defensive normalization for official aliases, Responses-only routing, hidden/API-key-only/malformed filtering, known metadata enrichment, conservative unknown defaults, reasoning capability, and supplied levels.
+- [x] Added an atomic 0600 token-free normalized cache with 15-minute freshness, 7-day stale-if-transient behavior, and auth/permanent/forced-failure tombstones.
+- [x] Made provider startup async, added exact unregister/register replacement, forced post-login refresh, deferred lock-protected session refresh, and removed-active-model fail-safe handling.
+- [x] Added fixture-based catalog/cache/failure tests and updated the extension harness for async load and login/empty-catalog replacement.
+- [x] Updated README, CHANGELOG, AGENTS.md, and scaffold policy documentation.
+
+## Review Fixes
+- [x] Completed four independent correctness, security/privacy, cache/normalization, and regression/docs/package reviews.
+- [x] Prevented cross-account refresh coalescing and aborts superseded requests so an older completion cannot overwrite provider state or cache.
+- [x] Bypassed fresh cache after logout/no credentials and when the credential file changed after the cache; preserved lock-refresh intent across fresh cache and retryable lookup failures.
+- [x] Added caller-cancellation handling that leaves cache/provider state untouched.
+- [x] Added pre-input model reconciliation plus transport/direct-helper entitlement guards; additional helpers default to the active entitled model.
+- [x] Fixed `none` reasoning mapping, capability-without-level defaults, known-output/context clamping, mixed malformed filtering, cache-write invalidation, and permissive cache permissions.
+- [x] Added overlap, removed-model, no-replacement, logout/fresh-cache, credential-change, cancellation, oversized-response, permissions, reasoning, and limit regressions.
+- [x] Documented pi's empty-catalog + disk-defined `xai-auth` model limitation; transport remains fail-closed before network.
 
 ## Validation
-- [x] Changed-file LSP diagnostics pass for `oauth.ts`, `oidc.ts`, and `constants.ts`.
-- [x] `npm test`, strict-unhandled focused verification, and `npm run typecheck` pass.
-- [x] `git diff --check` and npm dry-run package assertions pass; `oidc.ts` is included and scaffold/subagent/credential/key artifacts are excluded.
-- [x] Independent security/correctness/test review completed. Accepted fixes added cancellation propagation, callback-listener cleanup, authorization-error redaction, raw-code retry guidance, optional JWK-hint compatibility, exact valid-token retention checks, refresh fallback/discard checks, and broader negative coverage.
-- [x] Final re-review found no source/package blockers; the requested callback-wait cancellation regression was added and passes.
-- [x] Post-PR Codex feedback was rechecked and addressed: multi-audience ID tokens now require client membership plus this client as `azp`; positive and missing-`azp` regressions pass.
-- [x] Live OAuth was not attempted because this tool pane cannot safely transfer browser/TUI interaction to the user. Existing credentials were never read, removed, rewritten, or revoked.
+- [x] Changed TypeScript files have zero LSP errors/warnings; JS verifiers retain only pre-existing CommonJS/jiti hints.
+- [x] `npm test` passes (`verify-catalog`, `verify-extension`, `verify-setup`).
+- [x] `npm run typecheck` passes.
+- [x] `git diff --check` passes.
+- [x] `npm pack --dry-run --json` includes 43 intended files including `catalog.ts` and fixtures; no scaffold, subagent, credential, session, or cache artifacts.
+- [x] Safe live authenticated GET-only smoke through the implemented selector succeeded with source `remote`, two models, and no paid tool invocation or credential/header logging.
 
-## Delivery
-- [x] Committed the reviewed implementation as `3721691`.
-- [x] Pushed `feature/issue-67-oauth-state-oidc` to `origin`.
-- [x] Opened PR #72 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/72
-- [x] Left the PR unmerged for external review.
+- [x] Final focused race-condition re-review reproduced the prior commit-window issue, accepted the queued conditional rollback fix, reran the deterministic probe, and reported `CLEAN`.
+
+## Next
+Commit, push, and open an unmerged PR.

@@ -1,0 +1,41 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "model": "grok-build-0.1",
+      "name": "Grok Build 0.1",
+      "api_backend": "responses",
+      "context_window": 131072
+    },
+    {
+      "model": "explicit-api-key-model",
+      "apiBackend": "responses",
+      "contextWindow": 131072,
+      "apiKey": "MUST_NOT_REACH_CACHE"
+    },
+    {
+      "model": "env-api-key-model",
+      "api_backend": "responses",
+      "context_window": 131072,
+      "env_key": "XAI_API_KEY"
+    },
+    {
+      "model": "auth-scheme-api-key-model",
+      "api_backend": "responses",
+      "context_window": 131072,
+      "auth_scheme": "api-key"
+    },
+    {
+      "model": "oauth-safe-model",
+      "name": "OAuth Safe Model",
+      "api_backend": "responses",
+      "context_window": 131072
+    },
+    {
+      "model": "oauth-safe-model",
+      "name": "Duplicate Must Not Win",
+      "api_backend": "responses",
+      "context_window": 999999
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 const assert = require("assert");
 const crypto = require("crypto");
 const path = require("path");
+const os = require("os");
 const fs = require("fs/promises");
 const { createJiti } = require("jiti");
 
@@ -15,7 +16,12 @@ const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
   path.join(repoRoot, "extensions", "xai", "images.ts"),
 );
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
-const { resolveXaiClientMode } = jiti(path.join(repoRoot, "extensions", "xai", "models.ts"));
+const {
+  KNOWN_XAI_MODEL_METADATA,
+  getXaiRuntimeModels,
+  resolveXaiClientMode,
+  setXaiRuntimeModels,
+} = jiti(path.join(repoRoot, "extensions", "xai", "models.ts"));
 const { createXaiResponse } = jiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
 const { resolveXaiRoute } = jiti(path.join(repoRoot, "extensions", "xai", "routing.ts"));
 const { XAI_NETWORK_TOOL_NAMES } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "model-scope.ts"));
@@ -37,6 +43,28 @@ let nextJwksDocument;
 let nextRefreshTokenResponse;
 let abortNextOAuthFetch;
 let nextXaiResponse;
+let nextCatalogResponse;
+const catalogResponseQueue = [];
+
+const DEFAULT_CATALOG_RESPONSE = {
+  object: "list",
+  data: [
+    {
+      model: "grok-4.5",
+      name: "Grok 4.5",
+      api_backend: "responses",
+      context_window: 500_000,
+      supports_reasoning_effort: true,
+      reasoning_efforts: ["low", "medium", "high"],
+    },
+    {
+      model: "grok-composer-2.5-fast",
+      name: "Composer 2.5",
+      api_backend: "responses",
+      context_window: 200_000,
+    },
+  ],
+};
 
 const TEST_XAI_MODEL = {
   id: "grok-4.5",
@@ -194,6 +222,17 @@ function installFetchMock() {
       });
     }
 
+    if (href === "https://cli-chat-proxy.grok.com/v1/models-v2") {
+      assert.equal(init.method, "GET", "catalog discovery must be GET-only");
+      assert.equal(init.redirect, "error", "catalog discovery must refuse redirects");
+      requests.push({ url: href, method: init.method, headers: init.headers || {}, signal: init.signal });
+      const queuedCatalog = catalogResponseQueue.shift();
+      if (typeof queuedCatalog === "function") return queuedCatalog(href, init);
+      const catalog = queuedCatalog ?? nextCatalogResponse ?? DEFAULT_CATALOG_RESPONSE;
+      nextCatalogResponse = undefined;
+      return jsonResponse(catalog.body ?? catalog, { status: catalog.status });
+    }
+
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     requests.push({ url: href, method: init.method, headers: init.headers || {}, body, signal: init.signal });
     if (nextXaiResponse && href.endsWith("/responses")) {
@@ -260,7 +299,7 @@ function urlOriginIs(url, expectedOrigin) {
   }
 }
 
-function loadExtension() {
+async function loadExtension() {
   const providers = new Map();
   const tools = new Map();
   const handlers = new Map();
@@ -268,12 +307,16 @@ function loadExtension() {
   let activeTools = ["read", "bash", "edit", "write"];
   let throwOnGetActiveTools = false;
   let throwOnSetActiveTools = false;
-  extension({
+  const selectedModels = [];
+  await extension({
     on(event, handler) {
       handlers.set(event, handler);
     },
     registerProvider(name, config) {
       providers.set(name, config);
+    },
+    unregisterProvider(name) {
+      providers.delete(name);
     },
     registerTool(tool) {
       tools.set(tool.name, tool);
@@ -290,6 +333,10 @@ function loadExtension() {
       if (throwOnSetActiveTools) throw new Error("tool registry temporarily unavailable");
       activeTools = toolNames;
     },
+    async setModel(model) {
+      selectedModels.push(model);
+      return true;
+    },
   });
   return {
     providers,
@@ -298,6 +345,7 @@ function loadExtension() {
     commands,
     getActiveTools: () => activeTools,
     setActiveTools: (toolNames) => { activeTools = toolNames; },
+    selectedModels,
     setToolRegistryFailures({ get = false, set = false } = {}) {
       throwOnGetActiveTools = get;
       throwOnSetActiveTools = set;
@@ -1129,7 +1177,7 @@ async function verifyXaiResponsesTransport(provider) {
     message = await captureStreamResultMessage(() =>
       provider.streamSimple(
         {
-          id: "grok-4.3",
+          id: "grok-4.5",
           provider: "xai-auth",
           api: "xai-responses",
           baseUrl: "https://cli-chat-proxy.grok.com/v1",
@@ -1174,9 +1222,14 @@ function verifyCredentialAwareRouteMatrix() {
 }
 
 async function verifyOAuthResponsesRouting(provider) {
-  for (const modelId of OAUTH_RESPONSES_MODEL_IDS) {
-    const catalogModel = provider.models.find((model) => model.id === modelId);
-    assert.ok(catalogModel, `${modelId} should exist in the provider catalog`);
+  const previousModels = getXaiRuntimeModels();
+  setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
+  try {
+    for (const modelId of OAUTH_RESPONSES_MODEL_IDS) {
+    const catalogModel =
+      provider.models.find((model) => model.id === modelId) ||
+      KNOWN_XAI_MODEL_METADATA.find((model) => model.id === modelId);
+    assert.ok(catalogModel, `${modelId} should retain known compatibility metadata`);
     const model = {
       ...catalogModel,
       provider: "xai-auth",
@@ -1239,7 +1292,10 @@ async function verifyOAuthResponsesRouting(provider) {
       directConversationId,
       `${modelId} direct helper`,
     );
-    assert.notEqual(directRequestId, streamRequestId, `${modelId} stream and direct calls need distinct request ids`);
+      assert.notEqual(directRequestId, streamRequestId, `${modelId} stream and direct calls need distinct request ids`);
+    }
+  } finally {
+    setXaiRuntimeModels(previousModels);
   }
 }
 
@@ -1306,7 +1362,7 @@ function verifyXaiClientModeResolution() {
   assert.equal(resolveXaiClientMode(["--mode", "--print"], true, true), "interactive");
 }
 
-async function verifyOAuthCallbackState(provider) {
+async function verifyOAuthCallbackState(provider, loadResult) {
   const before = requests.length;
   let authUrl;
   let expectedIdToken;
@@ -1349,6 +1405,152 @@ async function verifyOAuthCallbackState(provider) {
   );
   const exchanges = requests.slice(before).filter((entry) => entry.body?.grant_type === "authorization_code");
   assert.deepStrictEqual(exchanges.map((entry) => entry.body.code), ["good-code"], "wrong-state code substitution must not reach token exchange");
+  const catalogRequest = requests.slice(before).find((entry) => entry.url === "https://cli-chat-proxy.grok.com/v1/models-v2");
+  assert.ok(catalogRequest, "successful login should force an authenticated catalog refresh");
+  assert.equal(headerValue(catalogRequest.headers, "X-XAI-Token-Auth"), "xai-grok-cli");
+  assert.deepEqual(
+    loadResult.providers.get("xai-auth").models.map((model) => model.id),
+    ["grok-4.5", "grok-composer-2.5-fast"],
+    "post-login provider replacement should expose the authenticated catalog immediately",
+  );
+  const inputResult = await loadResult.handlers.get("input")?.({}, {
+    model: { ...TEST_XAI_MODEL, id: "removed-model" },
+    modelRegistry: {
+      find: (_provider, id) => id === "grok-4.5" ? TEST_XAI_MODEL : undefined,
+    },
+    ui: { notify() {} },
+  });
+  assert.deepEqual(inputResult, { action: "continue" });
+  assert.equal(loadResult.selectedModels.at(-1)?.id, "grok-4.5", "removed active model should switch before prompt execution");
+}
+
+async function verifyOAuthEmptyCatalogReplacement(provider, loadResult) {
+  nextCatalogResponse = { data: [] };
+  let authUrl;
+  const login = provider.oauth.login({
+    onPrompt: async () => "n",
+    onProgress: () => {},
+    onAuth(auth) {
+      authUrl = new URL(auth.url);
+      const code = "empty-catalog-code";
+      queueValidOAuthToken(code, authUrl);
+      setTimeout(async () => {
+        const callback = new URL(authUrl.searchParams.get("redirect_uri"));
+        callback.searchParams.set("code", code);
+        callback.searchParams.set("state", authUrl.searchParams.get("state"));
+        await originalFetch(callback);
+      }, 10);
+    },
+  });
+  await login;
+  assert.ok(authUrl, "empty-catalog login should open authorization");
+  assert.deepEqual(
+    loadResult.providers.get("xai-auth").models,
+    [],
+    "an authenticated empty catalog must remove every previously registered xAI model",
+  );
+  const notifications = [];
+  const inputResult = await loadResult.handlers.get("input")?.({}, {
+    model: TEST_XAI_MODEL,
+    modelRegistry: { find: () => undefined },
+    ui: { notify: (message, type) => notifications.push({ message, type }) },
+  });
+  assert.deepEqual(inputResult, { action: "handled" }, "no-replacement removal should stop the prompt before agent start");
+  assert.match(notifications.at(-1).message, /no entitled xAI replacement/);
+}
+
+async function verifyCatalogRefreshIsolation() {
+  const previousHome = process.env.HOME;
+  const isolationHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-account-isolation-test-"));
+  process.env.HOME = isolationHome;
+  try {
+    const authPath = path.join(isolationHome, ".pi", "agent", "auth.json");
+    await fs.mkdir(path.dirname(authPath), { recursive: true });
+    await fs.writeFile(authPath, JSON.stringify({
+      "xai-auth": {
+        type: "oauth",
+        access: "expired-old-access",
+        refresh: "old-refresh",
+        expires: 1,
+        tokenEndpoint: "https://auth.x.ai/oauth2/token",
+      },
+    }));
+
+    const loadResult = await loadExtension();
+    const provider = loadResult.providers.get("xai-auth");
+    const catalogBearers = [];
+    let oldRequestStarted;
+    let resolveOldCatalog;
+    const oldStarted = new Promise((resolve) => { oldRequestStarted = resolve; });
+    catalogResponseQueue.push(
+      async (_url, init) => {
+        catalogBearers.push(headerValue(init.headers, "Authorization"));
+        oldRequestStarted();
+        return new Promise((resolve) => {
+          // Deliberately ignore abort and complete late: the catalog commit
+          // guard, not a cooperative transport, must protect the new account.
+          resolveOldCatalog = () => resolve(jsonResponse({ data: [{
+            model: "old-account-only",
+            api_backend: "responses",
+            context_window: 100_000,
+          }] }));
+        });
+      },
+      async (_url, init) => {
+        catalogBearers.push(headerValue(init.headers, "Authorization"));
+        return jsonResponse({ data: [{
+          model: "new-account-only",
+          name: "New Account Only",
+          api_backend: "responses",
+          context_window: 100_000,
+        }] });
+      },
+    );
+
+    const oldSessionRefresh = loadResult.handlers.get("session_start")?.({}, {
+      model: TEST_XAI_MODEL,
+      modelRegistry: {
+        find: (_provider, id) => ({ ...TEST_XAI_MODEL, id }),
+        async getApiKeyAndHeaders() {
+          return { ok: true, apiKey: "OLD_ACCOUNT" };
+        },
+      },
+    });
+    await oldStarted;
+
+    let authUrl;
+    const login = provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        authUrl = new URL(auth.url);
+        const code = "new-account-isolation-code";
+        queueValidOAuthToken(code, authUrl);
+        setTimeout(async () => {
+          const callback = new URL(authUrl.searchParams.get("redirect_uri"));
+          callback.searchParams.set("code", code);
+          callback.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callback);
+        }, 10);
+      },
+    });
+    await login;
+    resolveOldCatalog();
+    await oldSessionRefresh;
+
+    assert.deepEqual(catalogBearers, ["Bearer OLD_ACCOUNT", "Bearer access-new-account-isolation-code"]);
+    assert.deepEqual(
+      loadResult.providers.get("xai-auth").models.map((model) => model.id),
+      ["new-account-only"],
+      "a superseded old-account refresh must not overwrite the new login catalog",
+    );
+    const cache = JSON.parse(await fs.readFile(path.join(isolationHome, ".pi", "agent", "cache", "pi-xai-oauth", "models-v2.json"), "utf8"));
+    assert.deepEqual(cache.models.map((model) => model.id), ["new-account-only"]);
+  } finally {
+    catalogResponseQueue.length = 0;
+    process.env.HOME = previousHome;
+    await fs.rm(isolationHome, { recursive: true, force: true });
+  }
 }
 
 async function verifyLegacyOAuthRefresh(provider) {
@@ -1920,14 +2122,15 @@ async function verifyOAuthCancellationAndCleanup(provider) {
 }
 
 async function main() {
-  process.env.HOME = path.join(repoRoot, ".tmp-empty-home-for-tests");
+  const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-extension-test-"));
+  process.env.HOME = testHome;
   process.env.XAI_API_KEY = "must-not-be-used";
   installFetchMock();
 
   try {
-    const firstLoad = loadExtension();
+    const firstLoad = await loadExtension();
     const { providers, tools } = firstLoad;
-    const secondLoad = loadExtension();
+    const secondLoad = await loadExtension();
     const provider = providers.get("xai-auth");
     assert.ok(provider, "xai-auth provider should be registered");
     assert.equal(secondLoad.tools.size, tools.size, "extension reloads should register tools on the new pi API object");
@@ -1943,12 +2146,20 @@ async function main() {
     assert.equal(grok45?.cost.cacheRead, 0.5);
     assert.equal(grok45?.cost.output, 6);
     assert.equal(grok45?.thinkingLevelMap?.off, null, "Grok 4.5 reasoning cannot be disabled");
-    assert.equal(provider.models.find((model) => model.id === "grok-4.3")?.contextWindow, 1_000_000);
-    assert.equal(provider.models.find((model) => model.id === "grok-build")?.contextWindow, 512_000);
-    assert.equal(provider.models.find((model) => model.id === "grok-composer-2.5-fast")?.contextWindow, 200_000);
-    assert.equal(provider.models.find((model) => model.id === "grok-composer-2.5-fast")?.reasoning, false);
-    assert.equal(provider.models.find((model) => model.id === "grok-4.20-0309-reasoning")?.contextWindow, 2_000_000);
-    assert.ok(provider.models.some((model) => model.id === "grok-4.20-multi-agent-0309"));
+    assert.deepEqual(
+      provider.models.map((model) => model.id),
+      ["grok-4.5"],
+      "offline startup should advertise only the documented curated fallback",
+    );
+    assert.equal(
+      KNOWN_XAI_MODEL_METADATA.find((model) => model.id === "grok-build")?.contextWindow,
+      512_000,
+      "Grok Build compatibility metadata must remain available without being advertised",
+    );
+    assert.equal(
+      KNOWN_XAI_MODEL_METADATA.find((model) => model.id === "grok-composer-2.5-fast")?.reasoning,
+      false,
+    );
 
     await verifyXaiNetworkToolActivation(firstLoad);
     await verifyXaiToolsCommand(firstLoad);
@@ -1966,10 +2177,12 @@ async function main() {
     await verifyXaiImageTransport(provider);
     await verifyXaiStreamErrorPrefix(provider);
 
+    setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
     await verifyCursorToolActivation(firstLoad);
     await verifyCursorToolShims(firstLoad);
 
-    await verifyOAuthCallbackState(provider);
+    await verifyOAuthCallbackState(provider, firstLoad);
+    await verifyOAuthEmptyCatalogReplacement(provider, firstLoad);
     await verifyLegacyOAuthRefresh(provider);
     await verifyOAuthManualRawCodeRejected(provider);
     await verifyOAuthManualCallbackUrlState(provider);
@@ -1982,6 +2195,18 @@ async function main() {
     await verifyOAuthAuthorizationErrorRedaction(provider);
     await verifyOAuthTokenErrorRedaction(provider);
     await verifyOAuthCancellationAndCleanup(provider);
+
+    const beforeUnentitledDirect = requests.length;
+    await assert.rejects(
+      () => createXaiResponse(OAUTH_CREDENTIAL, { model: "grok-4.20-multi-agent-0309", input: "must stay local" }),
+      /not present in the authenticated model catalog/,
+      "direct OAuth helpers must reject a model absent from the active entitlement snapshot",
+    );
+    assert.equal(requests.length, beforeUnentitledDirect, "unentitled direct model rejection must happen before network access");
+
+    // Preserve the pre-#64 routing/tool regression matrix by simulating an
+    // account whose authenticated catalog contains every known model.
+    setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
 
     await firstLoad.commands.get("xai-tools").handler(
       "enable xai_generate_text",
@@ -2129,9 +2354,12 @@ async function main() {
     assert.ok(multiAgentBody.tools.some((tool) => tool.type === "web_search"));
     assert.ok(multiAgentBody.tools.some((tool) => tool.type === "x_search"));
 
+    await verifyCatalogRefreshIsolation();
+
     console.log("verify-extension: ok");
   } finally {
     restoreFetchMock();
+    await fs.rm(testHome, { recursive: true, force: true });
   }
 }
 
