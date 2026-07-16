@@ -8,6 +8,7 @@ node_modules/
 .idea/
 .vscode/
 .omp/
+.pi-subagents/
 .scaffold/
 *.pem
 *.key

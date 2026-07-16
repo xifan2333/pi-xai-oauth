@@ -91,12 +91,13 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 2. It builds an xAI OAuth authorize URL with PKCE challenge
 3. **Your default browser opens automatically** to the xAI login page
 4. After you approve, xAI redirects to the local callback server
-5. The authorization code is exchanged for access + refresh tokens
-6. Tokens are persisted and refreshed automatically
-7. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
-8. Proxy requests identify this client as `pi-xai-oauth` at the installed package version and include xAI's required auth, client-mode, request, conversation, session, and model metadata
+5. pi verifies that the callback state matches the in-memory login attempt before exchanging the authorization code
+6. The returned ID token is verified against xAI's pinned OIDC issuer and first-party JWKS for ES256 signature, signing key, audience, expiry, and nonce
+7. Only then are access + refresh credentials persisted and refreshed automatically
+8. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
+9. Proxy requests identify this client as `pi-xai-oauth` at the installed package version and include xAI's required auth, client-mode, request, conversation, session, and model metadata
 
-If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the redirect URL manually.
+If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the **complete redirect URL** manually. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted.
 
 ---
 
@@ -181,7 +182,9 @@ Fresh logins request xAI's current eight-scope Grok client grant, including `con
 
 > **Need the new conversation scopes?** Run `/login xai-auth` for a fresh authorization grant. If pi finds `~/.grok/auth.json` and asks whether to reuse it, answer **`n`** so the browser login runs; reusing or refreshing an older credential will not add scopes. You do not need to re-login merely to keep using an older credential that already works for your requests.
 >
-> **Choosing a different browser/profile?** The instructions in the TUI explain how. You can copy the shown URL, open your preferred browser manually, and paste it there.
+> **Choosing a different browser/profile?** The instructions in the TUI explain how. You can copy the shown authorization URL and open it manually in your preferred browser.
+>
+> **Remote/headless login:** If the browser cannot reach pi's loopback listener, paste the complete failed redirect URL from the browser address bar into pi. Do not paste only the authorization code: code-only input has no OAuth state and is rejected. A full device-code alternative remains separately tracked in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
 
 ### Re-authenticating
 
@@ -471,9 +474,11 @@ pi runs `open <url>` on macOS / `xdg-open` on Linux to launch your default brows
 If localhost is blocked (VPN, Docker, remote SSH, WSL):
 
 1. After authorizing in the browser, the page will show an error (can't reach localhost).
-2. **Copy the full URL** from the browser's address bar.
+2. **Copy the complete URL** from the browser's address bar. It must include both `code` and the matching `state` query parameter.
 3. **Paste it into the TUI's input field** that says "Paste redirect URL below."
-4. pi parses the authorization code from the URL and completes the login.
+4. pi verifies the state, exchanges the bound code with PKCE, validates the returned OIDC ID token, and then completes login.
+
+Raw authorization-code-only input is intentionally rejected because it cannot prove which browser login attempt produced the code. If you already pasted a raw code, run `/login xai-auth` again before pasting the complete redirect URL. If your environment cannot preserve that URL, use the loopback flow from a reachable browser for now; standardized device-code support is tracked separately in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
 
 ### "Cannot find provider xai-auth"
 
@@ -691,7 +696,8 @@ pi-xai-oauth/
 │       ├── auth.ts           # Grok CLI credential reuse + token resolution
 │       ├── constants.ts      # URLs, OAuth constants, defaults
 │       ├── models.ts         # Model catalog + model-specific compatibility helpers
-│       ├── oauth.ts          # OAuth discovery/login/refresh/callback helpers
+│       ├── oauth.ts          # OAuth login/refresh/callback transaction helpers
+│       ├── oidc.ts           # Pinned discovery/JWKS + ID-token validation
 │       ├── payload.ts        # xAI Responses payload normalization
 │       ├── responses.ts      # xAI request + streaming helpers
 │       ├── routing.ts        # Credential-aware Responses and Images endpoints

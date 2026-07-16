@@ -15,6 +15,9 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Fixed
 
+- Removed the unbound raw authorization-code fallback; pasted completions now require the matching OAuth state and raw-code users receive safe full-redirect-URL migration guidance while device authorization remains tracked separately.
+- Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
+- Stopped reflecting xAI token endpoint response bodies in authentication errors.
 - Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
 - Preserved the official direct `api.x.ai` Images endpoint for OAuth-backed image generation while keeping a future explicit API-key Responses route on the public API.
 - Added the complete CLI-proxy authentication, client-mode, request, conversation, session, and model metadata to every OAuth Responses request, with required values protected from caller overrides.
