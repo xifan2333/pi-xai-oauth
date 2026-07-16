@@ -55,6 +55,7 @@
 - [x] A second PR recheck found five additional Cursor findings; fixed failed-commit stale-cache refusal, expired-pi/fresh-Grok startup fallback, non-abort login fallback application, login/deferred refresh priority, and runtime-entitlement event gating.
 - [x] Added expired-pi/fresh-Grok, Grok-backed deferred-intent, disk-defined-unentitled, invalidation-sidecar, and credential-lookup/login-priority regressions; re-ran focused validation.
 - [x] Independent fault-injection/concurrency re-review verified all second-round fixes and reported `CLEAN — no blockers found`.
+- [x] A third PR recheck found one reasoning-denial issue; explicit `supportsReasoningEffort: false` now overrides known reasoning metadata and ignores supplied effort levels, with a focused regression.
 
 ## Delivery
 - [x] Committed the reviewed implementation as `70436d2`.

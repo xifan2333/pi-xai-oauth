@@ -243,13 +243,17 @@ function normalizeCatalogEntry(value: unknown): EntryResult {
   );
   const reasoning =
     explicitReasoning ??
-    (supportsReasoningEffort === true || !!defaultReasoningLevel || !!suppliedReasoningLevels?.length
-      ? true
-      : known?.reasoning ?? false);
+    (supportsReasoningEffort === false
+      ? false
+      : supportsReasoningEffort === true || !!defaultReasoningLevel || !!suppliedReasoningLevels?.length
+        ? true
+        : known?.reasoning ?? false);
 
   let levelMap: XaiCatalogModel["thinkingLevelMap"];
   if (!reasoning) {
     levelMap = known?.reasoning === false ? known.thinkingLevelMap : { off: "none" };
+  } else if (supportsReasoningEffort === false) {
+    levelMap = thinkingLevelMap([], normalizedId);
   } else if (suppliedReasoningLevels !== undefined) {
     levelMap = thinkingLevelMap(suppliedReasoningLevels, normalizedId);
   } else if (defaultReasoningLevel) {

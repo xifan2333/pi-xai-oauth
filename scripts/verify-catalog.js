@@ -95,6 +95,17 @@ async function main() {
     assert.equal(normalized.thinkingLevelMap.low, "low", "empty/malformed level lists should use capability defaults");
     assert.equal(normalized.thinkingLevelMap.high, "high");
   }
+  const deniedKnownReasoning = normalizeXaiCatalogPayload({ data: [{
+    model: "grok-4.5",
+    api_backend: "responses",
+    context_window: 500_000,
+    supports_reasoning_effort: false,
+    reasoning_efforts: ["low", "high"],
+  }] })[0];
+  assert.equal(deniedKnownReasoning.reasoning, false, "authenticated reasoning denial must override known metadata");
+  assert.equal(deniedKnownReasoning.thinkingLevelMap.off, "none");
+  assert.equal(deniedKnownReasoning.thinkingLevelMap.low, undefined);
+
   const clampedKnownOutput = normalizeXaiCatalogPayload({ data: [{
     model: "grok-4.5",
     api_backend: "responses",
