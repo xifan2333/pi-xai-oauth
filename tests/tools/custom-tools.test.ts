@@ -60,6 +60,7 @@ describe("custom xAI tools", () => {
     ["xai_deep_research", { topic: "guard" }],
     ["xai_code_execution", { code: "print(1)" }],
     ["xai_generate_image", { prompt: "guard" }],
+    ["xai_edit_image", { prompt: "guard", image: [{ path: "secret.png" }] }],
     ["xai_analyze_image", { image: "https://example.test/a.png" }],
     ["xai_critique", { content: "guard" }],
   ])(
@@ -82,6 +83,33 @@ describe("custom xAI tools", () => {
       expect(requests).toHaveLength(0);
     },
   );
+  it("blocks disabled image editing without touching params, credentials, filesystem context, or network", async () => {
+    const params = new Proxy({}, {
+      get() {
+        throw new Error("disabled tool must not inspect inputs");
+      },
+    });
+    const result = await h.tools.get("xai_edit_image").execute(
+      "call",
+      params,
+      undefined,
+      () => {},
+      {
+        model: TEST_MODEL,
+        get cwd() {
+          throw new Error("disabled tool must not inspect cwd");
+        },
+        get sessionManager() {
+          throw new Error("disabled tool must not inspect session storage");
+        },
+        get modelRegistry() {
+          throw new Error("disabled tool must not resolve credentials");
+        },
+      },
+    );
+    expect(result.content[0].text).toMatch(/xai_edit_image is disabled/);
+    expect(requests).toHaveLength(0);
+  });
   it("does not fall back to an API-key environment variable", async () => {
     vi.stubEnv("XAI_API_KEY", "must-not-use");
     setXaiNetworkToolActive(h.api, TEST_MODEL, "xai_generate_text", true);

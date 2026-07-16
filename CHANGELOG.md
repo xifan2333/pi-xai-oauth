@@ -12,6 +12,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added deterministic streaming/direct Responses, catalog, OAuth form, client-mode, media-boundary, reserved-header, bounded-error, and proxy version-gate request-shape coverage.
 - Added bounded authenticated `acceptsImages` / `inputModalities` normalization with explicit input-capability provenance and redacted schema fixtures.
 - Added 246 focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
+- Added the disabled-by-default `xai_edit_image` tool with exact singular/plural Imagine edit payloads, a distinct pinned `/images/edits` route, timeout/cancellation, and redacted errors.
+- Added reusable bounded media primitives for byte-validated PNG/JPEG data URLs and workspace files, source-backed compression, explicit request/response/output budgets, and atomic 0700/0600 Pi-session storage.
 - Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.
 - Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
 - Added pinned, bounded, cancellable RFC 8628 polling with initial wait, server interval plus cumulative `slow_down`, denial/expiry handling, strict secret-safe schema validation, and deterministic timing tests.
