@@ -19,6 +19,7 @@
 - [x] Independent CI review and final parent run proved exact packed Pi 0.80.1/0.80.7 matrices, pack boundaries, npm 11 lock install, unsupported peers, and workflow YAML.
 - [x] Follow-up parity, isolation/flakiness, and simplicity/CI reviews completed; the final focused re-review reported CLEAN.
 - [x] Final package dry run (85 files), diff/staging check, production-boundary check, and workflow parse passed.
+- [x] Rechecked PR automation and applied Cursor Bugbot's accepted fix so the CI coverage run also uses strict unhandled-rejection handling.
 
 ## Delivery
 

@@ -36,7 +36,7 @@ jobs:
       - name: Detect unreviewed releases inside the allowed range
         run: node scripts/verify-compatibility.js registry
       - name: Run focused unit suites with V8 coverage
-        run: npm run test:coverage
+        run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:coverage
       - name: Run real Pi extension-loader smoke
         run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:loader
       - name: Type-check production and test TypeScript
