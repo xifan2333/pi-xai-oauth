@@ -15,7 +15,7 @@ const extension = extensionModule.default || extensionModule;
 const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
   path.join(repoRoot, "extensions", "xai", "images.ts"),
 );
-const { resolveXaiCredential } = jiti(path.join(repoRoot, "extensions", "xai", "auth.ts"));
+const { getStartupXaiCatalogAuth, resolveXaiCredential } = jiti(path.join(repoRoot, "extensions", "xai", "auth.ts"));
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
 const {
   KNOWN_XAI_MODEL_METADATA,
@@ -1462,11 +1462,45 @@ async function verifyOAuthEmptyCatalogReplacement(provider, loadResult) {
   const notifications = [];
   const inputResult = await loadResult.handlers.get("input")?.({}, {
     model: TEST_XAI_MODEL,
-    modelRegistry: { find: () => undefined },
+    modelRegistry: { find: () => TEST_XAI_MODEL },
     ui: { notify: (message, type) => notifications.push({ message, type }) },
   });
   assert.deepEqual(inputResult, { action: "handled" }, "no-replacement removal should stop the prompt before agent start");
   assert.match(notifications.at(-1).message, /no entitled xAI replacement/);
+}
+
+async function verifyStartupAuthFallback() {
+  const previousHome = process.env.HOME;
+  const authHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-startup-auth-test-"));
+  process.env.HOME = authHome;
+  try {
+    const piAuthPath = path.join(authHome, ".pi", "agent", "auth.json");
+    await fs.mkdir(path.dirname(piAuthPath), { recursive: true });
+    await fs.writeFile(piAuthPath, JSON.stringify({
+      "xai-auth": {
+        type: "oauth",
+        access: "expired-pi-access",
+        refresh: "pi-refresh",
+        expires: 1,
+      },
+    }));
+    const grokAuthPath = path.join(authHome, ".grok", "auth.json");
+    await fs.mkdir(path.dirname(grokAuthPath), { recursive: true });
+    await fs.writeFile(grokAuthPath, JSON.stringify({
+      "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {
+        key: "fresh-grok-access",
+        refresh_token: "grok-refresh",
+        expires_at: Date.now() + 60 * 60 * 1000,
+      },
+    }));
+
+    const startup = getStartupXaiCatalogAuth();
+    assert.deepEqual(startup.credential, { access: "fresh-grok-access" });
+    assert.equal(startup.needsRegistryRefresh, true, "expired pi auth should still be refreshed under pi's lock");
+  } finally {
+    process.env.HOME = previousHome;
+    await fs.rm(authHome, { recursive: true, force: true });
+  }
 }
 
 async function verifyCatalogRefreshIsolation() {
@@ -1567,6 +1601,84 @@ async function verifyCatalogRefreshIsolation() {
     catalogResponseQueue.length = 0;
     process.env.HOME = previousHome;
     await fs.rm(isolationHome, { recursive: true, force: true });
+  }
+}
+
+async function verifyLoginWinsDeferredCredentialLookup() {
+  const previousHome = process.env.HOME;
+  const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-xai-login-priority-test-"));
+  process.env.HOME = testHome;
+  try {
+    const authPath = path.join(testHome, ".pi", "agent", "auth.json");
+    await fs.mkdir(path.dirname(authPath), { recursive: true });
+    await fs.writeFile(authPath, JSON.stringify({
+      "xai-auth": { type: "oauth", access: "expired", refresh: "refresh", expires: 1 },
+    }));
+    const cachePath = path.join(testHome, ".pi", "agent", "cache", "pi-xai-oauth", "models-v2.json");
+    await fs.mkdir(path.dirname(cachePath), { recursive: true });
+    await fs.writeFile(cachePath, JSON.stringify({
+      schemaVersion: 1,
+      fetchedAt: Date.now(),
+      models: [KNOWN_XAI_MODEL_METADATA[0]],
+    }));
+
+    const loadResult = await loadExtension();
+    let resolveAuthLookup;
+    let markAuthLookupStarted;
+    const authLookupStarted = new Promise((resolve) => { markAuthLookupStarted = resolve; });
+    const sessionStart = loadResult.handlers.get("session_start")?.({}, {
+      model: TEST_XAI_MODEL,
+      modelRegistry: {
+        find: (_provider, id) => ({ ...TEST_XAI_MODEL, id }),
+        async getApiKeyAndHeaders() {
+          markAuthLookupStarted();
+          return new Promise((resolve) => { resolveAuthLookup = resolve; });
+        },
+      },
+    });
+    await authLookupStarted;
+
+    const catalogBearers = [];
+    catalogResponseQueue.push(async (_url, init) => {
+      catalogBearers.push(headerValue(init.headers, "Authorization"));
+      return jsonResponse({ data: [{
+        model: "login-priority-model",
+        api_backend: "responses",
+        context_window: 100_000,
+      }] });
+    });
+
+    const provider = loadResult.providers.get("xai-auth");
+    let authUrl;
+    const login = provider.oauth.login({
+      onPrompt: async () => "n",
+      onProgress: () => {},
+      onAuth(auth) {
+        authUrl = new URL(auth.url);
+        const code = "login-priority-code";
+        queueValidOAuthToken(code, authUrl);
+        setTimeout(async () => {
+          const callback = new URL(authUrl.searchParams.get("redirect_uri"));
+          callback.searchParams.set("code", code);
+          callback.searchParams.set("state", authUrl.searchParams.get("state"));
+          await originalFetch(callback);
+        }, 10);
+      },
+    });
+    await login;
+    resolveAuthLookup({ ok: true, apiKey: "PRE_LOGIN_ACCOUNT" });
+    await sessionStart;
+
+    assert.deepEqual(catalogBearers, ["Bearer access-login-priority-code"]);
+    assert.deepEqual(
+      loadResult.providers.get("xai-auth").models.map((model) => model.id),
+      ["login-priority-model"],
+      "a deferred lookup started before login must not supersede the login catalog",
+    );
+  } finally {
+    catalogResponseQueue.length = 0;
+    process.env.HOME = previousHome;
+    await fs.rm(testHome, { recursive: true, force: true });
   }
 }
 
@@ -2387,7 +2499,9 @@ async function main() {
     assert.ok(multiAgentBody.tools.some((tool) => tool.type === "web_search"));
     assert.ok(multiAgentBody.tools.some((tool) => tool.type === "x_search"));
 
+    await verifyStartupAuthFallback();
     await verifyCatalogRefreshIsolation();
+    await verifyLoginWinsDeferredCredentialLookup();
 
     console.log("verify-extension: ok");
   } finally {

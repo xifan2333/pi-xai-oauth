@@ -89,19 +89,22 @@ export interface StartupXaiCatalogAuth {
 
 /**
  * Resolve a fresh startup-only OAuth bearer without refreshing or modifying
- * pi's credential store. Expired pi credentials are deferred to the bound
- * model registry so refresh-token rotation remains lock protected.
+ * pi's credential store. Expired pi credentials still defer lock-protected
+ * refresh to the bound model registry, while a fresh official Grok CLI bearer
+ * may be reused read-only for startup catalog selection.
  */
 export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAuth {
+  let needsRegistryRefresh = false;
+  let credentialChangedAt: number | undefined;
   try {
     const authPath = join(getAgentDir(), "auth.json");
     const stored = AuthStorage.create(authPath).get(XAI_PROVIDER_ID);
-    const credentialChangedAt = existsSync(authPath) ? statSync(authPath).mtimeMs : undefined;
+    credentialChangedAt = existsSync(authPath) ? statSync(authPath).mtimeMs : undefined;
     if (stored?.type === "oauth" && typeof stored.access === "string" && stored.access) {
       if (typeof stored.expires === "number" && stored.expires > now) {
         return { credential: { access: stored.access }, needsRegistryRefresh: false, credentialChangedAt };
       }
-      return { credential: null, needsRegistryRefresh: true, credentialChangedAt };
+      needsRegistryRefresh = true;
     }
   } catch {
     // Fall through to read-only official Grok CLI credential reuse.
@@ -110,10 +113,18 @@ export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAut
   const grok = getGrokAuthCredentials();
   if (grok?.access && typeof grok.expires === "number" && grok.expires > now) {
     const grokPath = join(homedir(), ".grok", "auth.json");
-    const credentialChangedAt = existsSync(grokPath) ? statSync(grokPath).mtimeMs : undefined;
-    return { credential: { access: grok.access }, needsRegistryRefresh: false, credentialChangedAt };
+    const grokChangedAt = existsSync(grokPath) ? statSync(grokPath).mtimeMs : undefined;
+    const changedAt =
+      typeof credentialChangedAt === "number" && typeof grokChangedAt === "number"
+        ? Math.max(credentialChangedAt, grokChangedAt)
+        : grokChangedAt ?? credentialChangedAt;
+    return {
+      credential: { access: grok.access },
+      needsRegistryRefresh,
+      credentialChangedAt: changedAt,
+    };
   }
-  return { credential: null, needsRegistryRefresh: false };
+  return { credential: null, needsRegistryRefresh, credentialChangedAt };
 }
 
 /** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */

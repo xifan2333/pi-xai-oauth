@@ -314,6 +314,32 @@ async function main() {
       { fetchImpl: async () => jsonResponse(additionsFixture) },
     );
     assert.equal(directFetch.kind, "success");
+
+    const grokStartupPath = path.join(tempDir, "grok-startup", "models-v2.json");
+    const grokStartup = await selectXaiModelCatalog({
+      credential: { access: TOKEN_SENTINEL },
+      refreshWhenCredentialsAvailable: true,
+      cachePath: grokStartupPath,
+      now,
+      fetchImpl: async () => jsonResponse(additionsFixture),
+    });
+    assert.equal(grokStartup.source, "remote");
+    assert.equal(grokStartup.needsAuthenticatedRefresh, true, "Grok-backed startup must preserve deferred pi refresh intent");
+
+    await fs.writeFile(`${grokStartupPath}.invalidated`, `1:${now}\n`);
+    let markerFetches = 0;
+    const markerSelection = await selectXaiModelCatalog({
+      credential: { access: TOKEN_SENTINEL },
+      cachePath: grokStartupPath,
+      now: now + 1,
+      fetchImpl: async () => {
+        markerFetches++;
+        return jsonResponse(removalsFixture);
+      },
+    });
+    assert.equal(markerSelection.source, "remote", "invalidation sidecar must suppress an otherwise fresh cache");
+    assert.equal(markerFetches, 1);
+    await assert.rejects(fs.stat(`${grokStartupPath}.invalidated`), { code: "ENOENT" });
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

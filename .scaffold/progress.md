@@ -52,6 +52,9 @@
 - [x] Added focused regressions for Composer-only credential lookup, empty/malformed reasoning lists, mixed-case runtime IDs, fresh-cache deferred refresh, and retryable transient failures.
 - [x] Re-ran focused catalog/extension tests, full `npm test`, typecheck, diff check, package inspection, and LSP diagnostics successfully.
 - [x] Independent post-feedback review caught and fixed a superseded retry-deadline race; focused re-review reported `CLEAN`.
+- [x] A second PR recheck found five additional Cursor findings; fixed failed-commit stale-cache refusal, expired-pi/fresh-Grok startup fallback, non-abort login fallback application, login/deferred refresh priority, and runtime-entitlement event gating.
+- [x] Added expired-pi/fresh-Grok, Grok-backed deferred-intent, disk-defined-unentitled, invalidation-sidecar, and credential-lookup/login-priority regressions; re-ran focused validation.
+- [x] Independent fault-injection/concurrency re-review verified all second-round fixes and reported `CLEAN — no blockers found`.
 
 ## Delivery
 - [x] Committed the reviewed implementation as `70436d2`.

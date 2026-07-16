@@ -389,8 +389,35 @@ function validateCachedModel(value: unknown): XaiCatalogModel | undefined {
   };
 }
 
+function invalidationMarkerPath(cachePath: string): string {
+  return `${cachePath}.invalidated`;
+}
+
+async function hasInvalidationMarker(cachePath: string): Promise<boolean> {
+  try {
+    const info = await lstat(invalidationMarkerPath(cachePath));
+    return info.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function writeInvalidationMarker(cachePath: string, now: number): Promise<void> {
+  const markerPath = invalidationMarkerPath(cachePath);
+  await mkdir(dirname(markerPath), { recursive: true, mode: 0o700 });
+  const handle = await open(markerPath, "w", 0o600);
+  try {
+    await handle.writeFile(`${XAI_MODEL_CATALOG_CACHE_SCHEMA}:${now}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await chmod(markerPath, 0o600);
+}
+
 async function readCache(cachePath: string, now: number): Promise<CacheRecord | undefined> {
   try {
+    if (await hasInvalidationMarker(cachePath)) return undefined;
     const info = await lstat(cachePath);
     if (info.isSymbolicLink() || !info.isFile() || info.size <= 0 || info.size > XAI_MODEL_CATALOG_MAX_BYTES) return undefined;
     if ((info.mode & 0o077) !== 0) await chmod(cachePath, 0o600);
@@ -432,6 +459,7 @@ async function writeAtomicJson(
   cachePath: string,
   value: CacheRecord | CacheTombstone,
   commitAllowed: () => boolean = () => true,
+  clearInvalidationMarker = false,
 ): Promise<void> {
   const directory = dirname(cachePath);
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -447,6 +475,9 @@ async function writeAtomicJson(
     if (!commitAllowed()) throw new XaiCatalogCancelledError();
     await rename(tempPath, cachePath);
     await chmod(cachePath, 0o600);
+    if (clearInvalidationMarker) {
+      await unlink(invalidationMarkerPath(cachePath)).catch(() => {});
+    }
   } catch (error) {
     await handle?.close().catch(() => {});
     await unlink(tempPath).catch(() => {});
@@ -469,7 +500,7 @@ async function cacheMatchesRecord(cachePath: string, expected: CacheRecord): Pro
 
 async function restorePreviousCache(cachePath: string, previous: CacheRecord | undefined): Promise<void> {
   if (previous) {
-    await writeAtomicJson(cachePath, previous);
+    await writeAtomicJson(cachePath, previous, () => true, true);
   } else {
     await unlink(cachePath).catch(() => {});
   }
@@ -495,7 +526,8 @@ async function invalidateCache(
     });
   } catch (error) {
     if (error instanceof XaiCatalogCancelledError) return;
-    await unlink(cachePath).catch(() => {});
+    const removed = await unlink(cachePath).then(() => true).catch(() => false);
+    if (!removed) await writeInvalidationMarker(cachePath, now).catch(() => {});
   }
 }
 
@@ -638,7 +670,7 @@ export async function selectXaiModelCatalog(options: XaiCatalogOptions = {}): Pr
     };
     try {
       await withCacheWriteQueue(cachePath, async () => {
-        await writeAtomicJson(cachePath, record, commitAllowed);
+        await writeAtomicJson(cachePath, record, commitAllowed, true);
         if (!commitAllowed()) {
           await restorePreviousCache(cachePath, cache);
           throw new XaiCatalogCancelledError();
@@ -654,6 +686,11 @@ export async function selectXaiModelCatalog(options: XaiCatalogOptions = {}): Pr
         commitAllowed,
         cache,
       );
+      if (!commitAllowed()) throw new XaiCatalogCancelledError();
+      // Invalidation is best-effort. Refuse to advertise remote success if an
+      // older readable entitlement cache could still be revived on reload.
+      if (await readCache(cachePath, now)) await unlink(cachePath).catch(() => {});
+      if (await readCache(cachePath, now)) return fallbackSelection(true);
     }
     if (!commitAllowed()) {
       await withCacheWriteQueue(cachePath, async () => {
@@ -663,7 +700,11 @@ export async function selectXaiModelCatalog(options: XaiCatalogOptions = {}): Pr
       });
       throw new XaiCatalogCancelledError();
     }
-    return { models: cloneModels(outcome.models), source: "remote", needsAuthenticatedRefresh: false };
+    return {
+      models: cloneModels(outcome.models),
+      source: "remote",
+      needsAuthenticatedRefresh: refreshWhenCredentialsAvailable,
+    };
   }
 
   if (!commitAllowed()) throw new XaiCatalogCancelledError();

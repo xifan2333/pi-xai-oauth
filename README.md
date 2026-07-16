@@ -274,7 +274,7 @@ The normalized, token-free last-known-good catalog is stored at:
 - **`/reload`:** recreates the extension and follows the same 15-minute policy; it is not an unconditional network refresh.
 - **Selection:** if a refresh removes the active xAI model, the next turn switches to an entitled xAI replacement when available; otherwise it aborts before sending an unentitled request.
 
-The cache stores only normalized model definitions and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
+The cache stores only normalized model definitions and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. If an exceptional filesystem error prevents replacing or deleting an old cache, a token-free `.invalidated` sidecar suppresses it until a later successful atomic write. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
 
 ### Reasoning / Thinking Levels
 
@@ -562,7 +562,7 @@ If you have the official Grok CLI installed and authenticated (`~/.grok/auth.jso
 
 The xAI model list is entitlement-aware. If a model is missing, the authenticated `/models-v2` response did not include a usable OAuth Responses entry, or discovery fell back to the curated offline catalog. Run `/login xai-auth` to force an account-bound refresh. `/reload` reloads the extension but intentionally reuses a cache younger than 15 minutes; after the TTL it performs a bounded refresh.
 
-A one-shot `pi --list-models` cannot refresh an already-expired stored OAuth token before the model registry is bound. In that case it uses fresh cache or the curated fallback; starting a normal session lets pi refresh the credential under its credential-store lock and then refresh the catalog.
+A one-shot `pi --list-models` cannot refresh an already-expired pi-stored OAuth token before the model registry is bound. It can still use a fresh official Grok CLI bearer when available; otherwise it uses fresh cache or the curated fallback. Starting a normal session lets pi refresh its stored credential under the credential-store lock and then revalidate the catalog.
 
 Do not add custom `xai-auth` entries to `~/.pi/agent/models.json`; that provider ID is owned by this extension. Pi can re-merge user-defined entries when an authenticated catalog is empty. The extension's input and transport guards still refuse any model absent from the active OAuth entitlement snapshot before an xAI request is sent, but such custom entries may remain visible in `/model` because pi exposes no extension API for removing disk-defined models from an otherwise empty provider.
 

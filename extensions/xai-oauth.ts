@@ -16,6 +16,8 @@ export default async function (pi: ExtensionAPI) {
   let needsSessionRefresh = false;
   let deferredRetryAfter = 0;
   let refreshGeneration = 0;
+  let loginCatalogGeneration = 0;
+  let activeLoginRefreshes = 0;
   let refreshAbortController: AbortController | undefined;
   let oauth: ReturnType<typeof createXaiOAuth>;
 
@@ -30,6 +32,17 @@ export default async function (pi: ExtensionAPI) {
     authHeader: true,
     streamSimple: streamSimpleXaiResponses as any,
     oauth: oauth as any,
+  });
+
+  const curatedFallbackSelection = (): XaiCatalogSelection => ({
+    models: CURATED_FALLBACK_MODELS.map((model) => ({
+      ...model,
+      input: [...model.input],
+      cost: { ...model.cost },
+      ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
+    })),
+    source: "curated-fallback",
+    needsAuthenticatedRefresh: true,
   });
 
   const applyCatalog = (selection: XaiCatalogSelection, replaceExisting: boolean) => {
@@ -73,19 +86,35 @@ export default async function (pi: ExtensionAPI) {
   oauth = createXaiOAuth({
     getExistingCredentials: getGrokAuthCredentials,
     onLoginCredentials: async (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => {
-      const { selection, isCurrent } = await refreshCatalog(credentials.access, {
-        forceRefresh: true,
-        signal: callbacks.signal,
-      });
-      if (isCurrent) {
+      const loginGeneration = ++loginCatalogGeneration;
+      activeLoginRefreshes++;
+      try {
+        const { selection, isCurrent } = await refreshCatalog(credentials.access, {
+          forceRefresh: true,
+          signal: callbacks.signal,
+        });
+        // Deferred refreshes cannot start while login catalog work is active.
+        // If another login superseded this one, only the newest login may apply.
+        if (loginGeneration !== loginCatalogGeneration || !isCurrent) return;
         applyCatalog(selection, true);
-        if (selection.needsAuthenticatedRefresh) deferredRetryAfter = Date.now() + 60_000;
+        deferredRetryAfter = selection.needsAuthenticatedRefresh ? Date.now() + 60_000 : 0;
+        callbacks.onProgress?.(
+          selection.source === "remote"
+            ? `Refreshed ${selection.models.length} OAuth-visible xAI model${selection.models.length === 1 ? "" : "s"}.`
+            : "The authenticated xAI model catalog was unavailable; using the curated fallback.",
+        );
+      } catch (error) {
+        if (callbacks.signal?.aborted) throw error;
+        if (loginGeneration === loginCatalogGeneration) {
+          applyCatalog(curatedFallbackSelection(), true);
+          deferredRetryAfter = Date.now() + 60_000;
+          callbacks.onProgress?.(
+            "The authenticated xAI model catalog was unavailable; using the curated fallback.",
+          );
+        }
+      } finally {
+        activeLoginRefreshes--;
       }
-      callbacks.onProgress?.(
-        selection.source === "remote"
-          ? `Refreshed ${selection.models.length} OAuth-visible xAI model${selection.models.length === 1 ? "" : "s"}.`
-          : "The authenticated xAI model catalog was unavailable; using the curated fallback.",
-      );
     },
   });
 
@@ -98,7 +127,8 @@ export default async function (pi: ExtensionAPI) {
   applyCatalog(startupSelection, false);
 
   const refreshDeferredCatalog = async (ctx: any) => {
-    if (!needsSessionRefresh || Date.now() < deferredRetryAfter) return;
+    if (activeLoginRefreshes > 0 || !needsSessionRefresh || Date.now() < deferredRetryAfter) return;
+    const loginGenerationAtStart = loginCatalogGeneration;
     const lookupModel =
       ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
       currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
@@ -115,6 +145,7 @@ export default async function (pi: ExtensionAPI) {
       (authorization.toLowerCase().startsWith("bearer ")
         ? authorization.slice("bearer ".length)
         : "");
+    if (activeLoginRefreshes > 0 || loginGenerationAtStart !== loginCatalogGeneration) return;
     if (!access) {
       deferredRetryAfter = Date.now() + 5_000;
       return;
@@ -146,14 +177,14 @@ export default async function (pi: ExtensionAPI) {
     (pi as any).on("input", async (_event: any, ctx: any) => {
       await refreshDeferredCatalog(ctx);
       const activeModel = ctx?.model;
-      if (
-        activeModel?.provider !== XAI_PROVIDER_ID ||
-        ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, activeModel.id)
-      ) return { action: "continue" };
+      const entitled =
+        typeof activeModel?.id === "string" &&
+        currentModels.some((model) => model.id.toLowerCase() === activeModel.id.toLowerCase());
+      if (activeModel?.provider !== XAI_PROVIDER_ID || entitled) return { action: "continue" };
 
-      const replacement =
-        ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
-        currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
+      const replacement = currentModels
+        .map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id))
+        .find(Boolean);
       if (replacement && (await pi.setModel(replacement))) {
         ctx?.ui?.notify?.(
           `The refreshed xAI catalog no longer includes ${activeModel.id}; switched to ${replacement.id}.`,
@@ -173,13 +204,13 @@ export default async function (pi: ExtensionAPI) {
     (pi as any).on("before_agent_start", async (_event: any, ctx: any) => {
       await refreshDeferredCatalog(ctx);
       let activeModel = ctx?.model;
-      if (
-        activeModel?.provider === XAI_PROVIDER_ID &&
-        !ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, activeModel.id)
-      ) {
-        const replacement =
-          ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
-          currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
+      const entitled =
+        typeof activeModel?.id === "string" &&
+        currentModels.some((model) => model.id.toLowerCase() === activeModel.id.toLowerCase());
+      if (activeModel?.provider === XAI_PROVIDER_ID && !entitled) {
+        const replacement = currentModels
+          .map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id))
+          .find(Boolean);
         if (replacement && (await pi.setModel(replacement))) {
           activeModel = replacement;
           ctx?.ui?.notify?.(
