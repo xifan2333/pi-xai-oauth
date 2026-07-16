@@ -1,40 +1,36 @@
 # Execution Progress
 
-**Project:** pi-xai-oauth Issue #66 device-code authentication
-**Branch:** feature/issue-66-device-code-auth
-**Started:** 2026-07-16
+**Project:** pi-xai-oauth Issue #69 bounded Pi peer compatibility
+**Branch:** feature/issue-69-pi-peer-range
+**Started:** 2026-07-17
 
 ## Research and Baseline
-- [x] Confirmed clean requested branch at current `origin/main` merge commit `13187a7` containing PRs #70/#71/#72/#73.
-- [x] Read AGENTS.md, complete issue #66, merged PR summaries, provider/setup/OAuth/OIDC/auth/catalog code, all verification scripts, README, changelog, and scaffold state.
-- [x] Read pi's complete custom-provider OAuth/device-code documentation, linked examples, callback types, TUI login wiring, persistence, cancellation, and built-in device pollers.
-- [x] Read the pinned official Grok authentication guide plus device/config/flow source at commit `b189869...`.
-- [x] Baseline LSP diagnostics, `npm test`, and `npm run typecheck` pass.
-- [x] Completed parallel official-protocol, local-code, and pi-runtime research plus independent planner/oracle review.
+- [x] Confirmed clean requested branch at current `origin/main` merge commit `665c036` containing PRs #70/#71/#72/#73/#75.
+- [x] Read AGENTS.md, complete issue #69 (no comments), package/lock metadata, all current workflows and verification scripts, README, CHANGELOG, CONTRIBUTING, and scaffold state.
+- [x] Read Pi's complete package, extension, and custom-provider docs plus linked extension/provider/dependency examples.
+- [x] Read official npm peer/lock/`npm ci` guidance, node-semver pre-1.0 caret behavior, and SemVer major-zero policy through delegated primary-source research.
+- [x] Audited compatibility history: 1.2.4 adapted to Pi 0.79.8's Responses guard; 1.3.2 adapted to Pi 0.80's export move; 1.3.3 adapted to the 0.80 extension-loader alias; historical commit `eb3a700` proposed `>=0.80.3 <0.81.0` but did not land on main.
+- [x] Confirmed both Pi packages publish aligned releases through 0.80.7 and no 0.81 release currently exists.
 
-## Accepted Design
-- Browser remains first/default; device is explicit and recommended via text only for WSL/SSH/container/non-TTY contexts.
-- Device and token POSTs are pinned; requests use the current client ID/scopes and truthful package attribution.
-- Device polling sleeps first, honors interval plus cumulative `slow_down`, uses fixed secret-safe errors, supports AbortSignal, and stops at `min(expires_in, 15 minutes)`.
-- Device ID tokens are ignored; successful access/refresh credentials use the existing converter, catalog refresh, refresh rotation, and pi persistence.
-- No live device flow will be attempted without explicit user interaction.
+## Current Findings
+- Baseline wildcard peers overclaimed support; caret dev ranges and the old lock silently tested only resolved 0.80.6.
+- A test-only hard-coded nested Pi dependency path failed clean exact-version installs regardless of API compatibility. It now resolves the public OAuth export from the same Pi dependency context as coding-agent `AuthStorage`, including npm 11 nested layouts.
+- Pi 0.80.1 is the selected real minimum: it is the first published 0.80 release, provides the required compat/loader contract, and passes the full packed tests/typecheck. Pi 0.80.7 is the exact latest allowed/tested endpoint; `<0.81.0` remains the safe upper bound.
 
 ## Implementation
-- [x] Added pinned device constants and a focused module with bounded JSON/schema/URL validation, secret-safe fixed errors, initial-wait polling, cumulative slow-down, expiry cap, request bounds, late-result rejection, and AbortSignal races.
-- [x] Added browser-first pi-native method selection, advisory WSL/SSH/container/headless labels, device UI callback, ignored device ID tokens, and shared credential/catalog completion.
-- [x] Added `verify-device-auth.js` deterministic clock/fetch/sleep coverage for request shape, contexts, UI, cadence, success, denial, expiry, HTTP/schema failures, redaction, cancellation, post-login handoff, and refresh rotation/preservation.
-- [x] Extended the browser integration regression to select browser explicitly and prove device UI is not invoked.
-- [x] Updated README, CHANGELOG, setup copy, AGENTS, and scaffold policy/context.
+- [x] Added central compatibility policy and aligned `>=0.80.1 <0.81.0` peer plus exact 0.80.7 development/lock metadata.
+- [x] Added plain-Node range/drift/pack/unsupported-install verifiers and exact packed matrix runner.
+- [x] Added PR/main CI matrix generated from checked-in exact policy endpoints.
+- [x] Added compatibility, widening, contribution/release, AGENTS, changelog, and scaffold documentation.
 
 ## Review and Validation
-- [x] Initial changed-file LSP diagnostics, strict focused/full tests, typecheck, diff check, and 45-file package inspection pass; JS files retain only pre-existing CommonJS/jiti hints.
-- [x] Four independent correctness, OAuth security/privacy, polling timing/cancellation, and tests/docs/package reviews completed.
-- [x] Accepted fixes: exact pi `Login cancelled` sentinel; incremental 64 KiB stream bound/cancellation; ignore `verification_uri_complete` and reject opaque-code reflection in base URI; observe promises before abort checks; expiry classification; hung request/body/timer and strict race tests; registered-provider catalog and real AuthStorage persistence/nonreplacement tests; corrected setup/docs/scaffold copy.
-- [x] Focused independent re-review verified listener cleanup and encoded/delimiter URI rejection and reported `CLEAN`.
-- [x] Final strict focused/full tests, TypeScript, diff check, changed-source LSP diagnostics, and 45-file npm package inspection pass.
-- [x] No live device flow was attempted; deterministic mocks plus registered-provider and real pi AuthStorage integration supplied validation without touching credentials.
+- [x] Exact 0.80.1/0.80.7 packed runs passed with requested/resolved pair reporting under the initial local resolver.
+- [x] Policy/range, registry drift, packed manifest, unsupported lower/upper diagnostics, full tests, typecheck, LSP hints, diff check, and YAML parse passed before independent review.
+- [x] Four independent dependency, CI, correctness, and docs reviews completed; accepted blockers cover npm 11 nested OAuth module identity, candidate-mode policy validation, unreleased README wording, release-gate ordering, and scaffold accuracy.
+- [x] Re-ran exact 0.80.1 and 0.80.7 packed boundaries under pinned npm 11.6.2; both reported the requested/resolved pair and passed full tests/typecheck.
+- [x] Final `npm test`, `npm run typecheck`, `npm run compatibility:check`, 49-file dry-run package inspection, LSP diagnostics, workflow YAML/schema checks, and `git diff --check` passed.
+- [x] Three focused independent re-reviewers validated npm 11 module identity, candidate mode, CI/script behavior, and docs/scaffold fixes; all reported `CLEAN`.
 
 ## Delivery
-- [x] Committed reviewed implementation as `9968f3b` (`Add xAI device-code authentication`).
-- [x] Pushed `feature/issue-66-device-code-auth` to origin.
-- [x] Opened unmerged PR #75 against `main`, closing #66: https://github.com/BlockedPath/pi-xai-oauth/pull/75
+- [x] Committed the reviewed implementation as `4ec249e` (`fix: bound and test Pi peer compatibility`).
+- [x] Pushed `feature/issue-69-pi-peer-range` and opened unmerged PR #77 against main, closing #69: https://github.com/BlockedPath/pi-xai-oauth/pull/77

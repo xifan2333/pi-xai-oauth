@@ -10,8 +10,11 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 ## Key Commands (Exact, Copy-Paste Ready)
 - Install / setup: `node bin/setup.js` or `npm run setup`
 - Install as pi extension: `pi install npm:pi-xai-oauth`
-- Run TypeScript: `npx tsc --noEmit` (validate)
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-66-device-code-auth`
+- Run TypeScript: `npm run typecheck` (validate)
+- Verify Pi policy/package metadata: `npm run compatibility:check`
+- Verify exact packed Pi boundaries: `npm run compatibility:boundaries`
+- Evaluate an unadvertised Pi candidate: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`
+- Git: Always work on feature branches. Current branch for this work: `feature/issue-69-pi-peer-range`
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
@@ -27,6 +30,9 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Treat successful catalog responses as exact entitlement state; additions appear and removals disappear
 - Keep the normalized token-free catalog cache atomic and apply the documented TTL/stale/fallback policy
 - Preserve known model metadata and compatibility behavior without advertising models absent from the authenticated catalog
+- Keep both Pi peers aligned to the checked-in bounded range in `compatibility/pi-versions.json`
+- Install/report exact Pi matrix versions from a clean packed package; never reuse the repository lockfile for boundary jobs
+- Keep normal Pi dev dependencies exact at the policy's latest tested release and review candidate releases before widening support
 
 **MUST NOT:**
 - Hardcode API keys (use OAuth only)
@@ -59,6 +65,13 @@ pi-xai-oauth/
 │       ├── responses.ts  # xAI request/stream helpers
 │       ├── routing.ts    # Credential-aware Responses/Images endpoint routing
 │       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
+├── compatibility/
+│   └── pi-versions.json # Peer range plus exact minimum/latest matrix policy
+├── scripts/
+│   ├── verify-compatibility.js # Policy/range/registry/pack/unsupported-peer checks
+│   └── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner
+├── .github/workflows/
+│   └── ci.yml           # PR/main policy and exact Pi boundary matrix
 ├── package.json
 ├── tsconfig.json
 ├── README.md
@@ -87,10 +100,12 @@ Start any task by reading:
 - Never retain a device-flow ID token without a device-specific validation policy; browser ID tokens keep nonce-bound OIDC validation
 - Reject malformed, hidden, unsupported-backend, secret-bearing, and known API-key-only catalog entries
 - Keep startup catalog network behavior bounded and use pi's credential lock for expired stored-token refresh
+- Keep compatibility verification in the existing plain-Node test style; do not migrate frameworks for issue #69
+- Use strict peer resolution for supported versions; `--force` is allowed only in isolated negative fixtures that assert npm peer warnings
 
 ## Safety Gates
 - Before any file edit: run `git status` and confirm on correct branch
-- Before committing: ensure `npx tsc --noEmit` passes
+- Before committing: ensure `npm test`, `npm run typecheck`, and both exact compatibility boundaries pass
 - For multi-agent work: always use the subagent tool with explicit parallel or chain mode
 - External state lives in `.scaffold/` — update progress.md after every major step
 

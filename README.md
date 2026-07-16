@@ -37,7 +37,7 @@ This package adds xAI's **account-specific OAuth model catalog** to pi, with **G
 
 > **Latest release:** `pi-xai-oauth` **1.3.5** keeps the highlighted `/xai-tools` row in place after toggling, so multiple tools can be configured without repeatedly navigating from the top. Version 1.3.4 made every network-backed xAI helper an explicit, session-scoped opt-in through `/xai-tools`, including paid image generation, and made disabled tools fail before OAuth credential lookup or network access. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
-> **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
+> **Compatibility note for the current checkout / next release:** aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.81.0` are supported. The exact tested boundaries are 0.80.1 and 0.80.7. Published 1.3.5 predates this bounded peer metadata.
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and fix history.
 
@@ -50,6 +50,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - [Changelog](CHANGELOG.md)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
+- [Pi Compatibility](#pi-compatibility)
 - [Authentication](#authentication)
 - [Usage](#usage)
   - [Switching Models](#switching-models)
@@ -153,6 +154,23 @@ Then optionally configure it as default:
 > ```
 >
 > Use the exact package spec/path shown by `pi list` when removing duplicates.
+
+---
+
+## Pi Compatibility
+
+Both Pi runtime peers use the same bounded range:
+
+```text
+@earendil-works/pi-ai:            >=0.80.1 <0.81.0
+@earendil-works/pi-coding-agent:  >=0.80.1 <0.81.0
+```
+
+The lower boundary is **0.80.1**, the first published Pi 0.80 release. It provides the `@earendil-works/pi-ai/compat` transport used by this extension and the matching Pi 0.80 extension-loader contract. The packed package's complete test and typecheck suites run against exact 0.80.1 in CI. The other matrix boundary is exact **0.80.7**, the latest release inside the allowed line when this policy was reviewed.
+
+The exclusive `<0.81.0` upper bound is deliberate. Pi is pre-1.0, so a new minor line may contain breaking API or loader changes; this project does not claim support until that line passes the packed compatibility suite. npm therefore reports a peer-resolution warning or error during installation for older releases such as 0.79.10 and for the untested 0.81 line, rather than allowing a later runtime loader failure.
+
+Older `pi-xai-oauth` 1.2.4 builds supported Pi 0.79.8's then-current Responses guard. Current code uses the Pi 0.80 compat dispatcher after the 1.3.2 export migration and 1.3.3 loader-resolution fix, so that historical statement is not the current minimum.
 
 ---
 
@@ -612,7 +630,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; 1.3.3 fixes Responses transport resolution under pi 0.80's extension loader and includes Grok 4.5 as the default model. Version 1.3.4 makes all network-backed xAI helpers explicit opt-ins through `/xai-tools`, and **1.3.5** preserves the highlighted row while tools are toggled. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+The current checkout and next release require aligned Pi runtime packages in `>=0.80.1 <0.81.0`; published 1.3.5 predates the bounded metadata. Version 1.3.3 fixed Responses transport resolution under Pi 0.80's extension loader and includes Grok 4.5 as the default model. Version 1.3.4 makes all network-backed xAI helpers explicit opt-ins through `/xai-tools`, and **1.3.5** preserves the highlighted row while tools are toggled. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .
@@ -678,6 +696,12 @@ npm run typecheck
 # Run verification tests
 npm test
 
+# Verify source/lock/range/registry/packed metadata and unsupported peers
+npm run compatibility:check
+
+# Repack, install, report, test, and typecheck both exact Pi boundaries
+npm run compatibility:boundaries
+
 # Install local version in pi
 pi install .
 
@@ -739,11 +763,16 @@ pi-xai-oauth/
 │       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
+├── compatibility/
+│   └── pi-versions.json      # Peer range plus exact minimum/latest CI policy
 ├── scripts/
+│   ├── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner
+│   ├── verify-compatibility.js # Range/lock/registry/pack/unsupported-peer checks
 │   ├── verify-device-auth.js # Deterministic device protocol/timing/cancellation tests
 │   ├── verify-catalog.js     # Catalog normalization/cache tests
 │   ├── verify-extension.js   # Provider/OAuth/transport integration tests
 │   └── verify-setup.js       # Installer/settings tests
+├── .github/workflows/ci.yml  # PR/main policy and exact Pi boundary matrix
 ├── .scaffold/                # Persistent agent state (plan, progress, etc.)
 ├── AGENTS.md                 # AI agent operations manual
 ├── package.json
@@ -751,11 +780,28 @@ pi-xai-oauth/
 └── README.md
 ```
 
-### Publishing
+### Compatibility updates and publishing
+
+`compatibility/pi-versions.json` is the single policy source for the peer range and exact CI endpoints. Normal development stays pinned exactly to the checked-in `latest` release; the minimum is tested only in a clean extracted tarball so the repository lock cannot mask version drift.
+
+When a new Pi patch appears inside the current range:
+
+1. Review both Pi package release notes.
+2. Evaluate it without changing the published claim: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`.
+3. If it passes, update `latest`, both exact Pi dev dependencies, and the lockfile together.
+4. Run `npm run compatibility:check` and `npm run compatibility:boundaries`, then record the result in CHANGELOG.
+
+For a new pre-1.0 minor line, keep the existing upper bound while running the candidate command. Widen the upper bound only after both Pi packages at that exact release pass the packed tests/typecheck and independent review. If raising the minimum, move the older sentinel to the immediately previous published release and document the support break. Never widen based only on Dependabot, typecheck, or a lockfile refresh.
+
+Before publishing, first bump `package.json` and `package-lock.json` together and finalize CHANGELOG. Then validate the exact release tree:
 
 ```bash
-# Bump version in package.json
-# Then:
+npm test
+npm run typecheck
+npm run compatibility:check
+npm run compatibility:boundaries
+npm pack --dry-run --json
+git diff --check
 npm publish
 
 # Users update with:

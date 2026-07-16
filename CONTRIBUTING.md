@@ -47,12 +47,44 @@ cd pi-xai-oauth
 # Install dependencies
 npm install
 
-# Run TypeScript check
-npx tsc --noEmit
+# Run the complete verification suite and TypeScript check
+npm test
+npm run typecheck
+
+# Verify compatibility policy, package metadata, and unsupported peers
+npm run compatibility:check
+
+# Verify the exact minimum/latest Pi boundaries from a clean packed package
+npm run compatibility:boundaries
 
 # Test the CLI
 node bin/setup.js --help
 ```
+
+## Pi Compatibility and Release Changes
+
+The compatibility contract lives in `compatibility/pi-versions.json`. Both Pi peer ranges must remain aligned, normal development dependencies must be exact at the policy's `latest` release, and CI derives its two exact matrix cells from that policy.
+
+To evaluate a future Pi release without advertising it prematurely:
+
+```bash
+node scripts/run-compatibility-matrix.js X.Y.Z --candidate
+```
+
+This changes metadata only inside a temporary extracted tarball. For a patch inside the allowed line, update the policy `latest`, both exact Pi dev dependencies, and `package-lock.json` only after the candidate passes. For a new pre-1.0 minor, keep the existing upper bound during evaluation and widen it only after the exact candidate passes the full packed tests/typecheck and review. If the minimum changes, test the immediately previous published release as unsupported and document the support break.
+
+Every dependency/compatibility PR and release must run:
+
+```bash
+npm test
+npm run typecheck
+npm run compatibility:check
+npm run compatibility:boundaries
+npm pack --dry-run --json
+git diff --check
+```
+
+Do not use `--legacy-peer-deps` or `--force` for supported-version validation. The verifier uses `--force` only inside temporary negative fixtures to prove npm emits peer warnings for unsupported hosts.
 
 ## Style Guidelines
 
