@@ -8,6 +8,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Added
 
+- Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
+- Added pinned, bounded, cancellable RFC 8628 polling with initial wait, server interval plus cumulative `slow_down`, denial/expiry handling, strict secret-safe schema validation, and deterministic timing tests.
 - Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
 - Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
 - Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
@@ -20,10 +22,11 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Derived the proxy client identifier and version from this package's own metadata instead of impersonating a stale Grok CLI release.
 - Made the authenticated account catalog authoritative for OAuth model additions and removals; known static metadata now enriches returned IDs without advertising unreturned models.
 - Made successful login force-refresh and immediately replace the model catalog, while `/reload` follows the documented cache TTL.
+- Kept browser authorization-code + PKCE as the desktop default while recommending device login in remote/headless selector copy without automatically changing the selected method.
 
 ### Fixed
 
-- Removed the unbound raw authorization-code fallback; pasted completions now require the matching OAuth state and raw-code users receive safe full-redirect-URL migration guidance while device authorization remains tracked separately.
+- Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.
 - Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
@@ -31,6 +34,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added the complete CLI-proxy authentication, client-mode, request, conversation, session, and model metadata to every OAuth Responses request, with required values protected from caller overrides.
 - Filtered hidden, malformed, unsupported-backend, secret-bearing, and known API-key-only entries such as `grok-build-0.1` from the OAuth provider catalog.
 - Invalidated stale entitlement data after authentication/permanent failures and prevented a forced post-login refresh from reusing another account's stale cache.
+- Prevented device authorization failures, denial, expiry, cancellation, malformed data, and missing access/refresh tokens from returning or replacing credentials; device ID tokens are not retained without browser nonce validation.
 
 ## 1.3.5 - 2026-07-15
 

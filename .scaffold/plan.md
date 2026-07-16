@@ -1,37 +1,38 @@
-# Implementation Plan: Issue #64 authenticated OAuth model catalog
+# Implementation Plan: Issue #66 device-code authentication
 
-**Branch:** feature/issue-64-oauth-model-catalog
+**Branch:** feature/issue-66-device-code-auth
 **Date:** 2026-07-16
 
 ## Goal
-Replace the release-bound OAuth model advertisement with an authenticated, entitlement-aware `/models-v2` catalog while preserving a small safe fallback, bounded startup, existing routing/header/OIDC behavior, and model-specific compatibility.
+Add secure, cancellable xAI device authorization for remote/headless human login while keeping browser authorization-code + PKCE first/default and preserving OAuth/OIDC, refresh, catalog, routing, and credential behavior from PRs #70-#73.
 
 ## Implementation
-- [x] Add a focused catalog module with defensive `/models-v2` normalization, pinned Responses-backend handling, hidden/API-key-only rejection, and exact replacement semantics for additions/removals.
-- [x] Add an atomic token-free last-known-good cache under pi's user cache directory.
-- [x] Use a 15-minute fresh TTL, an official-aligned bounded 5-second stale refresh, a 7-day stale-if-transient window, durable invalidation for auth/permanent failures, and forced no-stale refresh after successful login.
-- [x] Make the extension factory async so the selected catalog is registered before startup and `--list-models`; re-register immediately after login so `/model` sees new entitlements without `/reload`.
-- [x] Defer expired pi-owned token refresh to `session_start` through the bound model registry/credential lock.
-- [x] Keep direct helper metadata synchronized with the active catalog while preserving Grok 4.5, Build, Composer, 4.20, routing, headers/scopes, payload, and OIDC compatibility logic.
-- [x] Add fixture-based tests for additions, removals, malformed entries, duplicate/API-key-only/unsupported-backend filtering, reasoning metadata, fresh/stale cache, auth/network failures, and fallback choice.
-- [x] Update README, CHANGELOG, AGENTS.md, and scaffold state with refresh/login/reload/model-selection and cache policy.
+- [x] Add pinned device endpoint/protocol constants and a focused dependency-injected device authorization module.
+- [x] Validate incrementally bounded device/token JSON, exact first-party URLs, safe user codes, intervals/expiry, and required access/refresh tokens without reflecting secrets or raw bodies.
+- [x] Poll with an initial wait, at least the server interval, cumulative 5-second `slow_down`, AbortSignal cancellation, bounded requests, and `min(expires_in, 15 minutes)` timeout.
+- [x] Add pi-native browser/device selection with browser first/default; environment detection changes recommendation text only.
+- [x] Send device success through the existing credential converter, post-login catalog refresh, and pi persistence path; ignore device ID tokens.
+- [x] Add deterministic focused protocol/method/context/timing/error/cancellation/rotation tests plus provider/catalog and AuthStorage integration coverage.
+- [x] Document browser versus device choice and `/login`/`/reload`/catalog behavior; update setup, changelog, AGENTS, and scaffold state.
 
-## Non-goals
-- Do not add API-key auth or expose API-key-only models.
-- Do not alter issue #63 credential-aware Responses/Images routing, issue #65 scopes/proxy headers, issue #67 OAuth state/OIDC validation, or issue #66 device login.
-- Do not call paid generation/search/image tools during validation.
-- Do not persist or log access/refresh/ID tokens or raw catalog payloads.
+## Preservation Boundaries
+- Keep browser PKCE S256, callback state matching, raw-code rejection, pinned discovery/token/JWKS, nonce, and ES256 ID-token validation unchanged.
+- Keep current client ID, ordered eight scopes, proxy headers/routing, authenticated catalog exactness, and refresh-token rotation/preservation.
+- Never write/delete/revoke `~/.grok/auth.json`; pi writes its credential only after a selected login succeeds.
+- Never trust response-provided device/token endpoints, arbitrary `*.x.ai` endpoints, or upstream error text.
+- Do not attempt a live device flow without explicit user interaction in this pane.
 
 ## Validation Contract
-- [x] Changed-file LSP diagnostics pass.
-- [x] `npm test` passes.
-- [x] `npm run typecheck` passes.
-- [x] `git diff --check` passes.
-- [x] `npm pack --dry-run --json` contains required runtime/fixtures/docs and excludes credentials/cache/scaffold/subagent artifacts.
-- [x] Safe authenticated GET-only `/models-v2` smoke succeeds when credentials are available without printing credentials.
-- [x] Independent correctness, security, cache, and test reviews complete; accepted fixes are applied and revalidated.
+- [x] Changed-file LSP diagnostics.
+- [x] `node --unhandled-rejections=strict scripts/verify-device-auth.js`.
+- [x] Final `NODE_OPTIONS=--unhandled-rejections=strict npm test` after review fixes.
+- [x] `npm run typecheck`.
+- [x] `git diff --check`.
+- [x] Final `npm pack --dry-run --json` inspection (45 intended files; required runtime/tests/docs present; no scaffold, credentials, caches, or subagent artifacts).
+- [x] Independent correctness/security/timing/test/docs/package review completed; accepted fixes applied.
+- [x] Focused re-review reported `CLEAN`; final full validation passed.
 
 ## Delivery
-- [x] Committed reviewed implementation as `70436d2`.
-- [x] Pushed `feature/issue-64-oauth-model-catalog`.
-- [x] Opened unmerged PR #73 against `main`, closing #64: https://github.com/BlockedPath/pi-xai-oauth/pull/73
+- [ ] Commit on `feature/issue-66-device-code-auth`.
+- [ ] Push to origin.
+- [ ] Open an unmerged PR against `main` closing #66.
