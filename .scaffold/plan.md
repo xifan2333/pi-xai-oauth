@@ -17,7 +17,7 @@ Replace the monolithic behavior verifiers with focused typed Vitest suites while
 7. [x] Establish V8 thresholds from the measured migrated baseline, then document focused/full/watch/smoke/coverage commands.
 8. [x] Update README, CONTRIBUTING, CHANGELOG, AGENTS, scaffold, CI, and package contents.
 9. [x] Run independent parity, isolation/flakiness, CI/compatibility, and simplicity reviews; apply accepted fixes.
-10. [ ] Complete focused re-review, final validation, commit, push, and open an unmerged PR against main. The live registry gate currently reports newly published Pi 0.80.8; changing the required 0.80.1/0.80.7 policy is out of scope.
+10. [x] Complete focused CLEAN re-review, final validation, commit/push, and open unmerged PR #87 against main. The live registry gate reports newly published Pi 0.80.8; changing the required 0.80.1/0.80.7 policy remains out of scope.
 
 ## Validation contract
 
@@ -25,6 +25,6 @@ Replace the monolithic behavior verifiers with focused typed Vitest suites while
 - Real loader smoke and strict unhandled-rejection run pass.
 - V8 coverage meets reviewed baseline thresholds.
 - TypeScript 7 checks production, tests, fixtures, and config.
-- Compatibility policy, registry, pack, unsupported peers, and exact 0.80.1/0.80.7 packed matrices pass.
+- Compatibility policy, pack, unsupported peers, and exact 0.80.1/0.80.7 packed matrices pass; live registry drift is reported explicitly when an unreviewed release appears.
 - Workflow YAML, package dry run, diff check, and parity checklist pass.
 - Production runtime behavior is unchanged except independently reviewed typed testability seams if unavoidable.

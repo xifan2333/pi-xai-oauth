@@ -27,3 +27,7 @@ Current `main` has a 2,622-line `scripts/verify-extension.js` plus device, catal
 ## Main risks
 
 Global fetch/timers/HOME/cwd, loopback callback ports, mutable runtime models, tool WeakMap/WeakSet state, response transport captured at import time, cache write queues, and real image codec behavior are isolated by the suite. Pi 0.80.8 is newly published inside the allowed range; the intentionally unchanged 0.80.1/0.80.7 policy now triggers the external registry-drift gate pending a separate compatibility review.
+
+## Delivery
+
+Reviewed implementation commit `7adfb88` was pushed on `feature/issue-68-vitest-suites`; unmerged PR #87 targets `main` and closes issue #68: https://github.com/BlockedPath/pi-xai-oauth/pull/87

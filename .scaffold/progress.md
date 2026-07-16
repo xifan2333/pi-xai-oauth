@@ -20,9 +20,10 @@
 - [x] Follow-up parity, isolation/flakiness, and simplicity/CI reviews completed; the final focused re-review reported CLEAN.
 - [x] Final package dry run (85 files), diff/staging check, production-boundary check, and workflow parse passed.
 
-## Pending parent orchestration
+## Delivery
 
-- [ ] Commit, push, and open an unmerged PR against main.
+- [x] Committed the reviewed implementation as `7adfb88` (`test: split verifier into Vitest suites`).
+- [x] Pushed `feature/issue-68-vitest-suites` and opened unmerged PR #87 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/87
 
 ## Residual
 
