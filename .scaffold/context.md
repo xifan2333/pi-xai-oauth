@@ -1,33 +1,34 @@
 # Shared Agent Context
 
 **Project:** pi-xai-oauth
-**Branch:** feature/issue-63-auth-aware-routing
+**Branch:** feature/issue-65-proxy-headers
 **Date:** 2026-07-16
 
 ## Issue
-GitHub issue #63 reports that the OAuth-only `xai-auth` provider incorrectly routes ordinary Grok models to `api.x.ai`; only Grok Build and Composer previously used the official session-token proxy.
+GitHub issue #65 reports that fresh OAuth scopes and CLI-proxy request metadata lag the official Grok Build client. PR #70 already made Responses routing credential-aware; this issue changes the protocol metadata sent after routing, not endpoint selection.
 
-## Confirmed Contract
-- OAuth/session-token Responses inference → `https://cli-chat-proxy.grok.com/v1`.
-- Explicit external API-key Responses inference → `https://api.x.ai/v1`.
-- Endpoint selection must not depend on model ID or token shape.
-- Grok Build/Composer payload cleanup, Cursor shims, tool eligibility, and existing proxy headers remain model-specific compatibility behavior.
-- Official Grok Build commit `b189869` deliberately sends image generation for both OAuth and BYOK directly to `xai_api_base_url`.
+## Pinned Official Contract
+- Fresh personal OAuth grants request, in order: `openid profile email offline_access grok-cli:access api:access conversations:read conversations:write`.
+- Refresh exchanges send the existing refresh token and client ID without a new scope parameter.
+- Authenticated CLI-proxy requests require package/client version, `X-XAI-Token-Auth: xai-grok-cli`, `x-authenticateresponse: authenticate-response`, and client mode.
+- Official sampling transport also emits conversation, request, model override, and session identifiers per request.
+- Client mode is `headless` for pi print/explicit non-TUI mode and `interactive` otherwise.
 
-## Completed Implementation
-- Rebased onto current `origin/main`, preserving PR #62's selective `/xai-tools disable` fix.
-- Added one explicit credential/request routing matrix for OAuth-session and API-key Responses plus image generation.
-- Routed provider streaming and all direct OAuth Responses helpers through `cli-chat-proxy.grok.com`.
-- Preserved `api.x.ai` for an explicit future API-key Responses path and both image-generation credential kinds.
-- Kept Build/Composer compatibility payloads, headers, Cursor shims, and WebSearch eligibility model-specific.
-- Added actual-request regression coverage for Grok 4.5, Grok 4.3, Grok 4.20 reasoning, Grok Build, and Composer across streaming and direct helpers.
-- Documented a subscription-only manual smoke test and the image-generation exception.
+## Implementation
+- `extensions/xai/constants.ts` derives client name/version from module-relative `package.json` and carries the eight-scope fresh-login string.
+- `extensions/xai/models.ts` builds the complete OAuth proxy header set for all OAuth models and keeps API-key requests header-free.
+- `extensions/xai/responses.ts` applies stable stream session IDs (with UUID fallback), fresh request IDs, and coherent direct-call conversation/session UUIDs. Required metadata wins over caller headers.
+- Build/Composer capability checks remain limited to payload/tool/shim compatibility; `routing.ts` remains unchanged.
+- `scripts/verify-extension.js` asserts exact actual-fetch request shapes, scope order, legacy refresh forms, client modes, spoof resistance, and API-key absence.
 
-## Validation
-- `npm test`, `npm run typecheck`, and `git diff --check` pass before the final rebase.
-- `npm pack --dry-run --json` includes the routing module and excludes temporary subagent/scaffold/session artifacts.
-- Two fresh-context review rounds found no remaining code or documentation blockers.
-- Live OAuth smoke: Grok Build and Composer passed; Grok 4.5, Grok 4.3, Grok 4.20 reasoning, and the direct Grok 4.5 helper reached the proxy but failed HTTP 426 because the required Grok client-version header was absent.
+## User Migration
+Older credentials may continue refreshing and working, but refresh does not add `conversations:read` or `conversations:write`. To obtain the expanded grant, run `/login xai-auth` and answer `n` if prompted to reuse `~/.grok/auth.json`, forcing a fresh browser authorization.
 
-## Current Focus
-GitHub issue #65 tracks the proxy-header and OAuth-scope alignment exposed by the live smoke. Issue #63 remains focused on endpoint selection.
+## Validation State
+- LSP diagnostics, locked TypeScript 7.0.2 typecheck, `npm test`, and `git diff --check` pass.
+- Package inspection includes the changed runtime files and package metadata and excludes scaffold, subagent, credential, and session artifacts.
+- Live OAuth smoke with `XAI_API_KEY` unset returned `OAUTH_PROXY_OK` for Grok 4.5, Grok Build, and Composer. Grok Build retried one transient upstream 503 before succeeding.
+- Independent review found and fixed client-mode parsing and authorization-spoof gaps; focused regression coverage passes.
+
+## Delivery
+The reviewed implementation is committed on `feature/issue-65-proxy-headers`, pushed to `origin`, and open against `main` as PR #71: https://github.com/BlockedPath/pi-xai-oauth/pull/71. The PR is intentionally unmerged; no paid image generation was invoked.

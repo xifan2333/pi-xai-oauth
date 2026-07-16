@@ -10,11 +10,14 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
 - Kept Grok Build and Composer payload, header, and tool compatibility separate from transport routing.
+- Updated fresh OAuth logins to request xAI's current eight-scope Grok client grant, including conversation read/write access, while leaving existing refresh grants compatible.
+- Derived the proxy client identifier and version from this package's own metadata instead of impersonating a stale Grok CLI release.
 
 ### Fixed
 
 - Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
 - Preserved the official direct `api.x.ai` Images endpoint for OAuth-backed image generation while keeping a future explicit API-key Responses route on the public API.
+- Added the complete CLI-proxy authentication, client-mode, request, conversation, session, and model metadata to every OAuth Responses request, with required values protected from caller overrides.
 
 ## 1.3.5 - 2026-07-15
 

@@ -94,6 +94,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 5. The authorization code is exchanged for access + refresh tokens
 6. Tokens are persisted and refreshed automatically
 7. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
+8. Proxy requests identify this client as `pi-xai-oauth` at the installed package version and include xAI's required auth, client-mode, request, conversation, session, and model metadata
 
 If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the redirect URL manually.
 
@@ -176,6 +177,10 @@ Then, in the pi TUI:
 4. The browser redirects back to pi's local server — you can close the browser tab.
 5. Tokens are stored and refreshed automatically.
 
+Fresh logins request xAI's current eight-scope Grok client grant, including `conversations:read` and `conversations:write`. Credentials created before those scopes were added remain refreshable: refresh preserves the existing grant and does not renegotiate scopes.
+
+> **Need the new conversation scopes?** Run `/login xai-auth` for a fresh authorization grant. If pi finds `~/.grok/auth.json` and asks whether to reuse it, answer **`n`** so the browser login runs; reusing or refreshing an older credential will not add scopes. You do not need to re-login merely to keep using an older credential that already works for your requests.
+>
 > **Choosing a different browser/profile?** The instructions in the TUI explain how. You can copy the shown URL, open your preferred browser manually, and paste it there.
 
 ### Re-authenticating

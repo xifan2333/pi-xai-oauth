@@ -6,6 +6,7 @@ const fs = require("fs/promises");
 const { createJiti } = require("jiti");
 
 const repoRoot = path.resolve(__dirname, "..");
+const packageMetadata = require(path.join(repoRoot, "package.json"));
 const jiti = createJiti(__filename, { interopDefault: true });
 const extensionModule = jiti(path.join(repoRoot, "extensions", "xai-oauth.ts"));
 const extension = extensionModule.default || extensionModule;
@@ -13,6 +14,7 @@ const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
   path.join(repoRoot, "extensions", "xai", "images.ts"),
 );
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
+const { resolveXaiClientMode } = jiti(path.join(repoRoot, "extensions", "xai", "models.ts"));
 const { createXaiResponse } = jiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
 const { resolveXaiRoute } = jiti(path.join(repoRoot, "extensions", "xai", "routing.ts"));
 const { XAI_NETWORK_TOOL_NAMES } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "model-scope.ts"));
@@ -39,7 +41,33 @@ const OAUTH_RESPONSES_MODEL_IDS = [
   "grok-build",
   "grok-composer-2.5-fast",
 ];
-const GROK_CLI_COMPATIBILITY_MODEL_IDS = new Set(["grok-build", "grok-composer-2.5-fast"]);
+const XAI_OAUTH_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  "grok-cli:access",
+  "api:access",
+  "conversations:read",
+  "conversations:write",
+];
+const XAI_PROXY_HEADER_NAMES = [
+  "x-grok-client-identifier",
+  "x-grok-client-version",
+  "x-xai-token-auth",
+  "x-authenticateresponse",
+  "x-grok-client-mode",
+  "x-grok-conv-id",
+  "x-grok-req-id",
+  "x-grok-model-override",
+  "x-grok-session-id",
+];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TEST_PROCESS_CLIENT_MODE = resolveXaiClientMode(
+  process.argv.slice(2),
+  process.stdin.isTTY === true,
+  process.stdout.isTTY === true,
+);
 const XAI_NETWORK_TOOLS = [...XAI_NETWORK_TOOL_NAMES];
 const CUSTOM_XAI_NETWORK_TOOLS = XAI_NETWORK_TOOLS.filter((name) => name !== "WebSearch");
 
@@ -66,7 +94,7 @@ function installFetchMock() {
 
     if (href === "https://auth.x.ai/oauth2/token") {
       const params = new URLSearchParams(String(init.body || ""));
-      requests.push({ url: href, body: Object.fromEntries(params) });
+      requests.push({ url: href, method: init.method, body: Object.fromEntries(params) });
       return jsonResponse({
         access_token: `access-${params.get("code") || "refresh"}`,
         refresh_token: "refresh-token",
@@ -76,7 +104,7 @@ function installFetchMock() {
     }
 
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
-    requests.push({ url: href, headers: init.headers || {}, body, signal: init.signal });
+    requests.push({ url: href, method: init.method, headers: init.headers || {}, body, signal: init.signal });
     if (nextXaiResponse && href.endsWith("/responses")) {
       const response = nextXaiResponse;
       nextXaiResponse = undefined;
@@ -100,7 +128,37 @@ function respondToNextXaiRequest(status, body) {
 function headerValue(headers, name) {
   if (!headers) return undefined;
   if (typeof headers.get === "function") return headers.get(name);
-  return headers[name] || headers[name.toLowerCase()];
+  const expected = name.toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === expected);
+  return entry?.[1];
+}
+
+function proxyHeaderShape(request) {
+  const shape = {};
+  for (const name of XAI_PROXY_HEADER_NAMES) {
+    const value = headerValue(request.headers, name);
+    if (value !== undefined && value !== null) shape[name] = value;
+  }
+  return shape;
+}
+
+function assertOAuthProxyRequestShape(request, modelId, conversationId, label) {
+  assert.equal(headerValue(request.headers, "Content-Type"), "application/json", `${label} should send JSON`);
+  assert.equal(headerValue(request.headers, "Authorization"), "Bearer oauth-token", `${label} should use the OAuth bearer`);
+  const requestId = headerValue(request.headers, "x-grok-req-id");
+  assert.match(requestId || "", UUID_PATTERN, `${label} should include a fresh UUID request id`);
+  assert.deepStrictEqual(proxyHeaderShape(request), {
+    "x-grok-client-identifier": packageMetadata.name,
+    "x-grok-client-version": packageMetadata.version,
+    "x-xai-token-auth": "xai-grok-cli",
+    "x-authenticateresponse": "authenticate-response",
+    "x-grok-client-mode": TEST_PROCESS_CLIENT_MODE,
+    "x-grok-conv-id": conversationId,
+    "x-grok-req-id": requestId,
+    "x-grok-model-override": modelId,
+    "x-grok-session-id": conversationId,
+  });
+  return requestId;
 }
 
 function urlOriginIs(url, expectedOrigin) {
@@ -259,8 +317,8 @@ async function verifyCursorToolShims(loadResult) {
     context: 1,
     limit: 1,
   });
-  assert.match(grepContextResult.content[0].text, /constants\.ts-17-.*XAI_PROVIDER_ID/, "Grep shim should include leading context lines");
-  assert.match(grepContextResult.content[0].text, /constants\.ts:18:.*DEFAULT_XAI_MODEL/, "Grep shim should mark the matched line");
+  assert.match(grepContextResult.content[0].text, /constants\.ts-\d+-.*XAI_PROVIDER_ID/, "Grep shim should include leading context lines");
+  assert.match(grepContextResult.content[0].text, /constants\.ts:\d+:.*DEFAULT_XAI_MODEL/, "Grep shim should mark the matched line");
   await assert.rejects(
     () => runCursorTool(tools, "Grep", { query: "(a+)+$", include: "constants.ts", path: "extensions/xai" }),
     /Unsafe regex pattern/,
@@ -1034,7 +1092,6 @@ async function verifyOAuthResponsesRouting(provider) {
       api: provider.api,
       baseUrl: provider.baseUrl,
     };
-    const isCompatibilityModel = GROK_CLI_COMPATIBILITY_MODEL_IDS.has(modelId);
     const sessionId = `stream-${modelId}`;
 
     const beforeStream = requests.length;
@@ -1048,53 +1105,87 @@ async function verifyOAuthResponsesRouting(provider) {
       .slice(beforeStream)
       .find((entry) => entry.url?.endsWith("/responses"));
     assert.ok(streamRequest, `${modelId} provider stream should send a Responses request`);
+    assert.equal(streamRequest.method, "POST");
     assert.ok(
       urlOriginIs(streamRequest.url, "https://cli-chat-proxy.grok.com"),
       `${modelId} OAuth provider stream should use the session-token proxy`,
     );
     assert.equal(streamRequest.body.model, modelId);
     assert.equal(headerValue(streamRequest.headers, "Authorization"), "Bearer oauth-token");
-    assert.equal(
-      headerValue(streamRequest.headers, "x-xai-token-auth"),
-      isCompatibilityModel ? "xai-grok-cli" : undefined,
-      `${modelId} should ${isCompatibilityModel ? "receive" : "not receive"} Grok CLI token headers`,
+    const streamRequestId = assertOAuthProxyRequestShape(
+      streamRequest,
+      modelId,
+      sessionId,
+      `${modelId} provider stream`,
     );
-    assert.equal(
-      headerValue(streamRequest.headers, "x-grok-model-override"),
-      isCompatibilityModel ? modelId : undefined,
-      `${modelId} should ${isCompatibilityModel ? "receive" : "not receive"} a model override header`,
-    );
-    if (isCompatibilityModel) {
-      assert.equal(headerValue(streamRequest.headers, "x-grok-conv-id"), sessionId);
-    }
     if (modelId === "grok-composer-2.5-fast") {
       assert.equal(streamRequest.body.reasoning, undefined, "Composer 2.5 provider streams should omit reasoning effort");
     }
 
     const beforeDirect = requests.length;
-    await createXaiResponse(OAUTH_CREDENTIAL, { model: modelId, input: "hello" });
+    await createXaiResponse(OAUTH_CREDENTIAL, {
+      model: modelId,
+      input: "hello",
+      previous_response_id: "resp_must_not_be_used_as_session_metadata",
+    });
     const directRequest = requests
       .slice(beforeDirect)
       .find((entry) => entry.url?.endsWith("/responses"));
     assert.ok(directRequest, `${modelId} direct helper should send a Responses request`);
+    assert.equal(directRequest.method, "POST");
     assert.ok(
       urlOriginIs(directRequest.url, "https://cli-chat-proxy.grok.com"),
       `${modelId} OAuth direct helper should use the session-token proxy`,
     );
     assert.equal(directRequest.body.model, modelId);
     assert.equal(headerValue(directRequest.headers, "Authorization"), "Bearer oauth-token");
-    assert.equal(
-      headerValue(directRequest.headers, "x-xai-token-auth"),
-      isCompatibilityModel ? "xai-grok-cli" : undefined,
+    const directConversationId = headerValue(directRequest.headers, "x-grok-conv-id");
+    assert.match(directConversationId || "", UUID_PATTERN, `${modelId} direct helper should mint a conversation UUID`);
+    assert.notEqual(directConversationId, directRequest.body.previous_response_id);
+    const directRequestId = assertOAuthProxyRequestShape(
+      directRequest,
+      modelId,
+      directConversationId,
+      `${modelId} direct helper`,
     );
-    assert.equal(
-      headerValue(directRequest.headers, "x-grok-model-override"),
-      isCompatibilityModel ? modelId : undefined,
-    );
-    if (isCompatibilityModel) {
-      assert.ok(headerValue(directRequest.headers, "x-grok-conv-id"));
-    }
+    assert.notEqual(directRequestId, streamRequestId, `${modelId} stream and direct calls need distinct request ids`);
   }
+}
+
+async function verifyOAuthFallbackAndSpoofProtection(provider) {
+  const modelId = "grok-4.5";
+  const catalogModel = provider.models.find((model) => model.id === modelId);
+  const spoofedHeaders = {
+    "x-grok-client-identifier": "spoofed-client",
+    "x-grok-client-version": "999.0.0",
+    "X-XAI-Token-Auth": "spoofed-token-mode",
+    "x-authenticateresponse": "spoofed-auth-response",
+    "x-grok-client-mode": "spoofed-mode",
+    "x-grok-conv-id": "spoofed-conversation",
+    "x-grok-req-id": "spoofed-request",
+    "x-grok-model-override": "spoofed-model",
+    "x-grok-session-id": "spoofed-session",
+    aUtHoRiZaTiOn: "Bearer spoofed-token",
+  };
+  const model = {
+    ...catalogModel,
+    provider: "xai-auth",
+    api: provider.api,
+    baseUrl: provider.baseUrl,
+    headers: spoofedHeaders,
+  };
+  const before = requests.length;
+  const stream = provider.streamSimple(
+    model,
+    { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+    { apiKey: OAUTH_CREDENTIAL.token, headers: spoofedHeaders },
+  );
+  await stream.result();
+  const request = requests.slice(before).find((entry) => entry.url?.endsWith("/responses"));
+  assert.ok(request, "sessionless OAuth stream should send a Responses request");
+  const conversationId = headerValue(request.headers, "x-grok-conv-id");
+  assert.match(conversationId || "", UUID_PATTERN, "sessionless OAuth stream should mint a conversation UUID");
+  assertOAuthProxyRequestShape(request, modelId, conversationId, "sessionless OAuth stream");
 }
 
 async function verifyApiKeyResponsesRouting() {
@@ -1102,11 +1193,26 @@ async function verifyApiKeyResponsesRouting() {
   await createXaiResponse(API_KEY_CREDENTIAL, { model: "grok-build", input: "hello" });
   const request = requests.slice(before).find((entry) => entry.url?.endsWith("/responses"));
   assert.ok(request, "explicit API-key routing should send a Responses request");
+  assert.equal(request.method, "POST");
   assert.ok(urlOriginIs(request.url, "https://api.x.ai"), "explicit API-key Responses should use api.x.ai");
+  assert.equal(headerValue(request.headers, "Content-Type"), "application/json");
   assert.equal(headerValue(request.headers, "Authorization"), "Bearer api-key-token");
-  assert.equal(headerValue(request.headers, "x-xai-token-auth"), undefined);
-  assert.equal(headerValue(request.headers, "x-grok-model-override"), undefined);
-  assert.equal(headerValue(request.headers, "x-grok-conv-id"), undefined);
+  assert.deepStrictEqual(proxyHeaderShape(request), {}, "explicit API-key Responses must omit proxy-only metadata");
+}
+
+function verifyXaiClientModeResolution() {
+  assert.equal(resolveXaiClientMode([], true, true), "interactive");
+  assert.equal(resolveXaiClientMode(["--model", "grok-4.5"], true, true), "interactive");
+  assert.equal(resolveXaiClientMode(["--mode", "text"], true, true), "interactive");
+  assert.equal(resolveXaiClientMode(["-p", "hello"], true, true), "headless");
+  assert.equal(resolveXaiClientMode(["--print", "hello"], true, true), "headless");
+  assert.equal(resolveXaiClientMode(["--mode", "json"], true, true), "headless");
+  assert.equal(resolveXaiClientMode(["--mode", "rpc"], true, true), "headless");
+  assert.equal(resolveXaiClientMode([], false, true), "headless");
+  assert.equal(resolveXaiClientMode([], true, false), "headless");
+  assert.equal(resolveXaiClientMode(["--mode", "text"], false, true), "headless");
+  assert.equal(resolveXaiClientMode(["--mode=json"], true, true), "interactive");
+  assert.equal(resolveXaiClientMode(["--mode", "--print"], true, true), "interactive");
 }
 
 async function verifyOAuthCallbackState(provider) {
@@ -1136,6 +1242,34 @@ async function verifyOAuthCallbackState(provider) {
   const credentials = await login;
   assert.equal(credentials.access, "access-good-code", "login should ignore the bad callback and exchange the good code");
   assert.ok(authUrl, "login should provide an authorization URL");
+  assert.deepStrictEqual(
+    authUrl.searchParams.get("scope")?.split(" "),
+    XAI_OAUTH_SCOPES,
+    "fresh xAI login should request the frozen eight-scope contract in order",
+  );
+}
+
+async function verifyLegacyOAuthRefresh(provider) {
+  const before = requests.length;
+  const credentials = await provider.oauth.refreshToken({
+    access: "legacy-access-token",
+    refresh: "legacy-refresh-token",
+    expires: Date.now() - 1,
+    tokenEndpoint: "https://auth.x.ai/oauth2/token",
+    tokenType: "Bearer",
+  });
+  const refreshRequest = requests
+    .slice(before)
+    .find((entry) => entry.url === "https://auth.x.ai/oauth2/token" && entry.body?.grant_type === "refresh_token");
+  assert.ok(refreshRequest, "legacy OAuth credentials should refresh through the existing token endpoint");
+  assert.equal(refreshRequest.method, "POST");
+  assert.deepStrictEqual(refreshRequest.body, {
+    grant_type: "refresh_token",
+    refresh_token: "legacy-refresh-token",
+    client_id: "b1a00492-073a-47ea-816f-4c329264a828",
+  });
+  assert.equal(Object.hasOwn(refreshRequest.body, "scope"), false, "refresh must not renegotiate fresh-login scopes");
+  assert.equal(credentials.access, "access-refresh");
 }
 
 async function verifyOAuthManualRawCode(provider) {
@@ -1259,9 +1393,11 @@ async function main() {
     await verifyXaiImageCompaction();
 
     verifyCredentialAwareRouteMatrix();
+    verifyXaiClientModeResolution();
     await verifyOpenAIResponsesTransport();
     await verifyXaiResponsesTransport(provider);
     await verifyOAuthResponsesRouting(provider);
+    await verifyOAuthFallbackAndSpoofProtection(provider);
     await verifyApiKeyResponsesRouting();
 
     await verifyXaiImageTransport(provider);
@@ -1271,6 +1407,7 @@ async function main() {
     await verifyCursorToolShims(firstLoad);
 
     await verifyOAuthCallbackState(provider);
+    await verifyLegacyOAuthRefresh(provider);
     await verifyOAuthManualRawCode(provider);
     await verifyOAuthManualCallbackUrlState(provider);
     await verifyOAuthManualWrongStateIgnored(provider);

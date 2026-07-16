@@ -1,30 +1,40 @@
-# Implementation Plan: Issue #63 OAuth-aware xAI routing
+# Implementation Plan: Issue #65 OAuth scopes and proxy metadata
 
-**Branch:** feature/issue-63-auth-aware-routing
+**Branch:** feature/issue-65-proxy-headers
 **Date:** 2026-07-16
 
 ## Goal
-Route xAI Responses traffic by credential kind rather than model ID: OAuth/session credentials use the official Grok CLI proxy, while a future explicit API-key path stays on the public xAI API.
+Align fresh xAI OAuth grants and every OAuth Responses request with the pinned official Grok Build scope and CLI-proxy metadata contracts without changing credential-aware endpoint routing.
 
 ## Implementation
-- [x] Add a credential- and operation-aware routing module.
-- [x] Separate Grok Build/Composer compatibility classification from endpoint selection.
-- [x] Return tagged OAuth credentials from the current OAuth-only auth resolver.
-- [x] Route provider streaming and every direct Responses helper through the shared resolver.
-- [x] Audit image generation through the resolver while preserving the official direct `api.x.ai` exception.
-- [x] Add table-driven regression coverage for Grok 4.5, Grok 4.3, Grok 4.20, Grok Build, Composer, API-key routing, and image generation.
-- [x] Document a subscription-only manual smoke test and update the Unreleased changelog.
+- [x] Request the frozen eight-scope OAuth contract for fresh browser logins.
+- [x] Preserve legacy refresh behavior without scope renegotiation.
+- [x] Derive the truthful `pi-xai-oauth` client identifier and version from package metadata.
+- [x] Add required auth-response and interactive/headless client-mode headers to every OAuth proxy request.
+- [x] Add request, conversation, session, and model headers for streaming and direct Responses calls.
+- [x] Keep required proxy metadata authoritative over caller-supplied headers.
+- [x] Keep API-key Responses free of OAuth proxy-only metadata.
+- [x] Add exact outgoing-request, OAuth-scope, refresh-body, spoof-protection, and client-mode regression coverage.
+- [x] Document refresh compatibility and the fresh re-login path for new scopes.
 
 ## Validation Contract
-- [x] `npm run typecheck`
-- [x] `npm test`
-- [x] `git diff --check`
-- [x] `npm pack --dry-run --json` includes `extensions/xai/routing.ts` and excludes temporary subagent/scaffold/session artifacts.
-- [x] Two fresh-context review rounds completed; round 2 found no code or documentation blockers.
-- [x] Manual subscription-only smoke test is documented.
-- [ ] Live subscription-only smoke passes: executed on 2026-07-16 with OAuth present and `XAI_API_KEY` absent; Grok Build and Composer passed, while Grok 4.5, Grok 4.3, Grok 4.20, and the direct Grok 4.5 helper reached the proxy but failed with HTTP 426 because standard models did not send the required Grok client-version header. Header alignment remains the separately scoped non-goal tracked by GitHub issue #65.
+- [x] Focused extension verification passes.
+- [x] `npm run typecheck` passes.
+- [x] Full `npm test` passes.
+- [x] `git diff --check` passes after documentation/scaffold updates.
+- [x] Parent-owned LSP diagnostics pass on the final TypeScript source (the persistent server cache was cross-checked with fresh exact-source copies).
+- [x] `npm pack --dry-run --json` contains package metadata and changed runtime files while excluding scaffold, subagent, credential, and session artifacts.
+- [x] Parent-owned safe live OAuth smoke returned `OAUTH_PROXY_OK` for Grok 4.5, Grok Build, and Composer; no image generation was invoked.
+- [x] Independent focused review/fix passes completed; client-mode parsing and authorization-spoof findings were fixed and revalidated.
 
 ## Scope Decisions
-- Header and OAuth scope alignment remain out of scope per issue #63.
-- Image generation remains at `https://api.x.ai/v1/images/generations` for OAuth and API-key credentials, matching official Grok Build commit `b189869`.
-- This package remains OAuth-only; API-key routing is an internal, explicitly tagged future path.
+- Endpoint selection remains credential-aware in `extensions/xai/routing.ts`; model checks do not select transport.
+- Grok Build/Composer payload and local tool compatibility remain model-specific and unchanged.
+- Existing refresh tokens continue using their original grant; only a fresh login can add newly requested scopes.
+- Direct Responses calls mint their own coherent conversation/session UUID instead of treating `previous_response_id` as a session identifier.
+- The OAuth-only provider does not add API-key fallback and never logs or exposes bearer tokens.
+
+## Delivery
+- [x] Committed and pushed `feature/issue-65-proxy-headers`.
+- [x] Opened PR #71 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/71
+- [x] Left the PR unmerged for external review.

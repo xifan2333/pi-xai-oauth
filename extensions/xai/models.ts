@@ -1,5 +1,10 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { DEFAULT_XAI_MODEL, XAI_GROK_CLIENT_VERSION, XAI_PROVIDER_ID } from "./constants";
+import {
+  DEFAULT_XAI_MODEL,
+  XAI_CLIENT_IDENTIFIER,
+  XAI_CLIENT_VERSION,
+  XAI_PROVIDER_ID,
+} from "./constants";
 import { resolveXaiRoute, type XaiCredentialKind } from "./routing";
 
 export const MODELS = [
@@ -113,27 +118,55 @@ export function isGrokCliCompatibilityModel(modelId: string): boolean {
   return normalized === "grok-build" || normalized === "grok-composer-2.5-fast";
 }
 
-/** Build Grok CLI proxy headers for Composer/Grok Build requests. */
-export function grokCliProxyHeaders(modelId: string, sessionId?: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    "x-grok-client-identifier": "pi-xai-oauth",
-    "x-grok-client-version": XAI_GROK_CLIENT_VERSION,
-    "x-xai-token-auth": "xai-grok-cli",
-    "x-grok-model-override": normalizedXaiModelId(modelId),
-  };
-  if (sessionId) headers["x-grok-conv-id"] = sessionId;
-  return headers;
+export type XaiClientMode = "interactive" | "headless";
+
+export interface XaiProxyRequestMetadata {
+  conversationId: string;
+  requestId: string;
+  sessionId: string;
 }
 
-/** Build extra request headers needed for a credential and xAI model. */
-export function xaiModelRequestHeaders(
+/** Resolve truthful Grok proxy client mode from pi's arguments and terminal state. */
+export function resolveXaiClientMode(
+  argv: readonly string[] = process.argv.slice(2),
+  stdinIsTTY = process.stdin.isTTY === true,
+  stdoutIsTTY = process.stdout.isTTY === true,
+): XaiClientMode {
+  let outputMode: "text" | "json" | "rpc" | undefined;
+  let printRequested = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--mode" && index + 1 < argv.length) {
+      const candidate = argv[++index];
+      if (candidate === "text" || candidate === "json" || candidate === "rpc") outputMode = candidate;
+    } else if (arg === "-p" || arg === "--print") {
+      printRequested = true;
+    }
+  }
+
+  if (outputMode === "json" || outputMode === "rpc" || printRequested) return "headless";
+  return stdinIsTTY && stdoutIsTTY ? "interactive" : "headless";
+}
+
+/** Build the complete metadata contract for an OAuth request to the Grok CLI proxy. */
+export function xaiProxyRequestHeaders(
   modelId: string,
   credentialKind: XaiCredentialKind,
-  sessionId?: string,
+  metadata: XaiProxyRequestMetadata,
 ): Record<string, string> {
-  return credentialKind === "oauth-session" && isGrokCliCompatibilityModel(modelId)
-    ? grokCliProxyHeaders(modelId, sessionId)
-    : {};
+  if (credentialKind !== "oauth-session") return {};
+
+  return {
+    "x-grok-client-identifier": XAI_CLIENT_IDENTIFIER,
+    "x-grok-client-version": XAI_CLIENT_VERSION,
+    "X-XAI-Token-Auth": "xai-grok-cli",
+    "x-authenticateresponse": "authenticate-response",
+    "x-grok-client-mode": resolveXaiClientMode(),
+    "x-grok-conv-id": metadata.conversationId,
+    "x-grok-req-id": metadata.requestId,
+    "x-grok-model-override": normalizedXaiModelId(modelId),
+    "x-grok-session-id": metadata.sessionId,
+  };
 }
 
 /** Return true when xAI accepts an explicit Responses reasoning effort. */
