@@ -23,7 +23,10 @@ Replace wildcard Pi peers with one aligned, bounded, evidence-backed pre-1.0 ran
 Both peers use `>=0.80.1 <0.81.0`. Pi 0.80.1 is the first published 0.80 release, contains the required compat export/loader-alias contract, and passes the full packed `npm test` plus typecheck suite. Exact 0.80.7 is the latest allowed/tested endpoint. The exclusive upper bound remains `<0.81.0` until a reviewed 0.81 release passes as a temporary candidate before metadata is widened.
 
 ## Preservation Boundaries
-All runtime behavior from issues #63-#67 remains unchanged. This task may change dependency/test/CI/docs metadata and a brittle test-only import path, but not production OAuth, catalog, transport, or tool behavior.
+All runtime behavior from issues #63-#67 remains unchanged. This task changed dependency/test/CI/docs metadata and a brittle test-only import path, but no production OAuth, catalog, transport, or tool behavior.
+
+## Delivery
+Reviewed implementation commit `4ec249e` was pushed on `feature/issue-69-pi-peer-range`; unmerged PR #77 targets `main` and closes issue #69: https://github.com/BlockedPath/pi-xai-oauth/pull/77
 
 ## Research Artifacts
 - `.pi-subagents/artifacts/outputs/cba02feb-19ae-45cf-92de-c9e58a1ea772/research.md`

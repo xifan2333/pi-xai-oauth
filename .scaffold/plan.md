@@ -33,6 +33,6 @@ Publish an evidence-backed, bounded, aligned compatibility contract for `@earend
 - [x] Independent dependency, CI, correctness, and docs reviews; accepted fixes applied and focused re-review reported CLEAN.
 
 ## Delivery
-- [ ] Commit reviewed changes.
-- [ ] Push `feature/issue-69-pi-peer-range`.
-- [ ] Open an unmerged PR against `main` closing #69.
+- [x] Committed reviewed changes as `4ec249e` (`fix: bound and test Pi peer compatibility`).
+- [x] Pushed `feature/issue-69-pi-peer-range`.
+- [x] Opened unmerged PR #77 against `main`, closing #69: https://github.com/BlockedPath/pi-xai-oauth/pull/77

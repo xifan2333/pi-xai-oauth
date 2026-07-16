@@ -32,4 +32,5 @@
 - [x] Three focused independent re-reviewers validated npm 11 module identity, candidate mode, CI/script behavior, and docs/scaffold fixes; all reported `CLEAN`.
 
 ## Delivery
-- [ ] Commit, push, and open an unmerged PR against main closing #69.
+- [x] Committed the reviewed implementation as `4ec249e` (`fix: bound and test Pi peer compatibility`).
+- [x] Pushed `feature/issue-69-pi-peer-range` and opened unmerged PR #77 against main, closing #69: https://github.com/BlockedPath/pi-xai-oauth/pull/77
