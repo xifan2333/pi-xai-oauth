@@ -11,6 +11,7 @@ import {
   XAI_PROVIDER_ID,
 } from "./constants";
 import { ensureFreshXaiCredentials } from "./oauth";
+import type { XaiCredential } from "./routing";
 
 function parseExpiry(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -77,18 +78,20 @@ export function getGrokAuthCredentials(): OAuthCredentials | null {
   return null;
 }
 
-/** Resolve an xAI OAuth access token from pi context or reusable Grok CLI credentials. */
-export async function resolveXaiAuthToken(ctx: any): Promise<string | null> {
+/** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */
+export async function resolveXaiCredential(ctx: any): Promise<XaiCredential | null> {
   const registryModel = ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL);
   if (registryModel && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
     const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
-    if (auth?.ok && auth.apiKey) return auth.apiKey;
+    if (auth?.ok && auth.apiKey) return { kind: "oauth-session", token: auth.apiKey };
     const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
-    if (authorization.toLowerCase().startsWith("bearer ")) return authorization.slice("bearer ".length);
+    if (authorization.toLowerCase().startsWith("bearer ")) {
+      return { kind: "oauth-session", token: authorization.slice("bearer ".length) };
+    }
   }
-  if (ctx?.apiKey) return ctx.apiKey;
+  if (ctx?.apiKey) return { kind: "oauth-session", token: ctx.apiKey };
 
   const credentials = getGrokAuthCredentials();
   if (!credentials?.access) return null;
-  return (await ensureFreshXaiCredentials(credentials)).access;
+  return { kind: "oauth-session", token: (await ensureFreshXaiCredentials(credentials)).access };
 }

@@ -14,6 +14,7 @@ const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
 );
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
 const { createXaiResponse } = jiti(path.join(repoRoot, "extensions", "xai", "responses.ts"));
+const { resolveXaiRoute } = jiti(path.join(repoRoot, "extensions", "xai", "routing.ts"));
 const { XAI_NETWORK_TOOL_NAMES } = jiti(path.join(repoRoot, "extensions", "xai", "tools", "model-scope.ts"));
 const originalFetch = global.fetch;
 const requests = [];
@@ -23,12 +24,22 @@ const TEST_XAI_MODEL = {
   id: "grok-4.5",
   provider: "xai-auth",
   api: "xai-responses",
-  baseUrl: "https://api.x.ai/v1",
+  baseUrl: "https://cli-chat-proxy.grok.com/v1",
   headers: {},
   reasoning: true,
   input: ["text", "image"],
 };
 
+const OAUTH_CREDENTIAL = { kind: "oauth-session", token: "oauth-token" };
+const API_KEY_CREDENTIAL = { kind: "api-key", token: "api-key-token" };
+const OAUTH_RESPONSES_MODEL_IDS = [
+  "grok-4.5",
+  "grok-4.3",
+  "grok-4.20-0309-reasoning",
+  "grok-build",
+  "grok-composer-2.5-fast",
+];
+const GROK_CLI_COMPATIBILITY_MODEL_IDS = new Set(["grok-build", "grok-composer-2.5-fast"]);
 const XAI_NETWORK_TOOLS = [...XAI_NETWORK_TOOL_NAMES];
 const CUSTOM_XAI_NETWORK_TOOLS = XAI_NETWORK_TOOLS.filter((name) => name !== "WebSearch");
 
@@ -66,7 +77,7 @@ function installFetchMock() {
 
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     requests.push({ url: href, headers: init.headers || {}, body, signal: init.signal });
-    if (nextXaiResponse && urlOriginIs(href, "https://api.x.ai")) {
+    if (nextXaiResponse && href.endsWith("/responses")) {
       const response = nextXaiResponse;
       nextXaiResponse = undefined;
       return jsonResponse(response.body, { status: response.status });
@@ -183,7 +194,7 @@ async function runTool(
   name,
   params = {},
   expectedText = "OK",
-  requestOrigin = "https://api.x.ai",
+  requestOrigin = "https://cli-chat-proxy.grok.com",
   model = TEST_XAI_MODEL,
 ) {
   const controller = new AbortController();
@@ -849,7 +860,7 @@ async function verifyXaiImageTransport(provider) {
   ];
 
   const beforeDirect = requests.length;
-  await createXaiResponse("oauth-token", { model: TEST_XAI_MODEL.id, input, max_output_tokens: 32 });
+  await createXaiResponse(OAUTH_CREDENTIAL, { model: TEST_XAI_MODEL.id, input, max_output_tokens: 32 });
   const directRequest = requests.slice(beforeDirect).find((entry) => entry.url?.endsWith("/responses"));
   assert.ok(directRequest, "createXaiResponse should send the prepared payload");
   assert.ok(inlineImageBase64Bytes(directRequest.body) <= MAX_XAI_INLINE_IMAGE_BASE64_BYTES);
@@ -972,7 +983,7 @@ async function verifyXaiResponsesTransport(provider) {
           id: "grok-4.3",
           provider: "xai-auth",
           api: "xai-responses",
-          baseUrl: "https://api.x.ai/v1",
+          baseUrl: "https://cli-chat-proxy.grok.com/v1",
           headers: {},
           reasoning: true,
           input: ["text", "image"],
@@ -987,35 +998,115 @@ async function verifyXaiResponsesTransport(provider) {
   assert.ok(typeof message === "string", "xAI provider stream should expose a terminal result message");
   assert.equal(compatDispatcherCalled, false, "xAI stream should bypass conflicting compat API registrations");
   assert.ok(
-    requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://api.x.ai")),
-    "xAI stream should reach the xAI endpoint through the OpenAI Responses transport",
+    requests.slice(before).some((entry) => entry.url && urlOriginIs(entry.url, "https://cli-chat-proxy.grok.com")),
+    "xAI OAuth streams should reach the session-token proxy through the OpenAI Responses transport",
   );
 }
 
 
-async function verifyCliModelStreamRouting(provider) {
-  const composer = provider.models.find((model) => model.id === "grok-composer-2.5-fast");
-  const model = {
-    ...composer,
-    provider: "xai-auth",
-    api: provider.api,
-    baseUrl: provider.baseUrl,
-  };
+function verifyCredentialAwareRouteMatrix() {
+  const oauthResponses = resolveXaiRoute("oauth-session", "responses");
+  assert.equal(oauthResponses.baseUrl, "https://cli-chat-proxy.grok.com/v1");
+  assert.equal(oauthResponses.url, "https://cli-chat-proxy.grok.com/v1/responses");
+
+  const apiKeyResponses = resolveXaiRoute("api-key", "responses");
+  assert.equal(apiKeyResponses.baseUrl, "https://api.x.ai/v1");
+  assert.equal(apiKeyResponses.url, "https://api.x.ai/v1/responses");
+
+  for (const credentialKind of ["oauth-session", "api-key"]) {
+    const imageRoute = resolveXaiRoute(credentialKind, "image-generation");
+    assert.equal(imageRoute.baseUrl, "https://api.x.ai/v1", `${credentialKind} image generation should stay direct`);
+    assert.equal(
+      imageRoute.url,
+      "https://api.x.ai/v1/images/generations",
+      `${credentialKind} image generation should use the public Images endpoint`,
+    );
+  }
+}
+
+async function verifyOAuthResponsesRouting(provider) {
+  for (const modelId of OAUTH_RESPONSES_MODEL_IDS) {
+    const catalogModel = provider.models.find((model) => model.id === modelId);
+    assert.ok(catalogModel, `${modelId} should exist in the provider catalog`);
+    const model = {
+      ...catalogModel,
+      provider: "xai-auth",
+      api: provider.api,
+      baseUrl: provider.baseUrl,
+    };
+    const isCompatibilityModel = GROK_CLI_COMPATIBILITY_MODEL_IDS.has(modelId);
+    const sessionId = `stream-${modelId}`;
+
+    const beforeStream = requests.length;
+    const stream = provider.streamSimple(
+      model,
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+      { apiKey: OAUTH_CREDENTIAL.token, sessionId },
+    );
+    await stream.result();
+    const streamRequest = requests
+      .slice(beforeStream)
+      .find((entry) => entry.url?.endsWith("/responses"));
+    assert.ok(streamRequest, `${modelId} provider stream should send a Responses request`);
+    assert.ok(
+      urlOriginIs(streamRequest.url, "https://cli-chat-proxy.grok.com"),
+      `${modelId} OAuth provider stream should use the session-token proxy`,
+    );
+    assert.equal(streamRequest.body.model, modelId);
+    assert.equal(headerValue(streamRequest.headers, "Authorization"), "Bearer oauth-token");
+    assert.equal(
+      headerValue(streamRequest.headers, "x-xai-token-auth"),
+      isCompatibilityModel ? "xai-grok-cli" : undefined,
+      `${modelId} should ${isCompatibilityModel ? "receive" : "not receive"} Grok CLI token headers`,
+    );
+    assert.equal(
+      headerValue(streamRequest.headers, "x-grok-model-override"),
+      isCompatibilityModel ? modelId : undefined,
+      `${modelId} should ${isCompatibilityModel ? "receive" : "not receive"} a model override header`,
+    );
+    if (isCompatibilityModel) {
+      assert.equal(headerValue(streamRequest.headers, "x-grok-conv-id"), sessionId);
+    }
+    if (modelId === "grok-composer-2.5-fast") {
+      assert.equal(streamRequest.body.reasoning, undefined, "Composer 2.5 provider streams should omit reasoning effort");
+    }
+
+    const beforeDirect = requests.length;
+    await createXaiResponse(OAUTH_CREDENTIAL, { model: modelId, input: "hello" });
+    const directRequest = requests
+      .slice(beforeDirect)
+      .find((entry) => entry.url?.endsWith("/responses"));
+    assert.ok(directRequest, `${modelId} direct helper should send a Responses request`);
+    assert.ok(
+      urlOriginIs(directRequest.url, "https://cli-chat-proxy.grok.com"),
+      `${modelId} OAuth direct helper should use the session-token proxy`,
+    );
+    assert.equal(directRequest.body.model, modelId);
+    assert.equal(headerValue(directRequest.headers, "Authorization"), "Bearer oauth-token");
+    assert.equal(
+      headerValue(directRequest.headers, "x-xai-token-auth"),
+      isCompatibilityModel ? "xai-grok-cli" : undefined,
+    );
+    assert.equal(
+      headerValue(directRequest.headers, "x-grok-model-override"),
+      isCompatibilityModel ? modelId : undefined,
+    );
+    if (isCompatibilityModel) {
+      assert.ok(headerValue(directRequest.headers, "x-grok-conv-id"));
+    }
+  }
+}
+
+async function verifyApiKeyResponsesRouting() {
   const before = requests.length;
-  const stream = provider.streamSimple(
-    model,
-    { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
-    { apiKey: "oauth-token", sessionId: "session-test" },
-  );
-  await stream.result();
-  const request = requests.slice(before).find((entry) => entry.url && urlOriginIs(entry.url, "https://cli-chat-proxy.grok.com"));
-  assert.ok(request, "Composer 2.5 provider streams should route to the Grok CLI endpoint");
-  assert.equal(request.body.model, "grok-composer-2.5-fast");
-  assert.equal(request.body.reasoning, undefined, "Composer 2.5 provider streams should not send reasoning effort");
-  assert.equal(headerValue(request.headers, "Authorization"), "Bearer oauth-token");
-  assert.equal(headerValue(request.headers, "x-xai-token-auth"), "xai-grok-cli");
-  assert.equal(headerValue(request.headers, "x-grok-model-override"), "grok-composer-2.5-fast");
-  assert.equal(headerValue(request.headers, "x-grok-conv-id"), "session-test");
+  await createXaiResponse(API_KEY_CREDENTIAL, { model: "grok-build", input: "hello" });
+  const request = requests.slice(before).find((entry) => entry.url?.endsWith("/responses"));
+  assert.ok(request, "explicit API-key routing should send a Responses request");
+  assert.ok(urlOriginIs(request.url, "https://api.x.ai"), "explicit API-key Responses should use api.x.ai");
+  assert.equal(headerValue(request.headers, "Authorization"), "Bearer api-key-token");
+  assert.equal(headerValue(request.headers, "x-xai-token-auth"), undefined);
+  assert.equal(headerValue(request.headers, "x-grok-model-override"), undefined);
+  assert.equal(headerValue(request.headers, "x-grok-conv-id"), undefined);
 }
 
 async function verifyOAuthCallbackState(provider) {
@@ -1146,6 +1237,7 @@ async function main() {
     assert.ok(firstLoad.commands.has("xai-tools"), "the xAI paid-tool command should be registered");
     assert.equal(secondLoad.commands.size, firstLoad.commands.size, "extension reloads should register commands on the new pi API object");
     assert.equal(provider.api, "xai-responses");
+    assert.equal(provider.baseUrl, "https://cli-chat-proxy.grok.com/v1", "xai-auth should register the OAuth session endpoint");
     const grok45 = provider.models.find((model) => model.id === "grok-4.5");
     assert.ok(grok45, "grok-4.5 should be registered in the xAI model catalog");
     assert.equal(grok45?.contextWindow, 500_000);
@@ -1166,13 +1258,15 @@ async function main() {
     await verifyXaiImageLifecycle();
     await verifyXaiImageCompaction();
 
+    verifyCredentialAwareRouteMatrix();
     await verifyOpenAIResponsesTransport();
     await verifyXaiResponsesTransport(provider);
+    await verifyOAuthResponsesRouting(provider);
+    await verifyApiKeyResponsesRouting();
 
     await verifyXaiImageTransport(provider);
     await verifyXaiStreamErrorPrefix(provider);
 
-    await verifyCliModelStreamRouting(provider);
     await verifyCursorToolActivation(firstLoad);
     await verifyCursorToolShims(firstLoad);
 
@@ -1248,7 +1342,9 @@ async function main() {
       authContext(selectedGrok43),
     );
     assert.match(providerErrorResult.content[0].text, /xAI API Error 403/);
-    const providerErrorRequests = requests.slice(beforeProviderError).filter((entry) => urlOriginIs(entry.url, "https://api.x.ai"));
+    const providerErrorRequests = requests
+      .slice(beforeProviderError)
+      .filter((entry) => urlOriginIs(entry.url, "https://cli-chat-proxy.grok.com"));
     assert.equal(providerErrorRequests.length, 1, "a provider failure should result in one xAI request, not an implicit retry loop");
     assert.equal(providerErrorRequests[0].body.model, selectedGrok43.id, "provider errors should still use the active selected model");
 
@@ -1270,7 +1366,13 @@ async function main() {
     assert.equal(imageContent[1].type, "input_text");
 
     const requestsBeforeImageGeneration = requests.length;
-    const { body: imageGenBody } = await runTool(tools, "xai_generate_image", { prompt: "a crisp diagram" }, /Generated 1 image/);
+    const { body: imageGenBody } = await runTool(
+      tools,
+      "xai_generate_image",
+      { prompt: "a crisp diagram" },
+      /Generated 1 image/,
+      "https://api.x.ai",
+    );
     assert.equal(requests.length, requestsBeforeImageGeneration + 1, "enabled image generation should send exactly one xAI request");
     assert.equal(imageGenBody.model, "grok-imagine-image-quality");
     const imageTool = tools.get("xai_generate_image");
@@ -1286,6 +1388,7 @@ async function main() {
       "xai_generate_image",
       { prompt: "three crisp diagrams", n: 3 },
       /Generated 1 image/,
+      "https://api.x.ai",
     );
     assert.equal(imageBatchBody.n, 3, "image generation should forward an explicit n value");
     assert.equal(Object.hasOwn(imageBatchBody, "size"), false, "explicit n requests should still omit size");

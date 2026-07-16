@@ -11,9 +11,9 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { readdir, readFile, rm, stat } from "fs/promises";
 import { join, relative, sep } from "path";
 import { Type } from "typebox";
-import { resolveXaiAuthToken } from "../auth";
+import { resolveXaiCredential } from "../auth";
 import { XAI_CURSOR_AUTO_TOOL_NAMES, XAI_PROVIDER_ID } from "../constants";
-import { isGrokCliProxyModel } from "../models";
+import { isGrokCliCompatibilityModel } from "../models";
 import { createXaiResponse } from "../responses";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiToolError } from "./common";
@@ -328,7 +328,7 @@ export function syncCursorToolShimsForModel(api: any, model?: Model<Api>) {
     return;
   }
   const withoutCursorShims = activeTools.filter((toolName) => !XAI_CURSOR_AUTO_TOOL_NAMES.includes(toolName));
-  const shouldEnableCursorShims = model?.provider === XAI_PROVIDER_ID && isGrokCliProxyModel(model.id);
+  const shouldEnableCursorShims = model?.provider === XAI_PROVIDER_ID && isGrokCliCompatibilityModel(model.id);
   const nextTools = shouldEnableCursorShims
     ? uniqueToolNames([...withoutCursorShims, ...XAI_CURSOR_AUTO_TOOL_NAMES])
     : withoutCursorShims;
@@ -542,18 +542,18 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
         const query = firstString(params?.query, params?.search_term, params?.value);
         if (!query) return xaiToolError("Error: WebSearch requires a query.");
-        if (ctx?.model?.provider !== XAI_PROVIDER_ID || !isGrokCliProxyModel(ctx.model.id)) {
+        if (ctx?.model?.provider !== XAI_PROVIDER_ID || !isGrokCliCompatibilityModel(ctx.model.id)) {
           return xaiToolError("Error: WebSearch requires an active xAI Grok Build or Composer model. No xAI request was sent.");
         }
         if (!isXaiNetworkToolActive(pi, "WebSearch")) {
           return xaiToolError("Error: WebSearch is disabled. Run /xai-tools to enable it and request it explicitly. No xAI request was sent.");
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
 
         try {
           const data = await createXaiResponse(
-            apiKey,
+            credential,
             {
               model: ctx.model.id,
               input: `Search the web for: ${query}\n\nSummarize the key results with sources where available.`,

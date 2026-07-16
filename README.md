@@ -77,7 +77,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Coding models** — Grok Build and Composer 2.5 Fast are available from the same `xai-auth` provider
 - **Reasoning support** — configurable thinking levels: `low` / `medium` / `high`
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
-- **Modern API** — uses OpenAI's `responses` API format via `https://api.x.ai/v1`, with Grok CLI endpoint routing for CLI-only models
+- **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint for every Grok model; the public `api.x.ai` Responses endpoint is reserved for a future explicit API-key path
 
 > **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `xai_web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
 
@@ -85,7 +85,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 
 ## How It Works
 
-`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you run `pi /login xai-auth`:
+`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you launch `pi` and run `/login xai-auth` in the TUI:
 
 1. pi starts a local HTTP callback server on `127.0.0.1`
 2. It builds an xAI OAuth authorize URL with PKCE challenge
@@ -93,6 +93,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 4. After you approve, xAI redirects to the local callback server
 5. The authorization code is exchanged for access + refresh tokens
 6. Tokens are persisted and refreshed automatically
+7. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
 
 If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the redirect URL manually.
 
@@ -158,7 +159,13 @@ Then optionally configure it as default:
 ## Authentication
 
 ```bash
-pi /login xai-auth
+pi
+```
+
+Then, in the pi TUI:
+
+```text
+/login xai-auth
 ```
 
 **What happens:**
@@ -176,7 +183,13 @@ pi /login xai-auth
 Tokens are refreshed automatically, but if you want to force a fresh login:
 
 ```bash
-pi /login xai-auth
+pi
+```
+
+Then, in the pi TUI:
+
+```text
+/login xai-auth
 ```
 
 The existing `~/.grok/auth.json` prompt lets you either reuse or re-authenticate.
@@ -203,8 +216,8 @@ pi --model grok-4.5 "Write a poem about Rust"
 |----------|-------------|
 | `grok-4.5` | **Default.** xAI flagship for coding, agentic tasks, and knowledge work; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
 | `grok-4.3` | Full reasoning, 1M context. |
-| `grok-build` | Grok Build coding model via the Grok CLI OAuth endpoint, 512K context. |
-| `grok-composer-2.5-fast` | Composer 2.5 Fast coding model via the Grok CLI OAuth endpoint, 200K context. |
+| `grok-build` | Grok Build coding model with Cursor/Grok CLI tool compatibility, 512K context. |
+| `grok-composer-2.5-fast` | Composer 2.5 Fast coding model with Cursor/Grok CLI tool compatibility, 200K context. |
 | `grok-4.20-0309-reasoning` | Grok 4.20 with automatic reasoning, 2M context. |
 | `grok-4.20-0309-non-reasoning` | Grok 4.20 fast responses, 2M context. |
 | `grok-4.20-multi-agent-0309` | Grok 4.20 multi-agent research model, 2M context. |
@@ -254,7 +267,7 @@ pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 | **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
 | **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). `grok-build` and `grok-composer-2.5-fast` are routed through xAI's Grok CLI OAuth endpoint using the same X account OAuth token. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Because `xai-auth` is OAuth-only, Grok 4.5, Grok 4.3, every Grok 4.20 variant, Grok Build, and Composer all send Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. Grok Build and Composer still receive their model-specific compatibility payloads, headers, and local tool shims. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
 
 ### Grok 4.5 source notes
 
@@ -418,7 +431,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 }
 ```
 
-> **Note:** Every tool in this section makes a separate xAI request and can consume credits or rate limits. Image generation is charged per generated image. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
+> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. Responses-based helpers use the OAuth session proxy. Image generation is the intentional exception: matching official Grok Build behavior, it sends the OAuth bearer directly to `https://api.x.ai/v1/images/generations` and is charged per generated image. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
 
 ---
 
@@ -429,7 +442,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | Install | `pi install npm:pi-xai-oauth` |
 | One-command setup | `npx pi-xai-oauth` |
 | Try ephemeral | `pi -e npm:pi-xai-oauth` |
-| Authenticate | `pi /login xai-auth` |
+| Authenticate | Launch `pi`, then run `/login xai-auth` in the TUI |
 | Update | `pi update npm:pi-xai-oauth` |
 | Remove | `pi remove npm:pi-xai-oauth` |
 | List packages | `pi list` |
@@ -490,14 +503,22 @@ If an image cannot be decoded or compacted safely, the request fails locally wit
 Tokens refresh automatically, but if something goes wrong:
 
 ```bash
-pi /login xai-auth
+pi
+```
+
+Then, in the pi TUI:
+
+```text
+/login xai-auth
 ```
 
 This re-runs the full OAuth flow and replaces your stored tokens.
 
 ### "Does this need an xAI API key?"
 
-**No.** This uses OAuth — the same authentication as the official Grok CLI and chat interface. You sign in with your xAI / Grok account credentials. No API key required.
+**No.** This uses OAuth — the same authentication as the official Grok CLI and chat interface. You sign in with your xAI / Grok account credentials. No API key required. Responses requests use the OAuth session proxy; this package does not fall back to `XAI_API_KEY` or expose an API-key provider.
+
+The paid `xai_generate_image` helper is a deliberate transport exception: the official Grok Build client sends both OAuth and BYOK Imagine requests directly to the public Images endpoint. This does not change normal chat or Responses-helper routing.
 
 If you have the official Grok CLI installed and authenticated (`~/.grok/auth.json`), this package detects and reuses those credentials automatically.
 
@@ -621,6 +642,40 @@ pi install .
 git checkout -b feature/your-task
 ```
 
+### Subscription-only OAuth routing smoke test
+
+Use an account with an active SuperGrok/subscription entitlement but **no API-team credits or spending limit configured**. Install this checkout once, authenticate through `xai-auth` in the pi TUI, then run one short streaming request for each model family:
+
+```bash
+pi remove npm:pi-xai-oauth && pi install .
+pi
+```
+
+Then, in the pi TUI:
+
+```text
+/login xai-auth
+```
+
+After login completes, from your shell run:
+
+```bash
+pi -p --model grok-4.5 "Reply exactly: OAUTH_PROXY_OK"
+pi -p --model grok-4.3 "Reply exactly: OAUTH_PROXY_OK"
+pi -p --model grok-4.20-0309-reasoning "Reply exactly: OAUTH_PROXY_OK"
+pi -p --model grok-build "Reply exactly: OAUTH_PROXY_OK"
+pi -p --model grok-composer-2.5-fast "Reply exactly: OAUTH_PROXY_OK"
+```
+
+Expected passing result for this manual smoke test: each command returns `OAUTH_PROXY_OK` without an API-team credit or spending-limit error. Then verify the separate direct Responses helper in a Grok 4.5 TUI session:
+
+```text
+/xai-tools enable xai_generate_text
+Use xai_generate_text with model grok-4.5 and prompt "Reply exactly: DIRECT_OAUTH_PROXY_OK".
+```
+
+Do not enable `xai_generate_image` for this smoke test. Image generation intentionally uses the direct public Images endpoint, is billed/limited separately, and is not evidence for subscription-only Responses routing. Never print or record OAuth tokens while testing.
+
 ### Project Structure
 
 ```
@@ -630,10 +685,11 @@ pi-xai-oauth/
 │   └── xai/                  # Domain modules: OAuth, auth, models, payloads, tools
 │       ├── auth.ts           # Grok CLI credential reuse + token resolution
 │       ├── constants.ts      # URLs, OAuth constants, defaults
-│       ├── models.ts         # Model catalog + routing helpers
+│       ├── models.ts         # Model catalog + model-specific compatibility helpers
 │       ├── oauth.ts          # OAuth discovery/login/refresh/callback helpers
 │       ├── payload.ts        # xAI Responses payload normalization
 │       ├── responses.ts      # xAI request + streaming helpers
+│       ├── routing.ts        # Credential-aware Responses and Images endpoints
 │       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)

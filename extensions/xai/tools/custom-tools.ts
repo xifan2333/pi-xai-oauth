@@ -1,9 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { resolveXaiAuthToken } from "../auth";
-import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL, XAI_IMAGES_GENERATIONS_URL } from "../constants";
+import { resolveXaiCredential } from "../auth";
+import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL } from "../constants";
 import { normalizeXaiImageInput } from "../images";
 import { grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
+import { resolveXaiRoute } from "../routing";
 import { extractResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiTextInput, xaiToolError } from "./common";
 import { activeXaiModel, isXaiNetworkToolActive, type XaiNetworkToolName } from "./model-scope";
@@ -49,8 +50,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         if (!activeModelForXaiTool(pi, ctx, "xai_generate_text")) {
           return xaiToolDisabledError("xai_generate_text", { prompt: params?.prompt });
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
         }
 
@@ -87,7 +88,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
 
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, body, _signal);
+          data = await createXaiResponse(credential, body, _signal);
         } catch (error) {
           const status = statusFromError(error);
           return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, {
@@ -127,8 +128,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         if (!activeModelForXaiTool(pi, ctx, "xai_multi_agent")) {
           return xaiToolDisabledError("xai_multi_agent", { query: params?.query });
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { agents_used: 0, response_id: "" });
         }
 
@@ -138,7 +139,7 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         const prompt = `You are leading a team of ${agentsUsed} researchers. Research: ${params.query}`;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, {
+          data = await createXaiResponse(credential, {
             model: "grok-4.20-multi-agent-0309",
             input: xaiTextInput(prompt),
             reasoning: { effort },
@@ -179,14 +180,14 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_web_search");
         if (!activeModel) return xaiToolDisabledError("xai_web_search", { query: params?.query });
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
         }
         const prompt = `Search the web for: ${params.query}. Summarize the top results with sources, key facts, dates, and recent developments. Prioritize authoritative sources.`;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, {
+          data = await createXaiResponse(credential, {
             model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: "medium" },
@@ -219,8 +220,8 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: { query?: string; count?: number; since?: string; until?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_x_search");
         if (!activeModel) return xaiToolDisabledError("xai_x_search", { query: params?.query });
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
         }
         let prompt = `You have native real-time access to X (Twitter) posts and trends via Grok's built-in X search. Use it to find the most relevant recent posts about: ${params.query}.
@@ -243,7 +244,7 @@ Be specific and cite examples where helpful.`;
         if (params.until) xSearchTool.to_date = params.until;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, {
+          data = await createXaiResponse(credential, {
             model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: "medium" },
@@ -272,14 +273,14 @@ Be specific and cite examples where helpful.`;
         if (!activeModelForXaiTool(pi, ctx, "xai_code_execution")) {
           return xaiToolDisabledError("xai_code_execution", { code: params?.code });
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { code: params?.code });
         }
         const prompt = `Execute this Python code and show the result or output:\n\n${params.code}`;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, {
+          data = await createXaiResponse(credential, {
             model: DEFAULT_XAI_MODEL,
             input: xaiTextInput(prompt),
             reasoning: { effort: "low" },
@@ -326,8 +327,8 @@ Be specific and cite examples where helpful.`;
           });
         }
 
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { prompt: params?.prompt });
         }
         const body: Record<string, any> = {
@@ -340,7 +341,8 @@ Be specific and cite examples where helpful.`;
 
         let data: any;
         try {
-          data = await postXaiJson(apiKey, XAI_IMAGES_GENERATIONS_URL, body, _signal);
+          const route = resolveXaiRoute(credential.kind, "image-generation");
+          data = await postXaiJson(credential.token, route.url, body, _signal);
         } catch (error) {
           const status = statusFromError(error);
           return xaiToolError(`xAI Image API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, prompt: params.prompt });
@@ -373,8 +375,8 @@ Be specific and cite examples where helpful.`;
         if (!activeModelForXaiTool(pi, ctx, "xai_critique")) {
           return xaiToolDisabledError("xai_critique", { content: params?.content });
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { content: params?.content });
         }
         const aspect = params.aspect || "overall quality and correctness";
@@ -382,7 +384,7 @@ Be specific and cite examples where helpful.`;
         const prompt = `Provide a ${tone} critique focused on ${aspect}.\n\nContent to critique:\n${params.content}\n\nStructure your response with:\n- Strengths\n- Weaknesses / Issues\n- Specific suggestions for improvement\n- Overall assessment (score 1-10)\nUse step-by-step reasoning.`;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, { model: DEFAULT_XAI_MODEL, input: xaiTextInput(prompt), reasoning: { effort: "high" } }, _signal);
+          data = await createXaiResponse(credential, { model: DEFAULT_XAI_MODEL, input: xaiTextInput(prompt), reasoning: { effort: "high" } }, _signal);
         } catch (error) {
           const status = statusFromError(error);
           return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status });
@@ -409,8 +411,8 @@ Be specific and cite examples where helpful.`;
         if (!activeModelForXaiTool(pi, ctx, "xai_analyze_image")) {
           return xaiToolDisabledError("xai_analyze_image", { image: params?.image });
         }
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { image: params?.image });
         }
         const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
@@ -418,7 +420,7 @@ Be specific and cite examples where helpful.`;
         const input = [{ role: "user", content: [{ type: "input_image", image_url: imageInput, detail: "high" }, { type: "input_text", text: question }] }];
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, { model: DEFAULT_XAI_MODEL, input, reasoning: { effort: "medium" } }, _signal);
+          data = await createXaiResponse(credential, { model: DEFAULT_XAI_MODEL, input, reasoning: { effort: "medium" } }, _signal);
         } catch (error) {
           const status = statusFromError(error);
           return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, image: params.image });
@@ -444,15 +446,15 @@ Be specific and cite examples where helpful.`;
       execute: async (_toolCallId: string, params: { topic?: string; depth?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_deep_research");
         if (!activeModel) return xaiToolDisabledError("xai_deep_research", { topic: params?.topic });
-        const apiKey = await resolveXaiAuthToken(ctx);
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { topic: params?.topic });
         }
         const depth = params.depth || "high";
         const prompt = `Conduct deep ${depth} research on: ${params.topic}.\n\nSteps:\n1. Gather key facts, recent developments, and authoritative sources.\n2. Analyze different perspectives and potential biases.\n3. Synthesize findings into clear conclusions.\n4. Provide actionable insights and open questions.\n\nUse step-by-step reasoning and cite sources where possible.`;
         let data: any;
         try {
-          data = await createXaiResponse(apiKey, {
+          data = await createXaiResponse(credential, {
             model: activeModel.id,
             input: xaiTextInput(prompt),
             reasoning: { effort: depth === "high" ? "high" : "medium" },

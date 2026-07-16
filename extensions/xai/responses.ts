@@ -2,8 +2,9 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { isGrokCliProxyModel, xaiBaseUrlForModel, xaiModelForRequest, xaiModelRequestHeaders, xaiResponsesUrlForModel } from "./models";
+import { isGrokCliCompatibilityModel, xaiModelForRequest, xaiModelRequestHeaders } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
+import { resolveXaiRoute, type XaiCredential } from "./routing";
 
 type AssistantStreamEvent = Record<string, any>;
 
@@ -103,9 +104,9 @@ function streamErrorMessage(model: Model<Api>, error: unknown) {
   };
 }
 
-/** POST a JSON body to an xAI endpoint with OAuth bearer auth. */
+/** POST a JSON body to an xAI endpoint with bearer authentication. */
 export async function postXaiJson(
-  apiKey: string,
+  authToken: string,
   url: string,
   body: Record<string, any>,
   signal?: AbortSignal,
@@ -115,7 +116,7 @@ export async function postXaiJson(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${authToken}`,
       ...headers,
     },
     body: JSON.stringify(body),
@@ -132,21 +133,27 @@ export async function postXaiJson(
   return response.json();
 }
 
-/** Create a single xAI Responses API response with model-aware routing. */
-export async function createXaiResponse(apiKey: string, body: Record<string, any>, signal?: AbortSignal): Promise<any> {
-  const model = xaiModelForRequest(typeof body.model === "string" ? body.model : undefined);
+/** Create one xAI Responses result using explicit credential-aware routing. */
+export async function createXaiResponse(
+  credential: XaiCredential,
+  body: Record<string, any>,
+  signal?: AbortSignal,
+): Promise<any> {
+  const model = xaiModelForRequest(typeof body.model === "string" ? body.model : undefined, credential.kind);
+  const route = resolveXaiRoute(credential.kind, "responses");
   const rewritten = rewriteXaiResponsesPayload(body, model);
   const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
-  const usesGrokCliProxy = isGrokCliProxyModel(model.id);
-  const grokCliSessionId = usesGrokCliProxy
+  const usesGrokCliCompatibility =
+    credential.kind === "oauth-session" && isGrokCliCompatibilityModel(model.id);
+  const grokCliSessionId = usesGrokCliCompatibility
     ? (typeof body.previous_response_id === "string" && body.previous_response_id) || randomUUID()
     : undefined;
   return postXaiJson(
-    apiKey,
-    xaiResponsesUrlForModel(model.id),
+    credential.token,
+    route.url,
     payload,
     signal,
-    xaiModelRequestHeaders(model.id, grokCliSessionId),
+    xaiModelRequestHeaders(model.id, credential.kind, grokCliSessionId),
   );
 }
 
@@ -167,19 +174,25 @@ export async function createXaiResponse(apiKey: string, body: Record<string, any
  * @returns A forwarding assistant stream compatible with pi's async iterator and `result()` contract.
  */
 export function streamSimpleXaiResponses(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
-  // Prefer pi's stable session id for cache routing. For Grok CLI proxy only,
-  // fall back to a per-stream id so x-grok-conv-id is always present.
-  // Docs: Responses API uses body.prompt_cache_key; Chat Completions / CLI
-  // proxy also benefit from the x-grok-conv-id header.
+  // The registered xai-auth provider is OAuth-only, so bind its stream to
+  // session-token routing instead of inferring credential provenance from the
+  // bearer string. Build/Composer keep their separate compatibility headers.
+  const credentialKind = "oauth-session" as const;
+  const route = resolveXaiRoute(credentialKind, "responses");
+
+  // Prefer pi's stable session id for cache routing. For Grok CLI compatibility
+  // models, fall back to a per-stream id so x-grok-conv-id is always present.
+  // Docs: Responses API uses body.prompt_cache_key; the proxy also benefits
+  // from the x-grok-conv-id header.
   // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
   const sessionId = options?.sessionId;
-  const routingSessionId = sessionId || (isGrokCliProxyModel(model.id) ? randomUUID() : undefined);
+  const routingSessionId = sessionId || (isGrokCliCompatibilityModel(model.id) ? randomUUID() : undefined);
   const streamModel = {
     ...model,
-    baseUrl: xaiBaseUrlForModel(model.id),
+    baseUrl: route.baseUrl,
     headers: {
       ...(model as any).headers,
-      ...xaiModelRequestHeaders(model.id, routingSessionId),
+      ...xaiModelRequestHeaders(model.id, credentialKind, routingSessionId),
     },
   };
   // Keep the xAI stream model for routing/payload rewriting, but delegate with

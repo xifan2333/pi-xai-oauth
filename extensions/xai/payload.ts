@@ -1,6 +1,6 @@
 import type { Api, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { normalizeXaiImageInput } from "./images";
-import { grokSupportsReasoningEffort, isGrokCliProxyModel } from "./models";
+import { grokSupportsReasoningEffort, isGrokCliCompatibilityModel } from "./models";
 import { textFromResponsesContent } from "./text";
 
 function normalizeResponsesImageParts(value: unknown): unknown {
@@ -119,7 +119,7 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
   if (!payload || typeof payload !== "object") return payload;
   const body: Record<string, any> = { ...(payload as Record<string, any>) };
   const modelId = String(body.model || model.id);
-  const usesGrokCliProxy = isGrokCliProxyModel(modelId);
+  const usesGrokCliCompatibility = isGrokCliCompatibilityModel(modelId);
 
   // xAI's Responses API matches the OpenAI surface but has a few stricter
   // edges than pi's generic OpenAI Responses serializer. Hermes solves the
@@ -129,7 +129,7 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
     let input = normalizeXaiResponsesInput([...body.input], model) as Record<string, any>[];
     const instructionParts: string[] = [];
 
-    if (usesGrokCliProxy) {
+    if (usesGrokCliCompatibility) {
       input = input.filter((item) => {
         if (!item || typeof item !== "object") return true;
         if (item.type === "reasoning") return false;
@@ -171,7 +171,7 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
     }
   }
 
-  if (usesGrokCliProxy && Array.isArray(body.include)) {
+  if (usesGrokCliCompatibility && Array.isArray(body.include)) {
     body.include = body.include.filter((item: unknown) => item !== "reasoning.encrypted_content");
     if (body.include.length === 0) delete body.include;
   }

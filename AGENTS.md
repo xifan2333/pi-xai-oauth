@@ -11,7 +11,7 @@ Core flow: `bin/setup.js` → `pi install` → provider registration in `extensi
 - Install / setup: `node bin/setup.js` or `npm run setup` (if added)
 - Install as pi extension: `pi install npm:pi-xai-oauth`
 - Run TypeScript: `npx tsc --noEmit` (validate)
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-19-api-guard`
+- Git: Always work on feature branches. Current branch for this work: `feature/issue-63-auth-aware-routing`
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
@@ -36,11 +36,12 @@ pi-xai-oauth/
 │   ├── xai-oauth.ts      # Thin entrypoint: provider registration + tool orchestration
 │   └── xai/              # Focused implementation modules
 │       ├── constants.ts  # URLs, defaults, OAuth constants
-│       ├── models.ts     # Model catalog + routing helpers
+│       ├── models.ts     # Model catalog + model compatibility helpers
 │       ├── oauth.ts      # OAuth discovery/login/refresh/callback helpers
 │       ├── auth.ts       # Credential reuse + token resolution helpers
 │       ├── payload.ts    # Responses payload normalization
 │       ├── responses.ts  # xAI request/stream helpers
+│       ├── routing.ts    # Credential-aware Responses/Images endpoint routing
 │       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
 ├── package.json
 ├── tsconfig.json

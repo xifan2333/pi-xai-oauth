@@ -1,15 +1,17 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getGrokAuthCredentials } from "./xai/auth";
-import { XAI_API_BASE_URL, XAI_PROVIDER_ID } from "./xai/constants";
+import { XAI_PROVIDER_ID } from "./xai/constants";
 import { MODELS } from "./xai/models";
 import { createXaiOAuth } from "./xai/oauth";
 import { streamSimpleXaiResponses } from "./xai/responses";
+import { resolveXaiRoute } from "./xai/routing";
 import { registerXaiTools, syncXaiToolsForModel } from "./xai/tools";
 
 export default function (pi: ExtensionAPI) {
+  const oauthResponsesRoute = resolveXaiRoute("oauth-session", "responses");
   pi.registerProvider(XAI_PROVIDER_ID, {
     name: "xAI (OAuth)",
-    baseUrl: XAI_API_BASE_URL,
+    baseUrl: oauthResponsesRoute.baseUrl,
     api: "xai-responses",
     models: MODELS as any,
     authHeader: true,

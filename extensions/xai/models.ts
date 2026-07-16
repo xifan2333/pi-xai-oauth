@@ -1,13 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import {
-  DEFAULT_XAI_MODEL,
-  XAI_API_BASE_URL,
-  XAI_CLI_BASE_URL,
-  XAI_CLI_RESPONSES_URL,
-  XAI_GROK_CLIENT_VERSION,
-  XAI_PROVIDER_ID,
-  XAI_RESPONSES_URL,
-} from "./constants";
+import { DEFAULT_XAI_MODEL, XAI_GROK_CLIENT_VERSION, XAI_PROVIDER_ID } from "./constants";
+import { resolveXaiRoute, type XaiCredentialKind } from "./routing";
 
 export const MODELS = [
   {
@@ -93,8 +86,8 @@ export const MODELS = [
   },
 ];
 
-/** Build a pi model object for direct xAI tool requests. */
-export function xaiModelForRequest(modelId?: string): Model<Api> {
+/** Build a pi model object for a credential-aware direct xAI request. */
+export function xaiModelForRequest(modelId: string | undefined, credentialKind: XaiCredentialKind): Model<Api> {
   const id = modelId || DEFAULT_XAI_MODEL;
   const model =
     MODELS.find((candidate) => candidate.id === id) ||
@@ -105,29 +98,19 @@ export function xaiModelForRequest(modelId?: string): Model<Api> {
     id,
     provider: XAI_PROVIDER_ID,
     api: "xai-responses",
-    baseUrl: xaiBaseUrlForModel(id),
+    baseUrl: resolveXaiRoute(credentialKind, "responses").baseUrl,
   } as any;
 }
 
-/** Normalize provider/model-prefixed xAI model ids for routing comparisons. */
+/** Normalize provider/model-prefixed xAI model ids for capability comparisons. */
 export function normalizedXaiModelId(modelId: string): string {
   return (modelId || "").toLowerCase().split("/").pop() || "";
 }
 
-/** Return true for models that must route through xAI's Grok CLI proxy. */
-export function isGrokCliProxyModel(modelId: string): boolean {
+/** Return true for models that need Grok CLI compatibility behavior. */
+export function isGrokCliCompatibilityModel(modelId: string): boolean {
   const normalized = normalizedXaiModelId(modelId);
   return normalized === "grok-build" || normalized === "grok-composer-2.5-fast";
-}
-
-/** Resolve the base URL used by a model. */
-export function xaiBaseUrlForModel(modelId: string): string {
-  return isGrokCliProxyModel(modelId) ? XAI_CLI_BASE_URL : XAI_API_BASE_URL;
-}
-
-/** Resolve the Responses endpoint used by a model. */
-export function xaiResponsesUrlForModel(modelId: string): string {
-  return isGrokCliProxyModel(modelId) ? XAI_CLI_RESPONSES_URL : XAI_RESPONSES_URL;
 }
 
 /** Build Grok CLI proxy headers for Composer/Grok Build requests. */
@@ -142,9 +125,15 @@ export function grokCliProxyHeaders(modelId: string, sessionId?: string): Record
   return headers;
 }
 
-/** Build extra request headers needed for a given xAI model. */
-export function xaiModelRequestHeaders(modelId: string, sessionId?: string): Record<string, string> {
-  return isGrokCliProxyModel(modelId) ? grokCliProxyHeaders(modelId, sessionId) : {};
+/** Build extra request headers needed for a credential and xAI model. */
+export function xaiModelRequestHeaders(
+  modelId: string,
+  credentialKind: XaiCredentialKind,
+  sessionId?: string,
+): Record<string, string> {
+  return credentialKind === "oauth-session" && isGrokCliCompatibilityModel(modelId)
+    ? grokCliProxyHeaders(modelId, sessionId)
+    : {};
 }
 
 /** Return true when xAI accepts an explicit Responses reasoning effort. */
