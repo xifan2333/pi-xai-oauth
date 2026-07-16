@@ -32,5 +32,11 @@
 - [x] Independent focused review/fix passes completed; fixed truthful pi mode resolution and case-insensitive Authorization spoofing.
 - [x] No paid image generation was invoked.
 
+## Delivery
+- [x] Committed the reviewed implementation as `d01cb5e`.
+- [x] Pushed `feature/issue-65-proxy-headers` to `origin`.
+- [x] Opened PR #71 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/71
+- [x] Left the PR unmerged.
+
 ## Next
-- [ ] Commit, push, and open a PR against `main` without merging it.
+- [ ] Await external PR review; preserve issue #65 scope when addressing feedback.

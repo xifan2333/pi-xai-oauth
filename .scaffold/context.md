@@ -30,5 +30,5 @@ Older credentials may continue refreshing and working, but refresh does not add 
 - Live OAuth smoke with `XAI_API_KEY` unset returned `OAUTH_PROXY_OK` for Grok 4.5, Grok Build, and Composer. Grok Build retried one transient upstream 503 before succeeding.
 - Independent review found and fixed client-mode parsing and authorization-spoof gaps; focused regression coverage passes.
 
-## Remaining Work
-Commit, push, and open the issue #65 PR against `main` without merging it. Do not invoke paid image generation.
+## Delivery
+The reviewed implementation is committed on `feature/issue-65-proxy-headers`, pushed to `origin`, and open against `main` as PR #71: https://github.com/BlockedPath/pi-xai-oauth/pull/71. The PR is intentionally unmerged; no paid image generation was invoked.

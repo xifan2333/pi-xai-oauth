@@ -33,3 +33,8 @@ Align fresh xAI OAuth grants and every OAuth Responses request with the pinned o
 - Existing refresh tokens continue using their original grant; only a fresh login can add newly requested scopes.
 - Direct Responses calls mint their own coherent conversation/session UUID instead of treating `previous_response_id` as a session identifier.
 - The OAuth-only provider does not add API-key fallback and never logs or exposes bearer tokens.
+
+## Delivery
+- [x] Committed and pushed `feature/issue-65-proxy-headers`.
+- [x] Opened PR #71 against `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/71
+- [x] Left the PR unmerged for external review.
