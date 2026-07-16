@@ -200,6 +200,19 @@ function installFetchMock() {
       return jsonResponse(document);
     }
 
+    if (href === "https://auth.x.ai/oauth2/device/code") {
+      assert.equal(init.redirect, "error", "device authorization must not follow redirects");
+      const params = new URLSearchParams(String(init.body || ""));
+      requests.push({ url: href, method: init.method, body: Object.fromEntries(params), headers: init.headers || {} });
+      return jsonResponse({
+        device_code: "extension-device-code",
+        user_code: "WXYZ-1234",
+        verification_uri: "https://auth.x.ai/device",
+        expires_in: 600,
+        interval: 1,
+      });
+    }
+
     if (href === "https://auth.x.ai/oauth2/token") {
       assert.equal(init.redirect, "error", "token requests must not follow redirects away from the pinned endpoint");
       const params = new URLSearchParams(String(init.body || ""));
@@ -1379,6 +1392,14 @@ async function verifyOAuthCallbackState(provider, loadResult) {
   const login = provider.oauth.login({
     onPrompt: async () => "n",
     onProgress: () => {},
+    onSelect: async (prompt) => {
+      assert.equal(prompt.options[0].id, "browser", "browser login must remain the first/default method");
+      assert.equal(prompt.options[1].id, "device", "device login must be offered as the alternate method");
+      return "browser";
+    },
+    onDeviceCode() {
+      throw new Error("browser selection must not invoke the device-code UI");
+    },
     onAuth(auth) {
       authUrl = new URL(auth.url);
       const redirectUri = authUrl.searchParams.get("redirect_uri");
@@ -1432,6 +1453,89 @@ async function verifyOAuthCallbackState(provider, loadResult) {
   });
   assert.deepEqual(inputResult, { action: "continue" });
   assert.equal(loadResult.selectedModels.at(-1)?.id, "grok-4.5", "removed active model should switch before prompt execution");
+}
+
+async function verifyOAuthDeviceLogin(provider, loadResult) {
+  const before = requests.length;
+  const deviceUi = [];
+  const originalSetTimeout = global.setTimeout;
+  // Keep the runtime implementation on real timers while making only the
+  // server-requested one-second poll wait immediate and deterministic.
+  global.setTimeout = (callback, delay, ...args) =>
+    originalSetTimeout(callback, delay === 1000 ? 0 : delay, ...args);
+  try {
+    const credentials = await provider.oauth.login({
+      onPrompt: async () => { throw new Error("device login must not prompt"); },
+      onProgress: () => {},
+      onSelect: async (prompt) => {
+        assert.equal(prompt.options[0].id, "browser");
+        assert.equal(prompt.options[1].id, "device");
+        return "device";
+      },
+      onDeviceCode: (info) => deviceUi.push(info),
+      onAuth: () => { throw new Error("device login must not invoke browser auth"); },
+      onManualCodeInput: async () => { throw new Error("device login must not request callback input"); },
+    });
+    assert.equal(credentials.access, "access-refresh");
+    assert.equal(credentials.refresh, "refresh-token");
+    assert.equal(Object.hasOwn(credentials, "idToken"), false);
+    assert.deepStrictEqual(deviceUi, [{
+      userCode: "WXYZ-1234",
+      verificationUri: "https://auth.x.ai/device",
+      intervalSeconds: 1,
+      expiresInSeconds: 600,
+    }]);
+
+    const deviceRequest = requests.slice(before).find((entry) => entry.url === "https://auth.x.ai/oauth2/device/code");
+    assert.deepStrictEqual(deviceRequest.body, {
+      client_id: "b1a00492-073a-47ea-816f-4c329264a828",
+      scope: XAI_OAUTH_SCOPES.join(" "),
+      referrer: packageMetadata.name,
+    });
+    const tokenRequest = requests.slice(before).find((entry) => entry.body?.grant_type === "urn:ietf:params:oauth:grant-type:device_code");
+    assert.deepStrictEqual(tokenRequest.body, {
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      device_code: "extension-device-code",
+      client_id: "b1a00492-073a-47ea-816f-4c329264a828",
+    });
+    const catalogRequest = requests.slice(before).find((entry) => entry.url === "https://cli-chat-proxy.grok.com/v1/models-v2");
+    assert.equal(headerValue(catalogRequest.headers, "Authorization"), "Bearer access-refresh");
+    assert.deepEqual(
+      loadResult.providers.get("xai-auth").models.map((model) => model.id),
+      ["grok-4.5", "grok-composer-2.5-fast"],
+      "successful device login must immediately apply the authenticated catalog",
+    );
+
+    const previousModels = loadResult.providers.get("xai-auth").models.map((model) => model.id);
+    const cancellation = new AbortController();
+    const requestsBeforeCancellation = requests.length;
+    await assert.rejects(
+      provider.oauth.login({
+        onPrompt: async () => "n",
+        onProgress: () => {},
+        onSelect: async () => "device",
+        onDeviceCode: () => cancellation.abort(),
+        onAuth: () => {},
+        signal: cancellation.signal,
+      }),
+      (error) => {
+        assert.equal(error.message, "Login cancelled");
+        return true;
+      },
+    );
+    assert.equal(
+      requests.slice(requestsBeforeCancellation).some((entry) => entry.body?.grant_type === "urn:ietf:params:oauth:grant-type:device_code"),
+      false,
+      "cancellation after device UI must stop before token polling",
+    );
+    assert.deepEqual(
+      loadResult.providers.get("xai-auth").models.map((model) => model.id),
+      previousModels,
+      "cancelled device login must not replace the active catalog",
+    );
+  } finally {
+    global.setTimeout = originalSetTimeout;
+  }
 }
 
 async function verifyOAuthEmptyCatalogReplacement(provider, loadResult) {
@@ -1738,7 +1842,7 @@ async function verifyOAuthManualRawCodeRejected(provider) {
       },
       onManualCodeInput: async () => rawCode,
     }),
-    /Raw xAI authorization codes are no longer accepted.*complete redirect URL.*issue #66/s,
+    /Raw xAI authorization codes are not accepted.*device code login.*complete redirect URL/s,
   );
 
   assert.ok(authUrl, "login should provide an authorization URL before rejecting raw code");
@@ -2311,6 +2415,7 @@ async function main() {
     await verifyCursorToolShims(firstLoad);
 
     await verifyOAuthCallbackState(provider, firstLoad);
+    await verifyOAuthDeviceLogin(provider, firstLoad);
     await verifyOAuthEmptyCatalogReplacement(provider, firstLoad);
     await verifyLegacyOAuthRefresh(provider);
     await verifyOAuthManualRawCodeRejected(provider);

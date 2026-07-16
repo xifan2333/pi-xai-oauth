@@ -10,6 +10,11 @@ import {
   XAI_OAUTH_SCOPE,
   XAI_OAUTH_TOKEN_URL,
 } from "./constants";
+import {
+  pollXaiDeviceAuthorization,
+  requestXaiDeviceAuthorization,
+  type XaiDeviceAuthDependencies,
+} from "./device-auth";
 import { discoverXaiOidc, validateXaiIdToken, type XaiOidcDiscovery } from "./oidc";
 
 type XaiTokenPayload = {
@@ -32,19 +37,71 @@ type ManualCallbackInput =
   | { kind: "invalid" };
 
 const RAW_CODE_MIGRATION_MESSAGE =
-  "Raw xAI authorization codes are no longer accepted because they do not include the OAuth state that binds the code to this login. Run /login xai-auth again, then paste the complete redirect URL containing both code and state. Device-code login for remote/headless environments is tracked separately in issue #66.";
+  "Raw xAI authorization codes are not accepted because they do not include the OAuth state that binds the code to this login. Run /login xai-auth again, then either use device code login or choose browser login and paste the complete redirect URL containing both code and state.";
 
-type XaiOAuthOptions = {
+export const XAI_BROWSER_LOGIN_METHOD = "browser";
+export const XAI_DEVICE_LOGIN_METHOD = "device";
+
+export type XaiLoginEnvironment = {
+  env?: NodeJS.ProcessEnv;
+  stdinIsTTY?: boolean;
+  stdoutIsTTY?: boolean;
+};
+
+export type XaiLoginContext = "desktop" | "wsl" | "ssh" | "container" | "headless";
+
+export type XaiOAuthOptions = {
   getExistingCredentials: () => OAuthCredentials | null;
   onLoginCredentials?: (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => Promise<void>;
+  deviceAuth?: XaiDeviceAuthDependencies;
+  loginEnvironment?: XaiLoginEnvironment;
 };
+
+/** Classify the login environment for advisory method-selector copy only. */
+export function detectXaiLoginContext(options: XaiLoginEnvironment = {}): XaiLoginContext {
+  const env = options.env ?? process.env;
+  if (env.WSL_DISTRO_NAME || env.WSL_INTEROP) return "wsl";
+  if (env.SSH_CONNECTION || env.SSH_CLIENT || env.SSH_TTY) return "ssh";
+  if (
+    env.container ||
+    env.KUBERNETES_SERVICE_HOST ||
+    env.CODESPACES ||
+    env.REMOTE_CONTAINERS ||
+    env.DEVCONTAINER
+  ) return "container";
+  const stdinIsTTY = options.stdinIsTTY ?? process.stdin.isTTY === true;
+  const stdoutIsTTY = options.stdoutIsTTY ?? process.stdout.isTTY === true;
+  return stdinIsTTY && stdoutIsTTY ? "desktop" : "headless";
+}
+
+function loginMethodOptions(environment: XaiLoginEnvironment | undefined) {
+  const context = detectXaiLoginContext(environment);
+  const recommendation = context === "desktop"
+    ? "remote/headless"
+    : context === "wsl"
+      ? "this WSL session"
+      : context === "ssh"
+        ? "this SSH session"
+        : context === "container"
+          ? "this container"
+          : "this headless session";
+  return [
+    { id: XAI_BROWSER_LOGIN_METHOD, label: "Browser login (default)" },
+    {
+      id: XAI_DEVICE_LOGIN_METHOD,
+      label: context === "desktop"
+        ? "Device code login (remote/headless)"
+        : `Device code login (recommended for ${recommendation})`,
+    },
+  ];
+}
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
 function assertLoginNotCancelled(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+  if (signal?.aborted) throw new Error("Login cancelled");
 }
 
 async function runAbortableLoginStep<T>(signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> {
@@ -54,7 +111,7 @@ async function runAbortableLoginStep<T>(signal: AbortSignal | undefined, operati
     assertLoginNotCancelled(signal);
     return result;
   } catch (error) {
-    if (signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+    if (signal?.aborted) throw new Error("Login cancelled");
     throw error;
   }
 }
@@ -208,13 +265,13 @@ async function startCallbackServer(expectedState: string): Promise<{
       let abortHandler: (() => void) | undefined;
       const timeout = new Promise<CallbackResult>((_, reject) => {
         if (signal?.aborted) {
-          reject(new Error("xAI OAuth login was cancelled"));
+          reject(new Error("Login cancelled"));
           return;
         }
         timer = setTimeout(() => reject(new Error("Timed out waiting for xAI OAuth callback")), 180_000);
         abortHandler = () => {
           if (timer) clearTimeout(timer);
-          reject(new Error("xAI OAuth login was cancelled"));
+          reject(new Error("Login cancelled"));
         };
         signal?.addEventListener("abort", abortHandler, { once: true });
       });
@@ -338,7 +395,12 @@ function credentialsFromTokenPayload(
 }
 
 /** Build pi's OAuth provider config for xAI/Grok login and refresh. */
-export function createXaiOAuth({ getExistingCredentials, onLoginCredentials }: XaiOAuthOptions) {
+export function createXaiOAuth({
+  getExistingCredentials,
+  onLoginCredentials,
+  deviceAuth,
+  loginEnvironment,
+}: XaiOAuthOptions) {
   const finishLogin = async (
     credentials: OAuthCredentials,
     callbacks: OAuthLoginCallbacks,
@@ -349,7 +411,7 @@ export function createXaiOAuth({ getExistingCredentials, onLoginCredentials }: X
       await onLoginCredentials(credentials, callbacks);
       assertLoginNotCancelled(callbacks.signal);
     } catch (error) {
-      if (callbacks.signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+      if (callbacks.signal?.aborted) throw new Error("Login cancelled");
       // Catalog discovery must never discard an otherwise valid OAuth login.
       callbacks.onProgress?.("xAI login succeeded, but the model catalog could not be refreshed; using the curated fallback.");
     }
@@ -379,6 +441,34 @@ export function createXaiOAuth({ getExistingCredentials, onLoginCredentials }: X
             );
           }
         }
+      }
+
+      const method = typeof callbacks.onSelect === "function"
+        ? await runAbortableLoginStep(callbacks.signal, () => callbacks.onSelect({
+            message: "Select xAI login method:",
+            options: loginMethodOptions(loginEnvironment),
+          }))
+        : XAI_BROWSER_LOGIN_METHOD;
+      if (!method) throw new Error("Login cancelled");
+      if (method === XAI_DEVICE_LOGIN_METHOD) {
+        callbacks.onProgress?.("Starting xAI device authorization...");
+        const device = await runAbortableLoginStep(callbacks.signal, () =>
+          requestXaiDeviceAuthorization(deviceAuth, callbacks.signal),
+        );
+        callbacks.onDeviceCode({
+          userCode: device.userCode,
+          verificationUri: device.verificationUri,
+          intervalSeconds: device.intervalSeconds,
+          expiresInSeconds: device.expiresInSeconds,
+        });
+        callbacks.onProgress?.("Waiting for xAI device authorization...");
+        const data = await runAbortableLoginStep(callbacks.signal, () =>
+          pollXaiDeviceAuthorization(device, deviceAuth, callbacks.signal),
+        );
+        return finishLogin(credentialsFromTokenPayload(data, XAI_OAUTH_TOKEN_URL), callbacks);
+      }
+      if (method !== XAI_BROWSER_LOGIN_METHOD) {
+        throw new Error("Unsupported xAI login method");
       }
 
       callbacks.onProgress?.("Starting xAI SuperGrok OAuth login...");

@@ -68,7 +68,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 ## Features
 
 - **Real OAuth login** — authenticates through xAI's official OAuth endpoint (same flow as the Grok CLI)
-- **Automatic browser open** — pi opens your default browser automatically; fall back to manual paste if needed
+- **Browser or device login** — browser authorization-code + PKCE stays the desktop default, with native device authorization for SSH, WSL, containers, and remote/headless sessions
+- **Automatic browser open** — browser login opens your default browser automatically and retains the matching-state full-redirect paste fallback
 - **Token refresh** — refresh tokens are stored and rotated automatically before expiry
 - **Reuses existing credentials** — auto-detects `~/.grok/auth.json` from the official Grok CLI
 - **Grok 4.5 flagship (default)** — xAI's newest model for coding, agentic tasks, and knowledge work; 500K context, text+image input, high reasoning by default
@@ -87,20 +88,14 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 
 ## How It Works
 
-`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you launch `pi` and run `/login xai-auth` in the TUI:
+`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you launch `pi` and run `/login xai-auth`, pi offers two native login methods:
 
-1. pi starts a local HTTP callback server on `127.0.0.1`
-2. It builds an xAI OAuth authorize URL with PKCE challenge
-3. **Your default browser opens automatically** to the xAI login page
-4. After you approve, xAI redirects to the local callback server
-5. pi verifies that the callback state matches the in-memory login attempt before exchanging the authorization code
-6. The returned ID token is verified against xAI's pinned OIDC issuer and first-party JWKS for ES256 signature, signing key, audience, expiry, and nonce
-7. Only then are access + refresh credentials persisted and refreshed automatically
-8. The extension performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, normalizes the OAuth-visible entries, filters unsafe/API-key-only entries, and immediately replaces the provider catalog
-9. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
-10. Proxy requests identify this client as `pi-xai-oauth` at the installed package version and include xAI's required auth, client-mode, request, conversation, session, and model metadata
+- **Browser login (default):** starts a loopback callback listener, opens xAI authorization with PKCE S256, requires matching state for HTTP or pasted full-redirect callbacks, and verifies the fresh ID token against the pinned issuer/JWKS, ES256 policy, audience, expiry, and nonce.
+- **Device code login:** requests a challenge from the pinned first-party device endpoint, shows the verification URL and user code through pi's device UI, and polls the pinned token endpoint only after the server interval. It handles pending/slow-down, denial, expiry, cancellation, malformed responses, and a bounded timeout without displaying the opaque device code or token responses.
 
-If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the **complete redirect URL** manually. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted.
+Only a completed selected login returns access + refresh credentials for pi to persist. It then performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, filters unsafe/API-key-only entries, and immediately replaces the provider catalog. All OAuth-backed Responses traffic uses xAI's session-token proxy; proxy requests identify this package and include the required auth, client-mode, request, conversation, session, and model metadata.
+
+Browser login still supports the **complete redirect URL** paste fallback when localhost is unreachable. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted. Device login is the cleaner choice when the browser cannot reach the pi process.
 
 ---
 
@@ -175,11 +170,11 @@ Then, in the pi TUI:
 
 **What happens:**
 
-1. pi checks for existing Grok CLI credentials (`~/.grok/auth.json`). If found, it asks if you want to skip re-authentication.
-2. The xAI OAuth page opens in your **default browser**.
-3. Sign in with your xAI / Grok account and approve the authorization.
-4. The browser redirects back to pi's local server — you can close the browser tab.
-5. Tokens are stored and refreshed automatically.
+1. pi checks for existing Grok CLI credentials (`~/.grok/auth.json`). If found, it asks if you want to reuse them without modifying that file.
+2. If a fresh login is needed, choose **Browser login (default)** or **Device code login**.
+3. Browser login opens xAI in your default browser and completes through the state-bound loopback/full-redirect flow.
+4. Device login displays a clickable verification URL and user code. Open it on any browser-capable device, confirm the code, and leave pi open while it waits. Press Escape to cancel safely.
+5. Only successful access + refresh credentials are stored by pi and refreshed automatically.
 
 Fresh logins request xAI's current eight-scope Grok client grant, including `conversations:read` and `conversations:write`. Credentials created before those scopes were added remain refreshable: refresh preserves the existing grant and does not renegotiate scopes.
 
@@ -187,7 +182,7 @@ Fresh logins request xAI's current eight-scope Grok client grant, including `con
 >
 > **Choosing a different browser/profile?** The instructions in the TUI explain how. You can copy the shown authorization URL and open it manually in your preferred browser.
 >
-> **Remote/headless login:** If the browser cannot reach pi's loopback listener, paste the complete failed redirect URL from the browser address bar into pi. Do not paste only the authorization code: code-only input has no OAuth state and is rejected. A full device-code alternative remains separately tracked in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
+> **Which method should I choose?** Use **Browser login** on a normal desktop where the browser can reach pi's loopback listener. Use **Device code login** for SSH, WSL, Docker/dev containers, remote VMs/workspaces, or other human-operated headless sessions. Device login is not intended for unattended automation because a person must approve the displayed code. If you stay with browser login remotely, paste the complete failed redirect URL—not a raw code—so pi can verify state.
 
 ### Re-authenticating
 
@@ -270,7 +265,7 @@ The normalized, token-free last-known-good catalog is stored at:
 - **Stale refresh:** after 15 minutes, startup performs one authenticated GET bounded to 5 seconds.
 - **Transient fallback:** network errors, timeouts, HTTP 408/429/5xx, or a malformed successful response may reuse a validated cache no older than 7 days. A forced/deferred refresh never reuses stale account data; it uses the curated fallback and remains retryable with a one-minute in-session backoff.
 - **Auth/permanent failure:** HTTP 401/403 or other permanent 4xx responses invalidate cached entitlements and use the curated `grok-4.5` fallback.
-- **Login:** every successful `/login xai-auth` forces a refresh with the newly returned credential, never reuses stale data, and updates `/model` immediately. If that refresh fails, login still succeeds and the curated fallback is used.
+- **Login:** every successful browser, device, or reused-credential `/login xai-auth` forces a refresh with the returned credential, never reuses stale data, and updates `/model` immediately. A failed/cancelled selected login leaves existing credentials and catalog state intact. If catalog refresh alone fails after authentication, login still succeeds and the curated fallback is used.
 - **`/reload`:** recreates the extension and follows the same 15-minute policy; it is not an unconditional network refresh.
 - **Selection:** if a refresh removes the active xAI model, the next turn switches to an entitled xAI replacement when available; otherwise it aborts before sending an unentitled request.
 
@@ -475,7 +470,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | Install | `pi install npm:pi-xai-oauth` |
 | One-command setup | `npx pi-xai-oauth` |
 | Try ephemeral | `pi -e npm:pi-xai-oauth` |
-| Authenticate | Launch `pi`, then run `/login xai-auth` in the TUI |
+| Authenticate | Launch `pi`, run `/login xai-auth`, then choose browser (default) or device code |
 | Update | `pi update npm:pi-xai-oauth` |
 | Remove | `pi remove npm:pi-xai-oauth` |
 | List packages | `pi list` |
@@ -504,7 +499,11 @@ If localhost is blocked (VPN, Docker, remote SSH, WSL):
 3. **Paste it into the TUI's input field** that says "Paste redirect URL below."
 4. pi verifies the state, exchanges the bound code with PKCE, validates the returned OIDC ID token, and then completes login.
 
-Raw authorization-code-only input is intentionally rejected because it cannot prove which browser login attempt produced the code. If you already pasted a raw code, run `/login xai-auth` again before pasting the complete redirect URL. If your environment cannot preserve that URL, use the loopback flow from a reachable browser for now; standardized device-code support is tracked separately in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
+Raw authorization-code-only input is intentionally rejected because it cannot prove which browser login attempt produced the code. If you already pasted a raw code, run `/login xai-auth` again and either choose **Device code login** or choose browser login and paste the complete redirect URL.
+
+### "Device authorization expired or was denied"
+
+Run `/login xai-auth` again and choose device login to request a new code. Codes are short-lived and polling stops at the server expiry (with a 15-minute hard cap). Pressing Escape cancels the wait; denial, expiry, cancellation, network failure, or malformed server data returns no new credential and does not remove the previous one.
 
 ### "Cannot find provider xai-auth"
 
@@ -731,8 +730,9 @@ pi-xai-oauth/
 │       ├── catalog.ts        # Authenticated /models-v2 normalization + atomic LKG cache
 │       ├── constants.ts      # URLs, OAuth constants, catalog bounds, defaults
 │       ├── models.ts         # Curated fallback/known metadata + compatibility helpers
-│       ├── oauth.ts          # OAuth login/refresh/callback transaction helpers
-│       ├── oidc.ts           # Pinned discovery/JWKS + ID-token validation
+│       ├── oauth.ts          # Browser/device selection, PKCE login, refresh, callbacks
+│       ├── device-auth.ts    # Pinned device initiation + bounded cancellable polling
+│       ├── oidc.ts           # Pinned browser discovery/JWKS + ID-token validation
 │       ├── payload.ts        # xAI Responses payload normalization
 │       ├── responses.ts      # xAI request + streaming helpers
 │       ├── routing.ts        # Credential-aware Responses and Images endpoints
@@ -740,7 +740,10 @@ pi-xai-oauth/
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
 ├── scripts/
-│   └── verify-extension.js   # npm test
+│   ├── verify-device-auth.js # Deterministic device protocol/timing/cancellation tests
+│   ├── verify-catalog.js     # Catalog normalization/cache tests
+│   ├── verify-extension.js   # Provider/OAuth/transport integration tests
+│   └── verify-setup.js       # Installer/settings tests
 ├── .scaffold/                # Persistent agent state (plan, progress, etc.)
 ├── AGENTS.md                 # AI agent operations manual
 ├── package.json

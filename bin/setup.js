@@ -208,7 +208,8 @@ function printNextSteps(nonInteractive = false) {
   if (!nonInteractive) {
     console.log("Next steps:\n");
     console.log(`   ${color("1.", "bold")} Authenticate with xAI OAuth:`);
-    console.log(`      ${color("pi /login xai-auth", "cyan")}\n`);
+    console.log(`      ${color("pi", "cyan")}`);
+    console.log("      Then run /login xai-auth and choose browser (default) or device code.\n");
     console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.5 (already set as default)`);
     console.log(`      ${color("pi", "cyan")}\n`);
   } else {
