@@ -26,3 +26,7 @@
 
 - Rebase started from clean `e31303f` after verifying `origin/main=b0556a8` contains the exact reviewed PR #90 tree.
 - No live xAI request is part of deterministic validation.
+
+## Delivery
+
+The original implementation (`4a61389`) and delivery record (`e31303f`) were pushed to unmerged PR #91. The branch is now being rebased and revalidated before its next push: https://github.com/BlockedPath/pi-xai-oauth/pull/91

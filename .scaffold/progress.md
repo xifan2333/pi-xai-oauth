@@ -15,10 +15,12 @@
 
 - [ ] Resolve cumulative docs/scaffold conflicts and audit every auto-merged runtime hunk.
 
-## Next
+## Delivery
 
 - Apply the one-to-three, shared-header, decoded-output-limit, redaction, and modality-independence changes from the final handoff.
 - Run the complete post-rebase validation and independent review contract.
+- Original implementation commit `4a61389` and delivery record `e31303f` were pushed to unmerged PR #91 before this rebase.
+- PR #91 remains open and must not be merged until the rebased branch passes the full gate: https://github.com/BlockedPath/pi-xai-oauth/pull/91
 
 ## Residual
 
