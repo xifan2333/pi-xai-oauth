@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import extension from "../../extensions/xai-oauth";
 import {
   CURATED_FALLBACK_MODELS,
+  getXaiRuntimeModel,
   setXaiRuntimeModels,
+  XaiModelInputProvenance,
 } from "../../extensions/xai/models";
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { createTempDir } from "../fixtures/temp";
@@ -84,6 +86,25 @@ describe.sequential("authenticated provider catalog lifecycle", () => {
     expect(h.providers.get("xai-auth").models.map(({ id }: any) => id)).toEqual(
       ["grok-4.5", "new-entitled"],
     );
+  });
+  it("advertises authenticated modalities without exposing internal provenance", async () => {
+    const { h } = await loadAndLogin({
+      data: [
+        {
+          model: "grok-4.5",
+          api_backend: "responses",
+          context_window: 500_000,
+          acceptsImages: false,
+        },
+      ],
+    });
+    const providerModel = h.providers.get("xai-auth").models[0];
+    expect(providerModel.input).toEqual(["text"]);
+    expect(providerModel).not.toHaveProperty("inputProvenance");
+    expect(getXaiRuntimeModel("grok-4.5")).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    });
   });
   it("treats an authenticated empty catalog as exact and blocks an unreplaced prompt", async () => {
     const { h } = await loadAndLogin({ data: [] });

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { rewriteXaiResponsesPayload } from "../../extensions/xai/payload";
+import {
+  rewriteXaiResponsesPayload,
+  xaiResponsesPayloadContainsImage,
+} from "../../extensions/xai/payload";
 import {
   CURATED_FALLBACK_MODELS,
   KNOWN_XAI_MODEL_METADATA,
@@ -203,5 +206,23 @@ describe("Responses payload normalization", () => {
         detail: "high",
       },
     ]);
+  });
+  it("detects only structural image content inside final Responses input", () => {
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: [{ type: "input_image", image_url: "redacted" }] }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: [{ type: "image", data: "redacted" }] }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: "the words input_image and image_url are ordinary text" }],
+        metadata: { type: "input_image" },
+      }),
+    ).toBe(false);
   });
 });

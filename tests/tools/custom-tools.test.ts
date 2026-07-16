@@ -8,6 +8,7 @@ import {
   CURATED_FALLBACK_MODELS,
   KNOWN_XAI_MODEL_METADATA,
   setXaiRuntimeModels,
+  XaiModelInputProvenance,
 } from "../../extensions/xai/models";
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { authContext, TEST_MODEL } from "../fixtures/models";
@@ -144,6 +145,51 @@ describe("custom xAI tools", () => {
     expect(
       requests.at(-1)?.body.input[0].content.map(({ type }: any) => type),
     ).toEqual(["input_image", "input_text"]);
+  });
+  it.each([
+    ["xai_generate_text", { prompt: "describe", image_url: "https://example.test/generate-private.png" }],
+    ["xai_analyze_image", { image: "https://example.test/analyze-private.png", question: "what?" }],
+  ])("blocks %s image input for authenticated text-only evidence before fetch", async (name, params) => {
+    const catalogModel = {
+      ...KNOWN_XAI_MODEL_METADATA[0],
+      input: ["text"] as ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    };
+    const activeModel = { ...TEST_MODEL, input: ["text"] } as any;
+    setXaiRuntimeModels([catalogModel]);
+    setXaiNetworkToolActive(h.api, activeModel, name as any, true);
+
+    const result = await h.tools
+      .get(name)
+      .execute("call", params, undefined, () => {}, authContext(activeModel));
+
+    expect(result.content[0].text).toMatch(/explicitly text-only.*no xAI request was sent/);
+    expect(result.content[0].text).not.toMatch(/generate-private|analyze-private/);
+    expect(requests).toHaveLength(0);
+  });
+  it("keeps image generation separate from active-model image-input capability", async () => {
+    const catalogModel = {
+      ...KNOWN_XAI_MODEL_METADATA[0],
+      input: ["text"] as ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    };
+    const activeModel = { ...TEST_MODEL, input: ["text"] } as any;
+    setXaiRuntimeModels([catalogModel]);
+    setXaiNetworkToolActive(h.api, activeModel, "xai_generate_image", true);
+
+    const result = await h.tools
+      .get("xai_generate_image")
+      .execute(
+        "call",
+        { prompt: "draw a safe diagram" },
+        undefined,
+        () => {},
+        authContext(activeModel),
+      );
+
+    expect(result.content[0].text).toMatch(/Image generation completed/);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).toMatch(/\/images\/generations$/);
   });
   it("maps multi-agent effort, tools, and details", async () => {
     const result = await run("xai_multi_agent", {

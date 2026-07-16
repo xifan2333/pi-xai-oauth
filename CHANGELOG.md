@@ -10,6 +10,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Added a revision-pinned Grok Build wire-protocol matrix, ID-ownership policy, repeatable upstream review procedure, and an explicit encrypted-reasoning handoff to issue #79.
 - Added deterministic streaming/direct Responses, catalog, OAuth form, client-mode, media-boundary, reserved-header, bounded-error, and proxy version-gate request-shape coverage.
+- Added bounded authenticated `acceptsImages` / `inputModalities` normalization with explicit input-capability provenance and redacted schema fixtures.
 - Added 246 focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
 - Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.
 - Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
@@ -23,6 +24,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 ### Changed
 
 - Centralized xAI wire headers around pinned routes, truthful `pi-xai-oauth/<version>` attribution, package-controlled proxy versioning, and shared OAuth form metadata.
+- Migrated the normalized model cache to schema 2 while safely retaining schema-1 membership and rederiving legacy input as known/default rather than authenticated evidence.
 - Replaced the shared-state monolithic behavior verifiers with isolated per-domain suites and closure-local fixtures; production runtime behavior is unchanged.
 - Made the repository CI job run the full unit suite once under coverage and the loader smoke separately; packed compatibility jobs rerun unit, loader, and TypeScript checks at each exact Pi boundary.
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
@@ -44,6 +46,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Scrubbed caller/model authorization, content negotiation, User-Agent, proxy metadata, generic delegate affinity IDs, unsupported IDs, and unknown `x-grok-*` headers before applying the approved route contract.
 - Rejected redirects for streaming/direct Responses and media POSTs before fetch can replay request bodies or metadata to another origin.
 - Replaced raw direct-response error reflection with bounded status/route classification and actionable, non-impersonating proxy version-gate guidance.
+- Prevented authenticated text-only entitlements from sending image-bearing Responses payloads, including payload-hook mutations and image-input custom tools, without changing image generation.
 - Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.

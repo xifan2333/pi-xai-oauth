@@ -114,6 +114,32 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
   return rewritten;
 }
 
+/** Return whether a final Responses request input structurally contains image content. */
+export function xaiResponsesPayloadContainsImage(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const input = (payload as Record<string, unknown>).input;
+  const stack: unknown[] = [input];
+  const seen = new WeakSet<object>();
+  while (stack.length > 0) {
+    const value = stack.pop();
+    if (!value || typeof value !== "object") continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      stack.push(...value);
+      continue;
+    }
+    const item = value as Record<string, unknown>;
+    if (item.type === "input_image" || item.type === "image_url") return true;
+    if (
+      item.type === "image" &&
+      (typeof item.data === "string" || item.image_url !== undefined || item.source !== undefined)
+    ) return true;
+    stack.push(...Object.values(item));
+  }
+  return false;
+}
+
 /** Rewrite generic OpenAI Responses payloads into xAI-compatible payloads. */
 export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, options?: SimpleStreamOptions): unknown {
   if (!payload || typeof payload !== "object") return payload;

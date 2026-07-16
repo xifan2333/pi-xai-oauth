@@ -2,8 +2,13 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { isXaiRuntimeModelEntitled, xaiModelForRequest } from "./models";
-import { rewriteXaiResponsesPayload } from "./payload";
+import {
+  getXaiRuntimeModel,
+  isAuthenticatedXaiInputProvenance,
+  isXaiRuntimeModelEntitled,
+  xaiModelForRequest,
+} from "./models";
+import { rewriteXaiResponsesPayload, xaiResponsesPayloadContainsImage } from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
 import {
   safeXaiTransportErrorMessage,
@@ -183,6 +188,23 @@ export async function postXaiJson(
   return response.json();
 }
 
+/** Assert the current authenticated entitlement permits the final Responses payload. */
+export function assertXaiRuntimeModelAcceptsPayload(modelId: string, payload: unknown): void {
+  const runtimeModel = getXaiRuntimeModel(modelId);
+  if (!runtimeModel) {
+    throw new Error(`xAI OAuth model ${modelId} is not present in the authenticated model catalog`);
+  }
+  if (
+    isAuthenticatedXaiInputProvenance(runtimeModel.inputProvenance) &&
+    !runtimeModel.input.includes("image") &&
+    xaiResponsesPayloadContainsImage(payload)
+  ) {
+    throw new Error(
+      `xAI OAuth model ${modelId} is explicitly text-only in the authenticated model catalog; no xAI request was sent`,
+    );
+  }
+}
+
 /** Create one xAI Responses result using explicit credential-aware routing. */
 export async function createXaiResponse(
   credential: XaiCredential,
@@ -197,6 +219,7 @@ export async function createXaiResponse(
   const route = resolveXaiRoute(credential.kind, "responses");
   const rewritten = rewriteXaiResponsesPayload(body, model);
   const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
+  if (credential.kind === "oauth-session") assertXaiRuntimeModelAcceptsPayload(model.id, payload);
   const requestSessionId = randomUUID();
   const requestHeaders = xaiProxyRequestHeaders(model.id, credential.kind, {
     conversationId: requestSessionId,
@@ -294,7 +317,11 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
               sessionId: sessionId || routingSessionId,
             });
             const userRewritten = await options?.onPayload?.(rewritten, streamModel);
-            return compactXaiInlineImages(userRewritten === undefined ? rewritten : userRewritten);
+            const finalPayload = await compactXaiInlineImages(
+              userRewritten === undefined ? rewritten : userRewritten,
+            );
+            assertXaiRuntimeModelAcceptsPayload(streamModel.id, finalPayload);
+            return finalPayload;
           },
         },
       );

@@ -274,6 +274,14 @@ pi --model grok-composer-2.5-fast "Refactor this module"
 pi --model grok-4.20-0309-non-reasoning "Quick answer"
 ```
 
+### Authenticated input capabilities
+
+When `/models-v2` supplies a valid `acceptsImages` boolean or bounded `inputModalities` array, that authenticated evidence overrides the package's known metadata for the returned model. `acceptsImages` takes precedence over `inputModalities`; entry fields take precedence over the matching `_meta` field. Missing or malformed evidence falls back to known metadata for known models and conservative text input for unknown models. Missing fields do **not** make Composer text-only.
+
+The normalized cache stores only the final modalities and bounded provenance, never the raw catalog fields. Legacy schema-1 caches are migrated in memory without treating their inferred input as authenticated evidence. If an authenticated entitlement explicitly becomes text-only, image-bearing Responses payloads fail locally after payload hooks and before any network request, including `xai_generate_text(image_url)` and `xai_analyze_image`. Image generation is a separate endpoint and is unaffected.
+
+See [Authenticated model input modalities](docs/model-input-modalities.md) for the redacted 2026-07-16 schema observation, pinned xAI source revision, exact precedence, malformed-field policy, and cache migration contract.
+
 ### Catalog refresh and cache policy
 
 The normalized, token-free last-known-good catalog is stored at:
@@ -290,7 +298,7 @@ The normalized, token-free last-known-good catalog is stored at:
 - **`/reload`:** recreates the extension and follows the same 15-minute policy; it is not an unconditional network refresh.
 - **Selection:** if a refresh removes the active xAI model, the next turn switches to an entitled xAI replacement when available; otherwise it aborts before sending an unentitled request.
 
-The cache stores only normalized model definitions and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. If an exceptional filesystem error prevents replacing or deleting an old cache, a token-free `.invalidated` sidecar suppresses it until a later successful atomic write. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
+The cache stores only normalized model definitions, bounded input-capability provenance, and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, endpoint fields, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. If an exceptional filesystem error prevents replacing or deleting an old cache, a token-free `.invalidated` sidecar suppresses it until a later successful atomic write. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
 
 ### Reasoning / Thinking Levels
 

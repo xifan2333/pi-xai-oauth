@@ -1,0 +1,26 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "redacted-model-a",
+      "model": "redacted-model-a",
+      "name": "Redacted Model A",
+      "object": "model",
+      "owned_by": "redacted",
+      "api_backend": "responses",
+      "context_window": 500000,
+      "supports_reasoning_effort": true,
+      "reasoning_effort": "high"
+    },
+    {
+      "id": "redacted-model-b",
+      "model": "redacted-model-b",
+      "name": "Redacted Model B",
+      "object": "model",
+      "owned_by": "redacted",
+      "api_backend": "responses",
+      "context_window": 200000,
+      "supports_reasoning_effort": false
+    }
+  ]
+}

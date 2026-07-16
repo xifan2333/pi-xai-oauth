@@ -5,6 +5,7 @@ import {
   normalizeXaiCatalogPayload,
   XaiCatalogValidationError,
 } from "../../extensions/xai/catalog";
+import { XaiModelInputProvenance } from "../../extensions/xai/models";
 
 const fixture = async (name: string) =>
   JSON.parse(
@@ -32,12 +33,122 @@ describe("catalog normalization", () => {
     });
     expect(models[2]).toMatchObject({
       input: ["text"],
+      inputProvenance: XaiModelInputProvenance.Default,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     });
     expect(models[2].thinkingLevelMap).toMatchObject({
       medium: "medium",
       xhigh: "xhigh",
     });
+  });
+
+  it("applies authenticated modality precedence without changing membership", async () => {
+    const models = normalizeXaiCatalogPayload(await fixture("modalities.json"));
+    expect(models.map(({ id }) => id)).toEqual([
+      "grok-4.5",
+      "grok-composer-2.5-fast",
+      "synthetic-modalities",
+      "synthetic-meta-accepts",
+    ]);
+    expect(models.map(({ input, inputProvenance }) => ({ input, inputProvenance }))).toEqual([
+      {
+        input: ["text"],
+        inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+      },
+      {
+        input: ["text", "image"],
+        inputProvenance: XaiModelInputProvenance.Known,
+      },
+      {
+        input: ["text", "image"],
+        inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+      },
+      {
+        input: ["text", "image"],
+        inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+      },
+    ]);
+  });
+
+  it("falls through malformed higher-priority fields to bounded evidence", () => {
+    const [entryAccepts, entryModalities, metaModalities] = normalizeXaiCatalogPayload({
+      data: [
+        {
+          model: "entry-accepts",
+          api_backend: "responses",
+          context_window: 100_000,
+          acceptsImages: false,
+          _meta: { acceptsImages: true },
+          inputModalities: ["text", "image"],
+        },
+        {
+          model: "entry-modalities",
+          api_backend: "responses",
+          context_window: 100_000,
+          acceptsImages: "false",
+          inputModalities: ["image", "text"],
+          _meta: { acceptsImages: 1 },
+        },
+        {
+          model: "meta-modalities",
+          api_backend: "responses",
+          context_window: 100_000,
+          acceptsImages: null,
+          inputModalities: ["audio"],
+          _meta: { inputModalities: ["text"] },
+        },
+      ],
+    });
+    expect(entryAccepts).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    });
+    expect(entryModalities).toMatchObject({
+      input: ["text", "image"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    });
+    expect(metaModalities).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    });
+  });
+
+  it.each([
+    [],
+    ["text", "image", "text"],
+    ["text", "text"],
+    ["text", "audio"],
+    ["TEXT", "image"],
+    "text",
+    true,
+    { image: true },
+  ])("treats malformed inputModalities %j as missing evidence", (inputModalities) => {
+    const [model] = normalizeXaiCatalogPayload({
+      data: [
+        {
+          model: "unknown-modality-shape",
+          api_backend: "responses",
+          context_window: 100_000,
+          inputModalities,
+        },
+      ],
+    });
+    expect(model).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.Default,
+    });
+  });
+
+  it("keeps redacted observed missing fields non-authenticated", async () => {
+    const models = normalizeXaiCatalogPayload(await fixture("observed-no-modalities.json"));
+    expect(models).toHaveLength(2);
+    expect(
+      models.every(
+        (model) =>
+          model.inputProvenance === XaiModelInputProvenance.Default &&
+          JSON.stringify(model.input) === JSON.stringify(["text"]),
+      ),
+    ).toBe(true);
   });
 
   it("maps none and capability defaults to Pi thinking levels", () => {

@@ -5,6 +5,7 @@ import {
   CURATED_FALLBACK_MODELS,
   KNOWN_XAI_MODEL_METADATA,
   setXaiRuntimeModels,
+  XaiModelInputProvenance,
 } from "../../extensions/xai/models";
 import {
   createXaiResponse,
@@ -15,6 +16,16 @@ import { TEST_MODEL } from "../fixtures/models";
 let requests: any[];
 let oversized: string;
 let input: any[];
+const textOnlyEntitlement = {
+  ...KNOWN_XAI_MODEL_METADATA[0],
+  input: ["text"] as ["text"],
+  inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+};
+const authenticatedImageEntitlement = {
+  ...KNOWN_XAI_MODEL_METADATA[0],
+  input: ["text", "image"] as ["text", "image"],
+  inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+};
 function images(value: any) {
   const result: string[] = [];
   const walk = (item: any) => {
@@ -58,6 +69,97 @@ function bytes(value: any) {
   );
 }
 describe("Responses image preparation", () => {
+  it("rejects direct image input for authenticated text-only evidence before fetch", async () => {
+    setXaiRuntimeModels([textOnlyEntitlement]);
+    await expect(
+      createXaiResponse(
+        { kind: "oauth-session", token: "oauth-token" },
+        {
+          model: "grok-4.5",
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_image", image_url: "https://example.test/private.png" },
+                { type: "input_text", text: "describe" },
+              ],
+            },
+          ],
+        },
+      ),
+    ).rejects.toThrow(/explicitly text-only.*no xAI request was sent/);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("allows text and follows a replaced authenticated image-capable snapshot", async () => {
+    setXaiRuntimeModels([textOnlyEntitlement]);
+    await createXaiResponse(
+      { kind: "oauth-session", token: "oauth-token" },
+      { model: "grok-4.5", input: "text only" },
+    );
+    expect(requests).toHaveLength(1);
+
+    setXaiRuntimeModels([authenticatedImageEntitlement]);
+    await createXaiResponse(
+      { kind: "oauth-session", token: "oauth-token" },
+      {
+        model: "grok-4.5",
+        input: [{ role: "user", content: [{ type: "input_image", image_url: "https://example.test/ok.png" }] }],
+      },
+    );
+    expect(requests).toHaveLength(2);
+  });
+
+  it("rejects images injected by the final payload hook before stream transport", async () => {
+    setXaiRuntimeModels([textOnlyEntitlement]);
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        sessionId: "text-only-hook",
+        onPayload(payload: any) {
+          payload.input = [
+            {
+              role: "user",
+              content: [{ type: "input_image", image_url: "https://example.test/hook-private.png" }],
+            },
+          ];
+        },
+      } as any,
+    );
+    const result = await stream.result();
+    expect(result.errorMessage).toMatch(/explicitly text-only.*no xAI request was sent/);
+    expect(result.errorMessage).not.toContain("hook-private.png");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("allows a payload hook to remove image input before the final guard", async () => {
+    setXaiRuntimeModels([textOnlyEntitlement]);
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }],
+            timestamp: Date.now(),
+          },
+        ],
+      } as any,
+      {
+        apiKey: "oauth-token",
+        sessionId: "remove-image-hook",
+        onPayload(payload: any) {
+          payload.input = "image removed";
+        },
+      } as any,
+    );
+    await stream.result();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body.input).toBe("image removed");
+  });
+
   it("compacts direct helper images before transport", async () => {
     await createXaiResponse(
       { kind: "oauth-session", token: "oauth-token" },
