@@ -154,8 +154,7 @@ function canonicalReasoningLevel(value: unknown): ThinkingLevel | undefined {
 }
 
 function parseReasoningLevels(value: unknown): ThinkingLevel[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) return [];
+  if (value === undefined || !Array.isArray(value) || value.length === 0) return undefined;
   const result: ThinkingLevel[] = [];
   for (const entry of value) {
     const level = canonicalReasoningLevel(
@@ -163,7 +162,7 @@ function parseReasoningLevels(value: unknown): ThinkingLevel[] | undefined {
     );
     if (level && !result.includes(level)) result.push(level);
   }
-  return result;
+  return result.length > 0 ? result : undefined;
 }
 
 function thinkingLevelMap(levels: ThinkingLevel[], modelId: string): XaiCatalogModel["thinkingLevelMap"] {
@@ -668,18 +667,20 @@ export async function selectXaiModelCatalog(options: XaiCatalogOptions = {}): Pr
   }
 
   if (!commitAllowed()) throw new XaiCatalogCancelledError();
-  if (forceRefresh || outcome.kind === "auth" || outcome.kind === "permanent") {
-    await invalidateCache(
-      cachePath,
-      now,
-      commitAllowed,
-      cache,
-    );
+  if (outcome.kind === "auth" || outcome.kind === "permanent") {
+    await invalidateCache(cachePath, now, commitAllowed, cache);
     if (!commitAllowed()) throw new XaiCatalogCancelledError();
     return fallbackSelection(false);
+  }
+  if (forceRefresh) {
+    // Forced refresh never reuses stale account data, but transient failures
+    // remain retryable once pi has a bound, lock-refreshed credential.
+    await invalidateCache(cachePath, now, commitAllowed, cache);
+    if (!commitAllowed()) throw new XaiCatalogCancelledError();
+    return fallbackSelection(true);
   }
   if (cache) {
     return { models: cloneModels(cache.models), source: "stale-cache", needsAuthenticatedRefresh: false };
   }
-  return fallbackSelection(false);
+  return fallbackSelection(true);
 }

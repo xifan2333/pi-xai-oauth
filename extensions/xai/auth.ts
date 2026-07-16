@@ -11,6 +11,7 @@ import {
   XAI_OAUTH_REFRESH_SKEW_MS,
   XAI_PROVIDER_ID,
 } from "./constants";
+import { getXaiRuntimeModels } from "./models";
 import { ensureFreshXaiCredentials } from "./oauth";
 import type { XaiCredential } from "./routing";
 
@@ -117,13 +118,21 @@ export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAut
 
 /** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */
 export async function resolveXaiCredential(ctx: any): Promise<XaiCredential | null> {
-  const registryModel = ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL);
-  if (registryModel && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
-    if (auth?.ok && auth.apiKey) return { kind: "oauth-session", token: auth.apiKey };
-    const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
-    if (authorization.toLowerCase().startsWith("bearer ")) {
-      return { kind: "oauth-session", token: authorization.slice("bearer ".length) };
+  if (typeof ctx?.modelRegistry?.find === "function" && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
+    const candidateIds = [
+      ctx?.model?.provider === XAI_PROVIDER_ID ? ctx.model.id : undefined,
+      DEFAULT_XAI_MODEL,
+      ...getXaiRuntimeModels().map((model) => model.id),
+    ].filter((id, index, values): id is string => typeof id === "string" && !!id && values.indexOf(id) === index);
+    for (const modelId of candidateIds) {
+      const registryModel = ctx.modelRegistry.find(XAI_PROVIDER_ID, modelId);
+      if (!registryModel) continue;
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
+      if (auth?.ok && auth.apiKey) return { kind: "oauth-session", token: auth.apiKey };
+      const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
+      if (authorization.toLowerCase().startsWith("bearer ")) {
+        return { kind: "oauth-session", token: authorization.slice("bearer ".length) };
+      }
     }
   }
   if (ctx?.apiKey) return { kind: "oauth-session", token: ctx.apiKey };

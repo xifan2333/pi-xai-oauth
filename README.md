@@ -268,7 +268,7 @@ The normalized, token-free last-known-good catalog is stored at:
 
 - **Fresh for 15 minutes:** with a usable OAuth credential (or an expired stored credential awaiting pi's lock-protected refresh), startup and `/reload` use the cache immediately and do not make a catalog request. Logged-out startup uses the curated fallback instead of exposing the previous account's cache.
 - **Stale refresh:** after 15 minutes, startup performs one authenticated GET bounded to 5 seconds.
-- **Transient fallback:** network errors, timeouts, HTTP 408/429/5xx, or a malformed successful response may reuse a validated cache no older than 7 days.
+- **Transient fallback:** network errors, timeouts, HTTP 408/429/5xx, or a malformed successful response may reuse a validated cache no older than 7 days. A forced/deferred refresh never reuses stale account data; it uses the curated fallback and remains retryable with a one-minute in-session backoff.
 - **Auth/permanent failure:** HTTP 401/403 or other permanent 4xx responses invalidate cached entitlements and use the curated `grok-4.5` fallback.
 - **Login:** every successful `/login xai-auth` forces a refresh with the newly returned credential, never reuses stale data, and updates `/model` immediately. If that refresh fails, login still succeeds and the curated fallback is used.
 - **`/reload`:** recreates the extension and follows the same 15-minute policy; it is not an unconditional network refresh.

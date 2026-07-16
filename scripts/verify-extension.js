@@ -15,10 +15,12 @@ const extension = extensionModule.default || extensionModule;
 const { compactXaiInlineImages, MAX_XAI_INLINE_IMAGE_BASE64_BYTES } = jiti(
   path.join(repoRoot, "extensions", "xai", "images.ts"),
 );
+const { resolveXaiCredential } = jiti(path.join(repoRoot, "extensions", "xai", "auth.ts"));
 const { rewriteXaiResponsesPayload } = jiti(path.join(repoRoot, "extensions", "xai", "payload.ts"));
 const {
   KNOWN_XAI_MODEL_METADATA,
   getXaiRuntimeModels,
+  grokSupportsReasoningEffort,
   resolveXaiClientMode,
   setXaiRuntimeModels,
 } = jiti(path.join(repoRoot, "extensions", "xai", "models.ts"));
@@ -1348,6 +1350,14 @@ async function verifyApiKeyResponsesRouting() {
 }
 
 function verifyXaiClientModeResolution() {
+  const previousModels = getXaiRuntimeModels();
+  setXaiRuntimeModels([{
+    ...KNOWN_XAI_MODEL_METADATA[0],
+    id: "Mixed-Case-Reasoning",
+    thinkingLevelMap: { low: "low" },
+  }]);
+  assert.equal(grokSupportsReasoningEffort("mixed-case-reasoning"), true, "runtime reasoning lookup should be case-insensitive");
+  setXaiRuntimeModels(previousModels);
   assert.equal(resolveXaiClientMode([], true, true), "interactive");
   assert.equal(resolveXaiClientMode(["--model", "grok-4.5"], true, true), "interactive");
   assert.equal(resolveXaiClientMode(["--mode", "text"], true, true), "interactive");
@@ -1475,6 +1485,13 @@ async function verifyCatalogRefreshIsolation() {
         tokenEndpoint: "https://auth.x.ai/oauth2/token",
       },
     }));
+    const cachePath = path.join(isolationHome, ".pi", "agent", "cache", "pi-xai-oauth", "models-v2.json");
+    await fs.mkdir(path.dirname(cachePath), { recursive: true });
+    await fs.writeFile(cachePath, JSON.stringify({
+      schemaVersion: 1,
+      fetchedAt: Date.now(),
+      models: [KNOWN_XAI_MODEL_METADATA[0]],
+    }));
 
     const loadResult = await loadExtension();
     const provider = loadResult.providers.get("xai-auth");
@@ -1544,7 +1561,7 @@ async function verifyCatalogRefreshIsolation() {
       ["new-account-only"],
       "a superseded old-account refresh must not overwrite the new login catalog",
     );
-    const cache = JSON.parse(await fs.readFile(path.join(isolationHome, ".pi", "agent", "cache", "pi-xai-oauth", "models-v2.json"), "utf8"));
+    const cache = JSON.parse(await fs.readFile(cachePath, "utf8"));
     assert.deepEqual(cache.models.map((model) => model.id), ["new-account-only"]);
   } finally {
     catalogResponseQueue.length = 0;
@@ -2219,6 +2236,22 @@ async function main() {
       },
     });
     assert.match(noAuthResult.content[0].text, /No xAI OAuth credentials/, "tools should not fall back to XAI_API_KEY");
+
+    const composerOnlyModel = { ...TEST_XAI_MODEL, id: "grok-composer-2.5-fast" };
+    const composerOnlyCredential = await resolveXaiCredential({
+      model: composerOnlyModel,
+      modelRegistry: {
+        find: (_provider, modelId) => modelId === composerOnlyModel.id ? composerOnlyModel : undefined,
+        async getApiKeyAndHeaders() {
+          return { ok: true, apiKey: "composer-only-token" };
+        },
+      },
+    });
+    assert.deepEqual(
+      composerOnlyCredential,
+      { kind: "oauth-session", token: "composer-only-token" },
+      "credential lookup should use the active entitled model when Grok 4.5 is absent",
+    );
 
     const { body: grok45TextBody } = await runTool(tools, "xai_generate_text", {
       prompt: "hi",

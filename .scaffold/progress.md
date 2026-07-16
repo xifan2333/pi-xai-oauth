@@ -46,6 +46,13 @@
 
 - [x] Final focused race-condition re-review reproduced the prior commit-window issue, accepted the queued conditional rollback fix, reran the deterministic probe, and reported `CLEAN`.
 
+## Post-PR Recheck
+- [x] Re-read PR #73 status, automated reviews, inline comments, and checks after the user requested another check.
+- [x] Accepted and fixed active-catalog credential lookup when Grok 4.5 is absent, empty/malformed reasoning-level defaults, lock-refreshed deferred entitlement validation, case-insensitive runtime reasoning lookup, and transient retry retention/backoff.
+- [x] Added focused regressions for Composer-only credential lookup, empty/malformed reasoning lists, mixed-case runtime IDs, fresh-cache deferred refresh, and retryable transient failures.
+- [x] Re-ran focused catalog/extension tests, full `npm test`, typecheck, diff check, package inspection, and LSP diagnostics successfully.
+- [x] Independent post-feedback review caught and fixed a superseded retry-deadline race; focused re-review reported `CLEAN`.
+
 ## Delivery
 - [x] Committed the reviewed implementation as `70436d2`.
 - [x] Pushed `feature/issue-64-oauth-model-catalog` to `origin`.

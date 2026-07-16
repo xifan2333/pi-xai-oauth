@@ -14,6 +14,7 @@ export default async function (pi: ExtensionAPI) {
   const oauthResponsesRoute = resolveXaiRoute("oauth-session", "responses");
   let currentModels: readonly XaiCatalogModel[] = CURATED_FALLBACK_MODELS;
   let needsSessionRefresh = false;
+  let deferredRetryAfter = 0;
   let refreshGeneration = 0;
   let refreshAbortController: AbortController | undefined;
   let oauth: ReturnType<typeof createXaiOAuth>;
@@ -76,7 +77,10 @@ export default async function (pi: ExtensionAPI) {
         forceRefresh: true,
         signal: callbacks.signal,
       });
-      if (isCurrent) applyCatalog(selection, true);
+      if (isCurrent) {
+        applyCatalog(selection, true);
+        if (selection.needsAuthenticatedRefresh) deferredRetryAfter = Date.now() + 60_000;
+      }
       callbacks.onProgress?.(
         selection.source === "remote"
           ? `Refreshed ${selection.models.length} OAuth-visible xAI model${selection.models.length === 1 ? "" : "s"}.`
@@ -94,11 +98,14 @@ export default async function (pi: ExtensionAPI) {
   applyCatalog(startupSelection, false);
 
   const refreshDeferredCatalog = async (ctx: any) => {
-    if (!needsSessionRefresh) return;
+    if (!needsSessionRefresh || Date.now() < deferredRetryAfter) return;
     const lookupModel =
       ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
       currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
-    if (!lookupModel || typeof ctx?.modelRegistry?.getApiKeyAndHeaders !== "function") return;
+    if (!lookupModel || typeof ctx?.modelRegistry?.getApiKeyAndHeaders !== "function") {
+      deferredRetryAfter = Date.now() + 5_000;
+      return;
+    }
     const auth = await ctx.modelRegistry.getApiKeyAndHeaders(lookupModel);
     const authorization = auth?.ok && typeof auth.headers?.Authorization === "string"
       ? auth.headers.Authorization
@@ -108,12 +115,22 @@ export default async function (pi: ExtensionAPI) {
       (authorization.toLowerCase().startsWith("bearer ")
         ? authorization.slice("bearer ".length)
         : "");
-    if (!access) return;
+    if (!access) {
+      deferredRetryAfter = Date.now() + 5_000;
+      return;
+    }
     try {
-      const { selection, isCurrent } = await refreshCatalog(access, { forceRefresh: false });
-      if (isCurrent) applyCatalog(selection, true);
+      // The bearer became available only after pi's lock-protected refresh;
+      // revalidate entitlements instead of accepting a prior fresh cache.
+      const { selection, isCurrent } = await refreshCatalog(access, { forceRefresh: true });
+      if (isCurrent) {
+        applyCatalog(selection, true);
+        deferredRetryAfter = selection.needsAuthenticatedRefresh ? Date.now() + 60_000 : 0;
+      }
     } catch {
-      // A newer login/refresh superseded this attempt or the runtime shut down.
+      // A superseded older attempt must not shorten a newer transient
+      // refresh's one-minute retry deadline.
+      deferredRetryAfter = Math.max(deferredRetryAfter, Date.now() + 5_000);
     }
   };
 

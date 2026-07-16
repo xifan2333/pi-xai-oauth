@@ -84,6 +84,17 @@ async function main() {
   assert.equal(implicitReasoningLevels.thinkingLevelMap.low, "low");
   assert.equal(implicitReasoningLevels.thinkingLevelMap.medium, "medium");
   assert.equal(implicitReasoningLevels.thinkingLevelMap.high, "high");
+  for (const reasoningEfforts of [[], "malformed"]) {
+    const normalized = normalizeXaiCatalogPayload({ data: [{
+      model: "empty-levels",
+      api_backend: "responses",
+      context_window: 100_000,
+      supports_reasoning_effort: true,
+      reasoning_efforts: reasoningEfforts,
+    }] })[0];
+    assert.equal(normalized.thinkingLevelMap.low, "low", "empty/malformed level lists should use capability defaults");
+    assert.equal(normalized.thinkingLevelMap.high, "high");
+  }
   const clampedKnownOutput = normalizeXaiCatalogPayload({ data: [{
     model: "grok-4.5",
     api_backend: "responses",
@@ -256,7 +267,17 @@ async function main() {
       fetchImpl: async () => { throw new Error("new account offline"); },
     });
     assert.equal(forcedTransient.source, "curated-fallback", "post-login refresh must not reuse another account's stale cache");
+    assert.equal(forcedTransient.needsAuthenticatedRefresh, true, "transient forced failure should remain retryable");
     assert.equal(JSON.parse(await fs.readFile(stalePath, "utf8")).invalidated, true, "failed forced refresh must invalidate old account cache");
+
+    const noCacheTransient = await selectXaiModelCatalog({
+      credential: { access: TOKEN_SENTINEL },
+      cachePath: path.join(tempDir, "transient-missing", "models-v2.json"),
+      now,
+      fetchImpl: async () => { throw new Error("offline"); },
+    });
+    assert.equal(noCacheTransient.source, "curated-fallback");
+    assert.equal(noCacheTransient.needsAuthenticatedRefresh, true);
 
     const tooOldPath = path.join(tempDir, "too-old", "models-v2.json");
     await writeCache(tooOldPath, now - XAI_MODEL_CATALOG_MAX_STALE_MS - 1, additions);

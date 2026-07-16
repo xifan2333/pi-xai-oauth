@@ -237,7 +237,7 @@ export function xaiProxyRequestHeaders(
 /** Return true when xAI accepts an explicit Responses reasoning effort. */
 export function grokSupportsReasoningEffort(modelId: string): boolean {
   const normalized = normalizedXaiModelId(modelId);
-  const runtime = runtimeModels.find((model) => model.id === normalized);
+  const runtime = runtimeModels.find((model) => model.id.toLowerCase() === normalized);
   if (runtime?.thinkingLevelMap) {
     return ["minimal", "low", "medium", "high", "xhigh", "max"].some(
       (level) => typeof (runtime.thinkingLevelMap as Record<string, unknown>)[level] === "string",
