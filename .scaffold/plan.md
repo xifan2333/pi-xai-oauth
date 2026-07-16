@@ -32,6 +32,6 @@ Replace the release-bound OAuth model advertisement with an authenticated, entit
 - [x] Independent correctness, security, cache, and test reviews complete; accepted fixes are applied and revalidated.
 
 ## Delivery
-- [ ] Commit reviewed work.
-- [ ] Push `feature/issue-64-oauth-model-catalog`.
-- [ ] Open an unmerged PR against `main` that closes #64.
+- [x] Committed reviewed implementation as `70436d2`.
+- [x] Pushed `feature/issue-64-oauth-model-catalog`.
+- [x] Opened unmerged PR #73 against `main`, closing #64: https://github.com/BlockedPath/pi-xai-oauth/pull/73

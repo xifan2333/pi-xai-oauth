@@ -27,4 +27,7 @@ Issue #64 requires authenticated OAuth-visible `/models-v2` discovery, exact ent
 Keep OAuth-session Responses routing on `cli-chat-proxy.grok.com`, API-key routing direct and explicit, Images direct, issue #65 proxy metadata/scopes intact, issue #67 state/OIDC hardening intact, and current model-specific payload/reasoning/tool compatibility intact.
 
 ## Validation evidence
-Baseline `npm test` and `npm run typecheck` pass. Safe authenticated GET-only smoke returned HTTP 200 with two OAuth-visible Responses entries and no paid API/tool invocation.
+Final LSP diagnostics, `npm test`, `npm run typecheck`, `git diff --check`, and 43-file npm dry-run package inspection pass. Safe authenticated GET-only smoke through the implemented selector returned two OAuth-visible Responses entries and invoked no paid API/tool. Independent correctness, security/privacy, cache, tests, docs, and package reviews completed; accepted concurrency/cancellation/cache fixes were applied and the final focused review reported `CLEAN`.
+
+## Delivery
+Reviewed implementation commit `70436d2` was pushed on `feature/issue-64-oauth-model-catalog`; unmerged PR #73 targets `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/73

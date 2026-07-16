@@ -46,5 +46,10 @@
 
 - [x] Final focused race-condition re-review reproduced the prior commit-window issue, accepted the queued conditional rollback fix, reran the deterministic probe, and reported `CLEAN`.
 
+## Delivery
+- [x] Committed the reviewed implementation as `70436d2`.
+- [x] Pushed `feature/issue-64-oauth-model-catalog` to `origin`.
+- [x] Opened PR #73 against `main` without merging: https://github.com/BlockedPath/pi-xai-oauth/pull/73
+
 ## Next
-Commit, push, and open an unmerged PR.
+Leave PR #73 unmerged for external review.
