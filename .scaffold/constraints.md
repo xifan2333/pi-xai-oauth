@@ -1,22 +1,21 @@
-# Constraints & Safety Rules — Issue #66
+# Constraints & Safety Rules — Issue #69
 
 ## Hard Boundaries (MUST NOT)
-- Never print, log, persist outside pi auth storage, or include in errors OAuth codes, opaque device codes, access/refresh/ID tokens, PKCE verifiers, state, nonce, raw token/device responses, or authenticated headers.
-- Never accept response-provided device/token endpoints, arbitrary discovery/JWKS/token URLs, arbitrary `*.x.ai` trust, raw browser codes, or callbacks without matching state.
-- Never retain an unvalidated device-flow ID token or weaken browser OIDC validation.
-- Never delete, revoke, migrate, or overwrite existing credentials except when pi persists a successfully completed selected login.
-- Never alter credential-aware Responses routing, proxy scopes/headers, authenticated catalog exactness, or paid-tool opt-in behavior.
-- Never attempt a live device flow without explicit user interaction in this pane.
+- Never advertise Pi releases that have not passed the packed-package compatibility suite.
+- Never let a matrix cell reuse the repository lockfile's Pi versions or pass without asserting the exact requested/resolved pair.
+- Never use `--legacy-peer-deps` or `--force` to make a supported compatibility cell pass.
+- Never widen into an untested pre-1.0 minor line; keep a conservative exclusive upper bound.
+- Never migrate the test framework, implement issue #68, modernize publishing, or upgrade unrelated dependencies.
+- Never alter OAuth, routing, proxy-header, catalog, OIDC/state, device-login, or paid-tool runtime behavior from issues #63-#67.
 
 ## Required Practices (MUST)
-- Work only on `feature/issue-66-device-code-auth` from merged main through PR #73.
-- Keep browser authorization-code + PKCE first/default in pi's native selector.
-- Use pinned `https://auth.x.ai/oauth2/device/code` and `https://auth.x.ai/oauth2/token`, the current public client ID, and the frozen ordered eight-scope string.
-- Wait before every token poll; honor at least the server interval; add five seconds cumulatively for `slow_down`; stop at the advertised expiry capped at 15 minutes.
-- Pass AbortSignal through initiation, sleeps, polling, and post-login catalog work; cancellation must return no credentials.
-- Use fixed local errors and bounded JSON/schema validation.
-- Keep environment detection advisory-only for selector copy; never auto-switch or reorder methods.
-- Update progress after major steps and complete strict validation plus independent review before delivery.
+- Work only on `feature/issue-69-pi-peer-range` from current merged `origin/main` through PR #75.
+- Keep both Pi peer ranges byte-identical unless a documented package constraint proves otherwise.
+- Keep normal development dependencies exact at the checked-in latest allowed release; use isolated exact installs for the minimum matrix boundary.
+- Verify source metadata, lock metadata, CI policy, registry maximum, and packed manifest cannot drift silently.
+- Prove older and next-minor versions fail the range and produce npm peer-resolution diagnostics before runtime loading.
+- Document a deliberate review/test process before changing the minimum, latest tested release, or upper bound.
+- Update scaffold progress after major steps and complete independent dependency/CI/correctness/docs review before delivery.
 
-## Live-flow Safety
-A live flow, if explicitly requested during this task, must remain in this pane, show only pi's native verification URL/user code UI, invoke no paid model/tool request, never print tokens or opaque device codes, and leave existing credentials unchanged unless the complete flow succeeds.
+## npm Test Safety
+`--force` is allowed only in a temporary negative consumer fixture to prove npm emits an unsupported-peer warning. Positive installs must use strict peer resolution in a clean packed-package sandbox.

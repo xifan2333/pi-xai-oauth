@@ -13,6 +13,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
 - Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
 - Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
+- Added packed-package compatibility validation at exact Pi 0.80.1 and 0.80.7 boundaries, with requested/resolved version reporting, range and registry-drift checks, packed-manifest inspection, and unsupported-peer install diagnostics.
+- Added PR/main CI that derives its exact compatibility matrix from the checked-in Pi version policy instead of reusing the development lockfile version.
 
 ### Changed
 
@@ -23,6 +25,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Made the authenticated account catalog authoritative for OAuth model additions and removals; known static metadata now enriches returned IDs without advertising unreturned models.
 - Made successful login force-refresh and immediately replace the model catalog, while `/reload` follows the documented cache TTL.
 - Kept browser authorization-code + PKCE as the desktop default while recommending device login in remote/headless selector copy without automatically changing the selected method.
+- Replaced wildcard Pi peers with the aligned, bounded `>=0.80.1 <0.81.0` range and pinned development metadata exactly to the latest tested boundary, 0.80.7.
+- Documented the deliberate candidate-test and review process required before widening support to another pre-1.0 Pi line.
 
 ### Fixed
 

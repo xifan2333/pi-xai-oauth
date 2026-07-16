@@ -11,20 +11,10 @@ const {
   pollXaiDeviceAuthorization,
   requestXaiDeviceAuthorization,
 } = jiti(path.join(repoRoot, "extensions", "xai", "device-auth.ts"));
+const codingAgentEntry = jiti.resolve("@earendil-works/pi-coding-agent");
+const codingAgentJiti = createJiti(codingAgentEntry, { interopDefault: true });
 const { AuthStorage } = jiti("@earendil-works/pi-coding-agent");
-const { registerOAuthProvider } = jiti(path.join(
-  repoRoot,
-  "node_modules",
-  "@earendil-works",
-  "pi-coding-agent",
-  "node_modules",
-  "@earendil-works",
-  "pi-ai",
-  "dist",
-  "utils",
-  "oauth",
-  "index.js",
-));
+const { registerOAuthProvider } = codingAgentJiti("@earendil-works/pi-ai/oauth");
 const {
   createXaiOAuth,
   detectXaiLoginContext,

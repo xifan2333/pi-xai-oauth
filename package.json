@@ -23,8 +23,12 @@
   "scripts": {
     "scaffold": "node bin/setup.js --scaffold",
     "setup": "node bin/setup.js",
-    "test": "node scripts/verify-device-auth.js && node scripts/verify-catalog.js && node scripts/verify-extension.js && node scripts/verify-setup.js",
-    "typecheck": "npx tsc --noEmit"
+    "test": "node scripts/verify-compatibility.js policy && node scripts/verify-device-auth.js && node scripts/verify-catalog.js && node scripts/verify-extension.js && node scripts/verify-setup.js",
+    "typecheck": "tsc --noEmit",
+    "compatibility:check": "node scripts/verify-compatibility.js all",
+    "compatibility:min": "node scripts/run-compatibility-matrix.js minimum",
+    "compatibility:latest": "node scripts/run-compatibility-matrix.js latest",
+    "compatibility:boundaries": "npm run compatibility:min && npm run compatibility:latest"
   },
   "pi": {
     "extensions": [
@@ -33,12 +37,12 @@
     "image": "https://raw.githubusercontent.com/BlockedPath/pi-xai-oauth/main/preview.jpeg"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-ai": ">=0.80.1 <0.81.0",
+    "@earendil-works/pi-coding-agent": ">=0.80.1 <0.81.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.80.3",
-    "@earendil-works/pi-coding-agent": "^0.80.3",
+    "@earendil-works/pi-ai": "0.80.7",
+    "@earendil-works/pi-coding-agent": "0.80.7",
     "@types/node": "^26.0.0",
     "jiti": "^2.7.0",
     "typescript": "^7.0.2"

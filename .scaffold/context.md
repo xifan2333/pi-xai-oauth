@@ -1,39 +1,30 @@
-# Shared Agent Context — Issue #66
+# Shared Agent Context — Issue #69
 
 **Project:** pi-xai-oauth
-**Branch:** feature/issue-66-device-code-auth
-**Date:** 2026-07-16
+**Branch:** feature/issue-69-pi-peer-range
+**Date:** 2026-07-17
 
 ## Issue Contract
-Add device authorization as a clear `/login xai-auth` option for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions. Browser authorization-code + PKCE remains the normal desktop default.
+Replace wildcard Pi peers with one aligned, bounded, evidence-backed pre-1.0 range. CI must install and report the exact minimum and latest allowed releases from the packed package, run the relevant tests/typecheck, detect policy drift, verify packed metadata, and prove unsupported peers are rejected or warned about during npm resolution.
 
-## Authoritative Protocol
-- Device endpoint: `https://auth.x.ai/oauth2/device/code`.
-- Token endpoint: `https://auth.x.ai/oauth2/token`.
-- Client ID: existing `b1a00492-073a-47ea-816f-4c329264a828`.
-- Scopes: existing ordered `openid profile email offline_access grok-cli:access api:access conversations:read conversations:write`.
-- Initiation is form-encoded `client_id`, `scope`, and truthful referrer/metadata; polling is form-encoded device grant URN, opaque `device_code`, and client ID.
-- Sleep before the first request; default omitted interval to 5 seconds, floor to 1 second, preserve pending cadence, and add 5 seconds cumulatively on `slow_down`.
-- Honor positive server `expires_in` and cap total flow at 15 minutes. This intentionally follows RFC/pi bounded expiry rather than the pinned official client's 10-minute minimum-floor quirk.
+## Compatibility History
+- 1.2.4 / `de8d667` + `c36901b`: adapted and tested Pi 0.79.8's OpenAI Responses API guard.
+- 1.3.2 / `39e8f53`: moved from the removed Pi 0.80 root Responses helper to the new subpath.
+- 1.3.3 / `9283e3f`: moved to `@earendil-works/pi-ai/compat` after the Pi 0.80 extension loader rewrote the subpath incorrectly.
+- Historical `eb3a700` proposed aligned `>=0.80.3 <0.81.0`, but that side-branch metadata/CI did not land on current main.
 
-## Pi Runtime Contract
-- `onSelect` preserves provider option order and highlights index zero; selector cancellation returns `undefined` without aborting.
-- `onDeviceCode` displays a clickable verification URL, user code, waiting text, and cancel hint; the provider owns polling.
-- Dialog cancellation aborts `callbacks.signal`; device initiation, sleep, polls, and catalog handoff must consume it.
-- `AuthStorage.login` persists only after provider login resolves, so rejection/cancellation preserves existing pi credentials.
-- `usesCallbackServer` remains enabled provider-wide for browser/manual redirect input; device mode avoids `onAuth` and manual input.
+## npm Contract
+- Peers express host compatibility; npm 7+ resolves them and strict-peer mode turns conflicts into install failures.
+- For stable releases, `^0.80.1` is effectively the 0.80 patch line; the explicit `>=0.80.1 <0.81.0` form communicates the reviewed breaking-line boundary.
+- A repository lock proves only one tree. Matrix cells must start from the packed tarball in a clean directory, install exact root Pi dev versions, and assert both resolved versions before tests.
+- A checked-in latest endpoint plus a registry-drift check makes future compatible-line releases deliberate rather than silently dynamic.
+
+## Selected Boundary
+Both peers use `>=0.80.1 <0.81.0`. Pi 0.80.1 is the first published 0.80 release, contains the required compat export/loader-alias contract, and passes the full packed `npm test` plus typecheck suite. Exact 0.80.7 is the latest allowed/tested endpoint. The exclusive upper bound remains `<0.81.0` until a reviewed 0.81 release passes as a temporary candidate before metadata is widened.
 
 ## Preservation Boundaries
-Browser state/raw-code/PKCE/OIDC validation from #67; scopes/proxy headers from #65; credential-aware routing from #63/#70; exact authenticated catalog/cache/account isolation from #64/#73; and refresh-token rotation/preservation all remain unchanged.
-
-## Delivery
-Reviewed implementation commit `9968f3b` was pushed on `feature/issue-66-device-code-auth`; unmerged PR #75 targets `main` and closes issue #66: https://github.com/BlockedPath/pi-xai-oauth/pull/75
-
-No live device flow was attempted. Deterministic protocol, registered-provider/catalog, and real pi AuthStorage integration tests validated behavior without touching existing credentials.
+All runtime behavior from issues #63-#67 remains unchanged. This task may change dependency/test/CI/docs metadata and a brittle test-only import path, but not production OAuth, catalog, transport, or tool behavior.
 
 ## Research Artifacts
-- `/tmp/issue66-official-research.md`
-- `/tmp/issue66-local-scout.md`
-- `/tmp/issue66-pi-context.md`
-- `/tmp/issue66-plan-review.md`
-- `/tmp/issue66-oracle.md`
+- `.pi-subagents/artifacts/outputs/cba02feb-19ae-45cf-92de-c9e58a1ea772/research.md`
+- `.pi-subagents/artifacts/outputs/cba02feb-19ae-45cf-92de-c9e58a1ea772/context.md`
