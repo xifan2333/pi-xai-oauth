@@ -1,38 +1,33 @@
 # Shared Agent Context
 
 **Project:** pi-xai-oauth
-**Branch:** feature/issue-67-oauth-state-oidc
+**Branch:** feature/issue-64-oauth-model-catalog
 **Date:** 2026-07-16
 
-## Issue
-Issue #67 reports that token-shaped manual input is marked `trustedManualCode` and exchanged without OAuth state, while fresh-login ID tokens are stored without signature or claim validation. The fix must bind every authorization completion to its in-memory transaction and validate retained OIDC identity material.
+## Issue contract
+Issue #64 requires authenticated OAuth-visible `/models-v2` discovery, exact entitlement/removal filtering, defensive metadata normalization, explicit refresh/cache/fallback behavior, lifecycle integration, fixture tests, documentation, safe live smoke, and delivery as an unmerged PR.
 
-## First-party and normative contract
-- OIDC trust root: `https://auth.x.ai/.well-known/openid-configuration`.
-- Exact issuer: `https://auth.x.ai`.
-- Exact authorization endpoint: `https://auth.x.ai/oauth2/authorize`.
-- Exact token endpoint: `https://auth.x.ai/oauth2/token`.
-- Exact JWKS endpoint: `https://auth.x.ai/.well-known/jwks.json`.
-- Current ID-token algorithm/key shape: ES256 with public EC P-256 signing JWKs selected by `kid`.
-- Current PKCE method: S256.
-- OIDC Core requires fresh code-flow ID-token validation for exact issuer, client audience, expiry, nonce, and issuer signing key before tokens are accepted.
-- xAI's generic RFC 8414 metadata currently differs from its OIDC metadata; this OIDC client must not merge or fall back between them.
+## Authoritative behavior
+- Official session users fetch `{cli proxy base}/models-v2` with bearer auth, `X-XAI-Token-Auth: xai-grok-cli`, client version, and client mode; official idle refresh uses a 5-second bound and skips BYOK.
+- Official parsing accepts `model`/`modelId`/`id`, name, `apiBackend`, context-window variants, max-completion variants, reasoning capability/default/options, hidden flags, and `_meta` fallbacks.
+- Official catalog guidance says `grok-build-0.1` is API-key-only and excluded from OAuth catalogs.
+- pi awaits async extension factories before startup/session events/provider flush, making that the correct dynamic-model hook. Provider re-registration after startup is immediate. `/reload` recreates the extension runtime.
 
-## Scope decisions
-- Raw authorization codes are rejected because they carry no state. Users must paste the complete redirect URL containing matching `code` and `state`.
-- Device authorization is not implemented here; issue #66 owns method selection, device endpoint requests, polling, expiry, cancellation, and remote/headless UX.
-- Existing `~/.grok/auth.json` reuse and refresh remain compatible. Existing credentials are not deleted, revoked, or retroactively treated as fresh OIDC responses.
-- Fresh login requires and validates an ID token before credentials are returned. Refresh responses do not retain a new ID token unless a future design supplies the original validated identity context required by OIDC refresh rules.
-- Token endpoint response bodies, authorization codes, tokens, verifiers, state, and nonce must never be logged or included in errors.
+## Planned policy
+- Cache path: pi agent cache directory, `cache/pi-xai-oauth/models-v2.json`.
+- Fresh TTL: 15 minutes (startup uses cache without network).
+- Stale refresh: one redirect-refusing authenticated GET bounded to the official client's 5 seconds.
+- Stale-if-transient: normalized LKG up to 7 days for network/timeout/429/5xx/invalid-success failures.
+- Auth/permanent failure or unusable/no cache: the documented `grok-4.5`-only curated fallback; 401/403 never reuse stale entitlements.
+- Successful login always forces refresh, forbids stale reuse on every failure, invalidates the old account cache if refresh fails, and immediately re-registers models.
+- Expired pi-owned credentials are never refreshed in the extension factory; normal-session startup resolves them through pi's lock-protected model registry before catalog refresh.
+- Successful remote refresh replaces rather than merges, so account-specific additions/removals take effect.
 
-## Test strategy
-Use generated ES256/P-256 test keys and local JWT fixtures. Exercise HTTP and pasted callbacks, token-request capture, cancellation/listener cleanup, discovery/JWKS policy, signature/key failures, issuer/audience/nonce/expiry failures, refresh fallback/unvalidated-ID-token discard, and exact valid ID-token retention. No test uses production keys or credentials.
+## Preservation boundaries
+Keep OAuth-session Responses routing on `cli-chat-proxy.grok.com`, API-key routing direct and explicit, Images direct, issue #65 proxy metadata/scopes intact, issue #67 state/OIDC hardening intact, and current model-specific payload/reasoning/tool compatibility intact.
 
-## Validation state
-- LSP diagnostics, `npm test`, strict-unhandled focused verification, `npm run typecheck`, and `git diff --check` pass.
-- Dry-run package inspection includes `extensions/xai/oidc.ts` and excludes scaffold, subagent, credential, key, and local artifacts.
-- Two independent review rounds completed; accepted findings were fixed and the final security review reported no blockers.
-- Live interactive OAuth was not attempted because browser/TUI interaction is not safely available through this tool pane. Existing credentials were not read, removed, rewritten, or revoked.
+## Validation evidence
+Final LSP diagnostics, `npm test`, `npm run typecheck`, `git diff --check`, and 43-file npm dry-run package inspection pass. Safe authenticated GET-only smoke through the implemented selector returned two OAuth-visible Responses entries and invoked no paid API/tool. Independent correctness, security/privacy, cache, tests, docs, and package reviews completed; accepted concurrency/cancellation/cache fixes were applied and the final focused review reported `CLEAN`.
 
 ## Delivery
-The reviewed implementation was committed as `3721691`, pushed on `feature/issue-67-oauth-state-oidc`, and opened against `main` as unmerged PR #72: https://github.com/BlockedPath/pi-xai-oauth/pull/72
+Reviewed implementation commit `70436d2` was pushed on `feature/issue-64-oauth-model-catalog`; unmerged PR #73 targets `main`: https://github.com/BlockedPath/pi-xai-oauth/pull/73

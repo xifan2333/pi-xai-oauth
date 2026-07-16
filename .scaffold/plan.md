@@ -1,36 +1,37 @@
-# Implementation Plan: Issue #67 OAuth state and OIDC validation
+# Implementation Plan: Issue #64 authenticated OAuth model catalog
 
-**Branch:** feature/issue-67-oauth-state-oidc
+**Branch:** feature/issue-64-oauth-model-catalog
 **Date:** 2026-07-16
 
 ## Goal
-Remove the unbound raw authorization-code fallback and make fresh xAI browser OAuth completion fail closed on transaction state plus validated first-party OIDC identity metadata.
+Replace the release-bound OAuth model advertisement with an authenticated, entitlement-aware `/models-v2` catalog while preserving a small safe fallback, bounded startup, existing routing/header/OIDC behavior, and model-specific compatibility.
 
 ## Implementation
-- [x] Remove `trustedManualCode` and reject raw-code-only manual input with a safe migration message.
-- [x] Require the expected state on every HTTP or pasted callback before token exchange.
-- [x] Pin and validate xAI OIDC issuer, authorization endpoint, token endpoint, JWKS endpoint, ES256, and S256 metadata.
-- [x] Validate fresh-login ID tokens before retaining credentials: compact JWS shape, ES256 signature, matching P-256 signing key, issuer, audience/authorized party, expiry, required claims, and nonce.
-- [x] Preserve existing Grok CLI credential reuse and refresh compatibility without retaining unvalidated refresh ID tokens.
-- [x] Stop reflecting authorization/token endpoint response data in errors.
-- [x] Add focused wrong/missing-state, raw-code migration, code-substitution, cancellation/cleanup, discovery/JWKS, ID-token failure, and valid-completion tests.
-- [x] Update README, CHANGELOG, AGENTS.md, and scaffold security guidance.
+- [x] Add a focused catalog module with defensive `/models-v2` normalization, pinned Responses-backend handling, hidden/API-key-only rejection, and exact replacement semantics for additions/removals.
+- [x] Add an atomic token-free last-known-good cache under pi's user cache directory.
+- [x] Use a 15-minute fresh TTL, an official-aligned bounded 5-second stale refresh, a 7-day stale-if-transient window, durable invalidation for auth/permanent failures, and forced no-stale refresh after successful login.
+- [x] Make the extension factory async so the selected catalog is registered before startup and `--list-models`; re-register immediately after login so `/model` sees new entitlements without `/reload`.
+- [x] Defer expired pi-owned token refresh to `session_start` through the bound model registry/credential lock.
+- [x] Keep direct helper metadata synchronized with the active catalog while preserving Grok 4.5, Build, Composer, 4.20, routing, headers/scopes, payload, and OIDC compatibility logic.
+- [x] Add fixture-based tests for additions, removals, malformed entries, duplicate/API-key-only/unsupported-backend filtering, reasoning metadata, fresh/stale cache, auth/network failures, and fallback choice.
+- [x] Update README, CHANGELOG, AGENTS.md, and scaffold state with refresh/login/reload/model-selection and cache policy.
 
 ## Non-goals
-- Do not implement device authorization; full device-code UX, polling, and cancellation remain tracked by issue #66.
-- Do not revoke, delete, migrate, or rewrite existing user credentials.
-- Do not change model routing, scopes, tools, payloads, or xAI API behavior outside issue #67.
+- Do not add API-key auth or expose API-key-only models.
+- Do not alter issue #63 credential-aware Responses/Images routing, issue #65 scopes/proxy headers, issue #67 OAuth state/OIDC validation, or issue #66 device login.
+- Do not call paid generation/search/image tools during validation.
+- Do not persist or log access/refresh/ID tokens or raw catalog payloads.
 
 ## Validation Contract
-- [x] LSP diagnostics pass for changed TypeScript files.
+- [x] Changed-file LSP diagnostics pass.
 - [x] `npm test` passes.
 - [x] `npm run typecheck` passes.
 - [x] `git diff --check` passes.
-- [x] `npm pack --dry-run --json` contains intended runtime/docs files and no local artifacts or credentials.
-- [x] Independent security, correctness, and test reviews complete; accepted fixes are applied and revalidated.
-- [x] Live OAuth was not attempted because this tool pane cannot safely hand browser/TUI interaction to the user; existing credentials were not read, removed, rewritten, or revoked.
+- [x] `npm pack --dry-run --json` contains required runtime/fixtures/docs and excludes credentials/cache/scaffold/subagent artifacts.
+- [x] Safe authenticated GET-only `/models-v2` smoke succeeds when credentials are available without printing credentials.
+- [x] Independent correctness, security, cache, and test reviews complete; accepted fixes are applied and revalidated.
 
 ## Delivery
-- [x] Committed the reviewed implementation as `3721691`.
-- [x] Pushed `feature/issue-67-oauth-state-oidc`.
-- [x] Opened PR #72 against `main` without merging it: https://github.com/BlockedPath/pi-xai-oauth/pull/72
+- [x] Committed reviewed implementation as `70436d2`.
+- [x] Pushed `feature/issue-64-oauth-model-catalog`.
+- [x] Opened unmerged PR #73 against `main`, closing #64: https://github.com/BlockedPath/pi-xai-oauth/pull/73

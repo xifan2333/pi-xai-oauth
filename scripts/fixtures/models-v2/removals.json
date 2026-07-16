@@ -1,0 +1,11 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "model": "grok-composer-2.5-fast",
+      "name": "Composer 2.5",
+      "api_backend": "responses",
+      "context_window": 200000
+    }
+  ]
+}

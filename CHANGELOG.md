@@ -6,12 +6,20 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+### Added
+
+- Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
+- Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
+- Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
+
 ### Changed
 
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
 - Kept Grok Build and Composer payload, header, and tool compatibility separate from transport routing.
 - Updated fresh OAuth logins to request xAI's current eight-scope Grok client grant, including conversation read/write access, while leaving existing refresh grants compatible.
 - Derived the proxy client identifier and version from this package's own metadata instead of impersonating a stale Grok CLI release.
+- Made the authenticated account catalog authoritative for OAuth model additions and removals; known static metadata now enriches returned IDs without advertising unreturned models.
+- Made successful login force-refresh and immediately replace the model catalog, while `/reload` follows the documented cache TTL.
 
 ### Fixed
 
@@ -21,6 +29,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
 - Preserved the official direct `api.x.ai` Images endpoint for OAuth-backed image generation while keeping a future explicit API-key Responses route on the public API.
 - Added the complete CLI-proxy authentication, client-mode, request, conversation, session, and model metadata to every OAuth Responses request, with required values protected from caller overrides.
+- Filtered hidden, malformed, unsupported-backend, secret-bearing, and known API-key-only entries such as `grok-build-0.1` from the OAuth provider catalog.
+- Invalidated stale entitlement data after authentication/permanent failures and prevented a forced post-login refresh from reusing another account's stale cache.
 
 ## 1.3.5 - 2026-07-15
 

@@ -30,7 +30,7 @@ function color(text, c) {
 
 function printHeader() {
   console.log(`\n${color("🚀  pi-xai-oauth", "cyan")} — ${color("xAI Grok + OAuth for pi", "bold")}\n`);
-  console.log("   One-command setup for Grok 4.5, Grok Build, and Composer 2.5 with clean OAuth login.\n");
+  console.log("   One-command setup for Grok 4.5 plus your account's OAuth-visible xAI model catalog.\n");
 }
 
 function checkPi() {
@@ -212,7 +212,7 @@ function printNextSteps(nonInteractive = false) {
     console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.5 (already set as default)`);
     console.log(`      ${color("pi", "cyan")}\n`);
   } else {
-    console.log("Grok 4.5, Grok 4.3, Grok Build, Composer 2.5 + xAI OAuth are now configured and ready.\n");
+    console.log("Grok 4.5 plus your account's OAuth-visible xAI models are now configured and ready.\n");
   }
 
   console.log("You now have access to powerful reasoning, coding models, and long context!\n");

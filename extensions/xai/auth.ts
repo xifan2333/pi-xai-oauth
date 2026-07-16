@@ -1,5 +1,6 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
-import { existsSync, readFileSync } from "fs";
+import { AuthStorage, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { existsSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import {
@@ -10,6 +11,7 @@ import {
   XAI_OAUTH_REFRESH_SKEW_MS,
   XAI_PROVIDER_ID,
 } from "./constants";
+import { getXaiRuntimeModels } from "./models";
 import { ensureFreshXaiCredentials } from "./oauth";
 import type { XaiCredential } from "./routing";
 
@@ -78,15 +80,70 @@ export function getGrokAuthCredentials(): OAuthCredentials | null {
   return null;
 }
 
+export interface StartupXaiCatalogAuth {
+  credential: { access: string } | null;
+  /** True when pi has an expired stored OAuth token that session_start should refresh under AuthStorage's lock. */
+  needsRegistryRefresh: boolean;
+  credentialChangedAt?: number;
+}
+
+/**
+ * Resolve a fresh startup-only OAuth bearer without refreshing or modifying
+ * pi's credential store. Expired pi credentials still defer lock-protected
+ * refresh to the bound model registry, while a fresh official Grok CLI bearer
+ * may be reused read-only for startup catalog selection.
+ */
+export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAuth {
+  let needsRegistryRefresh = false;
+  let credentialChangedAt: number | undefined;
+  try {
+    const authPath = join(getAgentDir(), "auth.json");
+    const stored = AuthStorage.create(authPath).get(XAI_PROVIDER_ID);
+    credentialChangedAt = existsSync(authPath) ? statSync(authPath).mtimeMs : undefined;
+    if (stored?.type === "oauth" && typeof stored.access === "string" && stored.access) {
+      if (typeof stored.expires === "number" && stored.expires > now) {
+        return { credential: { access: stored.access }, needsRegistryRefresh: false, credentialChangedAt };
+      }
+      needsRegistryRefresh = true;
+    }
+  } catch {
+    // Fall through to read-only official Grok CLI credential reuse.
+  }
+
+  const grok = getGrokAuthCredentials();
+  if (grok?.access && typeof grok.expires === "number" && grok.expires > now) {
+    const grokPath = join(homedir(), ".grok", "auth.json");
+    const grokChangedAt = existsSync(grokPath) ? statSync(grokPath).mtimeMs : undefined;
+    const changedAt =
+      typeof credentialChangedAt === "number" && typeof grokChangedAt === "number"
+        ? Math.max(credentialChangedAt, grokChangedAt)
+        : grokChangedAt ?? credentialChangedAt;
+    return {
+      credential: { access: grok.access },
+      needsRegistryRefresh,
+      credentialChangedAt: changedAt,
+    };
+  }
+  return { credential: null, needsRegistryRefresh, credentialChangedAt };
+}
+
 /** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */
 export async function resolveXaiCredential(ctx: any): Promise<XaiCredential | null> {
-  const registryModel = ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL);
-  if (registryModel && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
-    if (auth?.ok && auth.apiKey) return { kind: "oauth-session", token: auth.apiKey };
-    const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
-    if (authorization.toLowerCase().startsWith("bearer ")) {
-      return { kind: "oauth-session", token: authorization.slice("bearer ".length) };
+  if (typeof ctx?.modelRegistry?.find === "function" && typeof ctx?.modelRegistry?.getApiKeyAndHeaders === "function") {
+    const candidateIds = [
+      ctx?.model?.provider === XAI_PROVIDER_ID ? ctx.model.id : undefined,
+      DEFAULT_XAI_MODEL,
+      ...getXaiRuntimeModels().map((model) => model.id),
+    ].filter((id, index, values): id is string => typeof id === "string" && !!id && values.indexOf(id) === index);
+    for (const modelId of candidateIds) {
+      const registryModel = ctx.modelRegistry.find(XAI_PROVIDER_ID, modelId);
+      if (!registryModel) continue;
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
+      if (auth?.ok && auth.apiKey) return { kind: "oauth-session", token: auth.apiKey };
+      const authorization = auth?.ok && typeof auth.headers?.Authorization === "string" ? auth.headers.Authorization : "";
+      if (authorization.toLowerCase().startsWith("bearer ")) {
+        return { kind: "oauth-session", token: authorization.slice("bearer ".length) };
+      }
     }
   }
   if (ctx?.apiKey) return { kind: "oauth-session", token: ctx.apiKey };

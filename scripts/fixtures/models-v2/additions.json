@@ -1,0 +1,39 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "grok-4.5",
+      "model": "grok-4.5",
+      "name": "Grok 4.5",
+      "api_backend": "responses",
+      "context_window": 500000,
+      "supports_reasoning_effort": true,
+      "reasoning_effort": "high",
+      "reasoning_efforts": [
+        { "id": "high", "value": "high", "label": "High Effort", "default": true },
+        { "id": "medium", "value": "medium", "label": "Medium Effort", "default": false },
+        "low"
+      ]
+    },
+    {
+      "modelId": "grok-composer-2.5-fast",
+      "name": "Composer 2.5",
+      "apiBackend": "responses",
+      "contextWindow": 200000,
+      "maxCompletionTokens": 30000
+    },
+    {
+      "id": "grok-new-oauth-model",
+      "name": "Grok New OAuth Model",
+      "apiBackend": "responses",
+      "contextWindow": 262144,
+      "maxCompletionTokens": 24576,
+      "supportsReasoningEffort": true,
+      "reasoningEfforts": [
+        { "id": "deep", "value": "xhigh", "label": "Deep" },
+        { "value": "invalid" },
+        "medium"
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { xaiModelForRequest, xaiProxyRequestHeaders } from "./models";
+import { isXaiRuntimeModelEntitled, xaiModelForRequest, xaiProxyRequestHeaders } from "./models";
 import { rewriteXaiResponsesPayload } from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
 
@@ -147,7 +147,11 @@ export async function createXaiResponse(
   body: Record<string, any>,
   signal?: AbortSignal,
 ): Promise<any> {
-  const model = xaiModelForRequest(typeof body.model === "string" ? body.model : undefined, credential.kind);
+  const requestedModel = typeof body.model === "string" ? body.model : undefined;
+  const model = xaiModelForRequest(requestedModel, credential.kind);
+  if (credential.kind === "oauth-session" && !isXaiRuntimeModelEntitled(model.id)) {
+    throw new Error(`xAI OAuth model ${model.id} is not present in the authenticated model catalog`);
+  }
   const route = resolveXaiRoute(credential.kind, "responses");
   const rewritten = rewriteXaiResponsesPayload(body, model);
   const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
@@ -177,6 +181,17 @@ export async function createXaiResponse(
  * @returns A forwarding assistant stream compatible with pi's async iterator and `result()` contract.
  */
 export function streamSimpleXaiResponses(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
+  if (!isXaiRuntimeModelEntitled(model.id)) {
+    const stream = createForwardingAssistantStream();
+    const message = streamErrorMessage(
+      model,
+      new Error(`xAI OAuth model ${model.id} is not present in the authenticated model catalog`),
+    );
+    stream.push({ type: "error", reason: "error", error: message });
+    stream.end(message);
+    return stream;
+  }
+
   // The registered xai-auth provider is OAuth-only, so bind its stream to
   // session-token routing instead of inferring credential provenance from the
   // bearer string.

@@ -36,6 +36,7 @@ const RAW_CODE_MIGRATION_MESSAGE =
 
 type XaiOAuthOptions = {
   getExistingCredentials: () => OAuthCredentials | null;
+  onLoginCredentials?: (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => Promise<void>;
 };
 
 function messageFromError(error: unknown): string {
@@ -337,7 +338,24 @@ function credentialsFromTokenPayload(
 }
 
 /** Build pi's OAuth provider config for xAI/Grok login and refresh. */
-export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
+export function createXaiOAuth({ getExistingCredentials, onLoginCredentials }: XaiOAuthOptions) {
+  const finishLogin = async (
+    credentials: OAuthCredentials,
+    callbacks: OAuthLoginCallbacks,
+  ): Promise<OAuthCredentials> => {
+    assertLoginNotCancelled(callbacks.signal);
+    if (!onLoginCredentials) return credentials;
+    try {
+      await onLoginCredentials(credentials, callbacks);
+      assertLoginNotCancelled(callbacks.signal);
+    } catch (error) {
+      if (callbacks.signal?.aborted) throw new Error("xAI OAuth login was cancelled");
+      // Catalog discovery must never discard an otherwise valid OAuth login.
+      callbacks.onProgress?.("xAI login succeeded, but the model catalog could not be refreshed; using the curated fallback.");
+    }
+    return credentials;
+  };
+
   return {
     usesCallbackServer: true,
     name: "xAI (Grok)",
@@ -351,9 +369,10 @@ export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
         });
         if (useExisting.toLowerCase().startsWith("y")) {
           try {
-            return await runAbortableLoginStep(callbacks.signal, () =>
+            const credentials = await runAbortableLoginStep(callbacks.signal, () =>
               ensureFreshXaiCredentials(existingCredentials, callbacks.signal),
             );
+            return finishLogin(credentials, callbacks);
           } catch (error) {
             callbacks.onProgress?.(
               `Existing Grok CLI credentials could not be refreshed (${messageFromError(error)}). Starting a fresh xAI OAuth login...`,
@@ -456,7 +475,10 @@ export function createXaiOAuth({ getExistingCredentials }: XaiOAuthOptions) {
       );
       assertLoginNotCancelled(callbacks.signal);
 
-      return credentialsFromTokenPayload(data, discovery.token_endpoint, "", data.id_token);
+      return finishLogin(
+        credentialsFromTokenPayload(data, discovery.token_endpoint, "", data.id_token),
+        callbacks,
+      );
     },
 
     async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
