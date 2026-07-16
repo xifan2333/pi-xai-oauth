@@ -690,11 +690,25 @@ cd pi-xai-oauth
 # Install deps
 npm install
 
-# Type-check
+# Full deterministic gate: policy, focused Vitest suites, and real Pi loader smoke
+npm test
+
+# Focused development commands
+npm run test:unit -- tests/oauth/browser-login.test.ts
+npm run test:unit -- -t "rejects raw codes"
+npm run test:watch
+
+# V8 coverage (text, JSON summary, and LCOV)
+npm run test:coverage
+
+# Run only the real Pi extension-loader integration smoke
+npm run test:loader
+
+# Type-check production, tests, fixtures, and Vitest config with TypeScript 7
 npm run typecheck
 
-# Run verification tests
-npm test
+# Strict asynchronous error validation
+NODE_OPTIONS=--unhandled-rejections=strict npm test
 
 # Verify source/lock/range/registry/packed metadata and unsupported peers
 npm run compatibility:check
@@ -765,13 +779,20 @@ pi-xai-oauth/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
 ├── compatibility/
 │   └── pi-versions.json      # Peer range plus exact minimum/latest CI policy
+├── tests/                     # Focused typed Vitest domain suites
+│   ├── fixtures/              # Isolated ExtensionAPI, OAuth, fetch, model, and temp fixtures
+│   ├── catalog/               # Normalization, authenticated fetch, and cache policy
+│   ├── oauth/                 # Browser/device/OIDC/refresh/cancellation/AuthStorage
+│   ├── provider/              # Registration, routing, credentials, lifecycle, and races
+│   ├── responses/             # Payload, stream, error, routing, and image transport
+│   ├── images/                # Codec budgets and Images tool behavior
+│   ├── tools/                 # Network lifecycle, command, custom, and Cursor shims
+│   └── setup/                 # Installer/settings behavior
 ├── scripts/
 │   ├── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner
 │   ├── verify-compatibility.js # Range/lock/registry/pack/unsupported-peer checks
-│   ├── verify-device-auth.js # Deterministic device protocol/timing/cancellation tests
-│   ├── verify-catalog.js     # Catalog normalization/cache tests
-│   ├── verify-extension.js   # Provider/OAuth/transport integration tests
-│   └── verify-setup.js       # Installer/settings tests
+│   └── verify-extension-loader.mjs # Small real Pi loader integration smoke
+├── vitest.config.ts           # Node isolation and measured V8 coverage floors
 ├── .github/workflows/ci.yml  # PR/main policy and exact Pi boundary matrix
 ├── .scaffold/                # Persistent agent state (plan, progress, etc.)
 ├── AGENTS.md                 # AI agent operations manual

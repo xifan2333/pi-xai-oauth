@@ -47,9 +47,21 @@ cd pi-xai-oauth
 # Install dependencies
 npm install
 
-# Run the complete verification suite and TypeScript check
+# Run the complete policy + focused unit + real-loader suite
 npm test
 npm run typecheck
+
+# Run one suite or one named regression while developing
+npm run test:unit -- tests/catalog/cache.test.ts
+npm run test:unit -- -t "invalidates stale entitlements"
+npm run test:watch
+
+# Run measured V8 coverage and the loader smoke independently
+npm run test:coverage
+npm run test:loader
+
+# Fail on leaked asynchronous errors
+NODE_OPTIONS=--unhandled-rejections=strict npm test
 
 # Verify compatibility policy, package metadata, and unsupported peers
 npm run compatibility:check
@@ -77,6 +89,8 @@ Every dependency/compatibility PR and release must run:
 
 ```bash
 npm test
+NODE_OPTIONS=--unhandled-rejections=strict npm test
+npm run test:coverage
 npm run typecheck
 npm run compatibility:check
 npm run compatibility:boundaries

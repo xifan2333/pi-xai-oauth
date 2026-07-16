@@ -43,6 +43,15 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function listFilesRecursively(directory, root = directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = path.join(directory, entry.name);
+    return entry.isDirectory()
+      ? listFilesRecursively(absolute, root)
+      : [path.relative(repoRoot, absolute).split(path.sep).join("/")];
+  });
+}
+
 function run(command, args, options = {}) {
   const env = { ...process.env, ...options.env };
   delete env.npm_config_allow_scripts;
@@ -199,10 +208,13 @@ function verifyPackedPackage() {
       "extensions/xai-oauth.ts",
       "scripts/verify-compatibility.js",
       "scripts/run-compatibility-matrix.js",
+      "scripts/verify-extension-loader.mjs",
+      "vitest.config.ts",
+      ...listFilesRecursively(path.join(repoRoot, "tests")),
     ];
     for (const file of required) assert.ok(packed.files.includes(file), `Packed package is missing ${file}`);
 
-    const forbidden = ["node_modules/", ".git/", ".scaffold/", ".pi-subagents/", ".env", "auth.json"];
+    const forbidden = ["node_modules/", ".git/", ".scaffold/", ".pi-subagents/", "coverage/", ".env", "auth.json"];
     for (const file of packed.files) {
       assert.ok(!forbidden.some((prefix) => file === prefix || file.startsWith(prefix)), `Packed forbidden path: ${file}`);
     }

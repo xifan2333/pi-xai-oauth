@@ -23,7 +23,11 @@
   "scripts": {
     "scaffold": "node bin/setup.js --scaffold",
     "setup": "node bin/setup.js",
-    "test": "node scripts/verify-compatibility.js policy && node scripts/verify-device-auth.js && node scripts/verify-catalog.js && node scripts/verify-extension.js && node scripts/verify-setup.js",
+    "test": "node scripts/verify-compatibility.js policy && npm run test:unit && npm run test:loader",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:loader": "node scripts/verify-extension-loader.mjs",
     "typecheck": "tsc --noEmit",
     "compatibility:check": "node scripts/verify-compatibility.js all",
     "compatibility:min": "node scripts/run-compatibility-matrix.js minimum",
@@ -44,7 +48,9 @@
     "@earendil-works/pi-ai": "0.80.7",
     "@earendil-works/pi-coding-agent": "0.80.7",
     "@types/node": "^26.0.0",
+    "@vitest/coverage-v8": "4.1.10",
     "jiti": "^2.7.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "4.1.10"
   }
 }
