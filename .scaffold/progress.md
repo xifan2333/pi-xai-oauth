@@ -30,10 +30,19 @@
 
 - [x] Committed and force-pushed the rebased branch and refreshed PR #90 with current scope and validation.
 - [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+- [x] Confirmed the final review's five findings against the exact clean PR head at `09a60f4`.
+- [x] Added inert JSON canonicalization before direct/stream model and modality enforcement, including stable redacted serialization failures.
+- [x] Added computer-screenshot detection, canonical model IDs in text-only errors, iterative wide-payload traversal, and forced zero SDK retries.
+- [x] Added direct/stream serializer-bypass, screenshot URL/file ID, retry, redaction, canonical-ID, entitlement-race, and wide-payload regressions.
+- [x] Applied independent review feedback so runtime catalog IDs now drive OAuth rewrite, body, headers, checks, and errors, with modality checks both before compaction and immediately before transport.
+- [x] Final focused validation passed 73 tests plus typecheck; strict full validation passed 299 tests and loader smoke.
+- [x] Coverage passed at 84.88% statements, 77.02% branches, 87.03% functions, and 88.40% lines.
+- [x] Live policy/registry, 90-file pack, unsupported-peer checks, and clean packed Pi 0.80.1/0.80.10 test/loader/typecheck matrices passed.
+- [x] Two independent final read-only re-reviews returned CLEAN after canonical model binding and pre/post-compaction enforcement were added.
 
 ## In progress
 
-- [ ] Merge PR #90 after final maintainer approval.
+- [ ] Commit, push, and refresh PR #90 without merging.
 
 ## Residual
 
