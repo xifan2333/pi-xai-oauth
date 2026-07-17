@@ -18,7 +18,7 @@ Pin and document the reviewed Grok Build wire contract without impersonating the
 6. [x] Complete rebase onto merged PR #94 without dropping protocol or Pi 0.80.10 behavior.
 7. [x] Run focused suites, strict full tests, coverage, typecheck, live compatibility checks, and exact 0.80.1/0.80.10 boundaries.
 8. [x] Complete independent review, fix redirect replay and generic delegate affinity headers, revalidate, and obtain a CLEAN focused re-review.
-9. [ ] Commit and force-push the rebased branch, refresh PR #92, mark it ready, and wait for fresh required checks.
+9. [x] Commit and force-push the rebased branch, refresh PR #92, mark it ready, and receive fresh green policy plus exact Pi 0.80.1/0.80.10 checks.
 
 ## Validation contract
 

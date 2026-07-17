@@ -26,9 +26,12 @@
 
 - [x] Focused final independent review returned CLEAN with no blocker.
 
+- [x] Committed and force-pushed the rebased branch, refreshed PR #92, and marked it ready for review.
+- [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+
 ## In progress
 
-- [ ] Commit, force-push, refresh PR #92, and mark it ready.
+- [ ] Merge PR #92 after final maintainer approval.
 
 ## Residual
 
