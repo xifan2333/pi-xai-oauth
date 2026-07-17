@@ -1,39 +1,53 @@
-# Execution Progress — Issue #78
+# Execution Progress — Issue #80
 
-**Branch:** feature/issue-78-grok-protocol
+**Branch:** feature/issue-80-model-modalities
 **Original baseline:** 579f965
-**Rebased baseline:** 0d51d0a
+**Rebased baseline:** c0c89b0
 
 ## Completed
 
-- [x] Audited the pinned Grok Build revision and current runtime/tests.
-- [x] Added `extensions/xai/wire.ts` for truthful package identity, route-specific headers, reserved-header scrubbing, OAuth form headers, and bounded status-only errors.
-- [x] Applied the shared contract to streaming/direct Responses, catalog, browser/refresh/device OAuth, and direct media without changing pinned routes.
-- [x] Added SSE/direct, catalog, client-mode, OAuth form, unsupported-ID, media-boundary, body-redaction, and version-gate coverage.
-- [x] Added the pinned compatibility matrix/review procedure and documented the encrypted-reasoning handoff to #79.
-- [x] Opened draft PR #92 with the original reviewed implementation.
-- [x] Merged issue #93 compatibility work is available on main at 0d51d0a with exact Pi 0.80.1/0.80.10 policy.
+- [x] Audited issue #80, the pinned Grok Build revision, current runtime boundaries, fixtures, tests, and documentation.
+- [x] Performed one bounded authenticated schema observation without retaining secrets, raw bodies, endpoints, identity, or account membership.
+- [x] Added bounded capability precedence with authenticated/known/default provenance.
+- [x] Added schema-2 cache validation and safe in-memory schema-1 migration without changing exact entitlement membership.
+- [x] Kept provenance in cloned runtime snapshots while stripping it from provider model definitions.
+- [x] Added final current-snapshot image-input enforcement after package rewriting, caller hooks, and compaction for streaming/direct OAuth Responses and shared custom tools.
+- [x] Added redacted fixtures and focused normalization, cache, provider, payload, transport, and custom-tool regressions.
+- [x] Documented observed schema absence, pinned source revision, precedence, fallback, cache/privacy, and local rejection behavior.
+- [x] Original branch validation passed 270 tests, loader smoke, typecheck, coverage, package checks, and its then-current exact boundaries; independent review was clean.
+- [x] Merged PR #92 is present on current main at c0c89b0, including redirect rejection and generic delegate affinity suppression.
+- [x] Read-only conflict reviews identified the required combined catalog/Responses resolution.
 
-- [x] Rebased PR #92 onto merged PR #94/current main and reconciled tracked docs/state without dropping Pi 0.80.10 compatibility.
-- [x] Focused protocol/OAuth validation passed: 10 files / 110 tests.
-- [x] Strict full tests passed after review fixes: 29 files / 253 tests plus loader smoke and typecheck.
-- [x] Coverage passed at 83.57% statements, 75.31% branches, 86.07% functions, and 87.11% lines.
-- [x] Live policy/registry/pack/unsupported checks passed with an 87-file package.
-- [x] Exact packed Pi 0.80.1 and 0.80.10 matrices passed under CI's npm 11.6.2 resolver.
+- [x] Rebased issue #80 onto c0c89b0 and retained centralized catalog headers, redirect rejection, generic affinity suppression, and Pi 0.80.10 credential compatibility.
+- [x] Fixed the merged stream seam so bounded text-only errors remain actionable while upstream errors stay sanitized and fetch guards restore before terminal results.
+- [x] Review fixes now reject impossible cached provenance/input pairs, preserve exact schema-1 files on post-rename cancellation, and remove image locations/data from all image-analysis error details.
+- [x] Final focused transport/cache/tool validation passed: 5 files / 70 tests.
+- [x] Strict full tests passed: 29 files / 282 tests plus loader smoke and typecheck.
+- [x] Coverage passed at 84.73% statements, 76.70% branches, 87.26% functions, and 88.28% lines.
+- [x] Live policy/registry/90-file pack/unsupported-peer checks passed.
+- [x] Exact clean packed Pi 0.80.1 and 0.80.10 matrices passed 282 tests, loader smoke, and typecheck under npm 11.6.2.
+- [x] Two independent final re-reviews returned CLEAN with no merge blockers.
 
-- [x] Independent review found and the sole writer fixed redirect replay exposure plus generic delegate affinity-header injection.
-- [x] Added concurrent-stream guard coverage proving pinned xAI redirects are rejected, unrelated fetches remain unchanged, and the global fetch surface is restored before terminal results resolve.
-
-- [x] Focused final independent review returned CLEAN with no blocker.
-
-- [x] Committed and force-pushed the rebased branch, refreshed PR #92, and marked it ready for review.
+- [x] Committed and force-pushed the rebased branch and refreshed PR #90 with current scope and validation.
 - [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+- [x] Confirmed the final review's five findings against the exact clean PR head at `09a60f4`.
+- [x] Added inert JSON canonicalization before direct/stream model and modality enforcement, including stable redacted serialization failures.
+- [x] Added computer-screenshot detection, canonical model IDs in text-only errors, iterative wide-payload traversal, and forced zero SDK retries.
+- [x] Added direct/stream serializer-bypass, screenshot URL/file ID, retry, redaction, canonical-ID, entitlement-race, and wide-payload regressions.
+- [x] Applied independent review feedback so runtime catalog IDs now drive OAuth rewrite, body, headers, checks, and errors, with modality checks both before compaction and immediately before transport.
+- [x] Final focused validation passed 73 tests plus typecheck; strict full validation passed 299 tests and loader smoke.
+- [x] Coverage passed at 84.88% statements, 77.02% branches, 87.03% functions, and 88.40% lines.
+- [x] Live policy/registry, 90-file pack, unsupported-peer checks, and clean packed Pi 0.80.1/0.80.10 test/loader/typecheck matrices passed.
+- [x] Two independent final read-only re-reviews returned CLEAN after canonical model binding and pre/post-compaction enforcement were added.
 
-## In progress
+## Delivery
 
-- [ ] Merge PR #92 after final maintainer approval.
+- [x] Committed the reviewed transport hardening as `b935cbe` (`fix: harden Responses payload enforcement`).
+- [x] Pushed the existing feature branch without force and posted the finding-by-finding resolution evidence on PR #90.
+- [x] Fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+- [x] Kept PR #90 open and unmerged for maintainer approval.
 
 ## Residual
 
-- Encrypted reasoning request/response replay remains deferred to #79 by design.
-- No live xAI request is part of the deterministic compatibility gate.
+- No live xAI request or interactive OAuth flow is part of the deterministic compatibility gate.
+- Encrypted reasoning remains deferred to issue #79.

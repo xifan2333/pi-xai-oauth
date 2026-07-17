@@ -3,6 +3,28 @@ import { normalizeXaiImageInput } from "./images";
 import { grokSupportsReasoningEffort, isGrokCliCompatibilityModel } from "./models";
 import { textFromResponsesContent } from "./text";
 
+export const XAI_PAYLOAD_CANONICALIZATION_ERROR =
+  "xAI OAuth payload could not be safely canonicalized; no xAI request was sent";
+
+/**
+ * Materialize the exact JSON representation of a caller-controlled Responses
+ * payload so custom serializers, accessors, prototypes, and functions cannot
+ * change what later security checks and transport observe.
+ */
+export function canonicalizeXaiResponsesPayload(payload: unknown): Record<string, unknown> {
+  try {
+    const serialized = JSON.stringify(payload);
+    if (typeof serialized !== "string") throw new Error();
+    const canonical = JSON.parse(serialized);
+    if (!canonical || typeof canonical !== "object" || Array.isArray(canonical)) {
+      throw new Error();
+    }
+    return canonical as Record<string, unknown>;
+  } catch {
+    throw new Error(XAI_PAYLOAD_CANONICALIZATION_ERROR);
+  }
+}
+
 function normalizeResponsesImageParts(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeResponsesImageParts);
   if (!value || typeof value !== "object") return value;
@@ -112,6 +134,36 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
   }
 
   return rewritten;
+}
+
+/** Return whether a final Responses request input structurally contains image content. */
+export function xaiResponsesPayloadContainsImage(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const input = (payload as Record<string, unknown>).input;
+  const stack: unknown[] = [input];
+  const seen = new WeakSet<object>();
+  while (stack.length > 0) {
+    const value = stack.pop();
+    if (!value || typeof value !== "object") continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const child of value) stack.push(child);
+      continue;
+    }
+    const item = value as Record<string, unknown>;
+    if (item.type === "input_image" || item.type === "image_url") return true;
+    if (
+      item.type === "computer_screenshot" &&
+      (item.image_url !== undefined || item.file_id !== undefined)
+    ) return true;
+    if (
+      item.type === "image" &&
+      (typeof item.data === "string" || item.image_url !== undefined || item.source !== undefined)
+    ) return true;
+    for (const child of Object.values(item)) stack.push(child);
+  }
+  return false;
 }
 
 /** Rewrite generic OpenAI Responses payloads into xAI-compatible payloads. */

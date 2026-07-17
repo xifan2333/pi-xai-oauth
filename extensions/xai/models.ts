@@ -8,12 +8,21 @@ export {
   type XaiProxyRequestMetadata,
 } from "./wire";
 
+/** Bounded evidence used to derive one normalized model input capability. */
+export enum XaiModelInputProvenance {
+  AuthenticatedAcceptsImages = "authenticated-accepts-images",
+  AuthenticatedInputModalities = "authenticated-input-modalities",
+  Known = "known-model-metadata",
+  Default = "conservative-default",
+}
+
 export type XaiCatalogModel = {
   id: string;
   name: string;
   apiBackend: "responses";
   reasoning: boolean;
   input: ("text" | "image")[];
+  inputProvenance: XaiModelInputProvenance;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
   contextWindow: number;
   maxTokens: number;
@@ -34,6 +43,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: true,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0 },
     contextWindow: 500_000,
     // xAI has not published a Grok 4.5-specific max output limit yet;
@@ -54,6 +64,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: true,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
     contextWindow: 1_000_000,
     maxTokens: 131_072,
@@ -64,6 +75,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: true,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 1, output: 2, cacheRead: 0.2, cacheWrite: 0.2 },
     contextWindow: 512_000,
     maxTokens: 30_000,
@@ -74,6 +86,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: false,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 3, output: 15, cacheRead: 0.5, cacheWrite: 0 },
     contextWindow: 200_000,
     maxTokens: 30_000,
@@ -92,6 +105,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: true,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
     contextWindow: 2_000_000,
     maxTokens: 131_072,
@@ -102,6 +116,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: false,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
     contextWindow: 2_000_000,
     maxTokens: 131_072,
@@ -112,6 +127,7 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     apiBackend: "responses",
     reasoning: true,
     input: ["text", "image"],
+    inputProvenance: XaiModelInputProvenance.Known,
     cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
     contextWindow: 2_000_000,
     maxTokens: 131_072,
@@ -132,7 +148,12 @@ let runtimeModels: readonly XaiCatalogModel[] = CURATED_FALLBACK_MODELS;
 
 /** Replace request-helper metadata with the current entitlement snapshot. */
 export function setXaiRuntimeModels(models: readonly XaiCatalogModel[]): void {
-  runtimeModels = models.map((model) => ({ ...model }));
+  runtimeModels = models.map((model) => ({
+    ...model,
+    input: [...model.input],
+    cost: { ...model.cost },
+    ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
+  }));
 }
 
 /** Return the current entitlement snapshot used by direct request helpers. */
@@ -142,8 +163,21 @@ export function getXaiRuntimeModels(): readonly XaiCatalogModel[] {
 
 /** Return true only when the active OAuth catalog currently advertises a model. */
 export function isXaiRuntimeModelEntitled(modelId: string): boolean {
+  return getXaiRuntimeModel(modelId) !== undefined;
+}
+
+/** Return one model from the current entitlement snapshot without falling back. */
+export function getXaiRuntimeModel(modelId: string): XaiCatalogModel | undefined {
   const normalized = normalizedXaiModelId(modelId);
-  return runtimeModels.some((model) => model.id.toLowerCase() === normalized);
+  return runtimeModels.find((model) => model.id.toLowerCase() === normalized);
+}
+
+/** Return whether a provenance value came from bounded authenticated catalog evidence. */
+export function isAuthenticatedXaiInputProvenance(
+  provenance: XaiModelInputProvenance,
+): boolean {
+  return provenance === XaiModelInputProvenance.AuthenticatedAcceptsImages ||
+    provenance === XaiModelInputProvenance.AuthenticatedInputModalities;
 }
 
 /** Choose the default model from the active OAuth catalog, if one exists. */

@@ -1,19 +1,31 @@
-# Constraints & Safety Rules — Issue #78
+# Constraints & Safety Rules — Issue #80
 
-## Hard boundaries
+## Catalog and cache
 
-- One writer in this worktree; delegated reviewers are read-only.
-- Preserve pinned OAuth authorize/device/token/discovery/JWKS endpoints, pinned CLI proxy Responses/catalog routes, and direct `api.x.ai` API-key/media routes.
-- Never trust catalog/model/caller endpoints or route metadata.
-- Keep `pi-xai-oauth` as the truthful client identifier and User-Agent; never claim to be `grok-shell`, `grok-build`, or an official Grok binary.
-- Never log or reflect codes, device codes, tokens, verifiers, state, nonce, authenticated headers, raw catalog bodies, or raw transport error bodies.
-- Do not invent or derive Grok agent, turn, deployment, or user IDs.
-- Preserve browser PKCE/state/nonce/OIDC validation and bounded cancellable device polling.
-- Do not implement encrypted reasoning in issue #78; record and defer it to #79.
-- Preserve Pi peers at `>=0.80.1 <0.81.0`, minimum 0.80.1, latest 0.80.10, exact dev dependencies, and the read-only startup credential compatibility path.
+- Preserve authenticated `/models-v2` as exact entitlement membership; capability enrichment must never union or remove IDs.
+- Parse only exact `acceptsImages` booleans and bounded `inputModalities` arrays from an entry or `_meta`.
+- Precedence is `entry.acceptsImages`, `_meta.acceptsImages`, `entry.inputModalities`, `_meta.inputModalities`, known metadata, then conservative unknown text.
+- Malformed higher-priority evidence falls through; it does not exclude the entitlement or become an authenticated denial.
+- Do not mark Composer text-only without authenticated or official evidence.
+- Schema-1 migration is in-memory and never labels legacy input as authenticated. Preserve membership, order, IDs, and normalized non-input metadata.
+- Store only normalized models, timestamps, and bounded provenance. Never cache raw catalog bodies, tokens, headers, endpoints, or identity fields.
+- Preserve atomic writes, TTL, stale-if-transient behavior, invalidation, permissions, cancellation, refresh ownership, and centralized catalog wire headers.
 
-## Validation
+## Transport and OAuth
 
-- Run focused request-shape/OAuth suites, strict full tests, coverage, loader smoke, typecheck, live policy/registry/pack checks, and exact packed 0.80.1/0.80.10 matrices.
-- Resolve rebase conflicts without dropping either the issue #78 protocol contract or merged issue #93 compatibility changes.
-- Commit and force-push only after independent review reports no blockers.
+- Keep existing unentitled-model rejection and evaluate image capability from the current runtime entitlement snapshot at the final pre-network point.
+- Run the image guard after package rewriting, caller payload hooks, and image compaction; zero fetches may occur on rejection.
+- Error text may identify the model but must not echo payloads, image locations/data, credentials, headers, or raw upstream bodies.
+- Central direct-helper enforcement must cover `xai_generate_text(image_url)` and `xai_analyze_image`; do not apply image-input policy to image generation.
+- Preserve pinned routes, centralized truthful wire headers, reserved-header scrubbing, redirect rejection, and suppression of generic delegate affinity IDs.
+- Preserve browser PKCE/state/nonce/OIDC validation, bounded cancellable device polling, and state-bound callback requirements.
+- Preserve Pi peers at `>=0.80.1 <0.81.0`, exact 0.80.1/0.80.10 boundaries, and read-only startup credential compatibility.
+- Encrypted reasoning remains deferred to issue #79.
+
+## Delivery
+
+- This worktree has one writer; delegated reviewers are read-only.
+- Update scaffold state after major phases.
+- Run focused tests, strict full tests, typecheck, coverage, live package checks, and both exact packed compatibility boundaries before push.
+- Rebase without dropping merged issue #78 wire/security or issue #93 Pi compatibility behavior.
+- Force-push only after independent final review reports no blockers.

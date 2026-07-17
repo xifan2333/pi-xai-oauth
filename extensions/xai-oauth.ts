@@ -22,7 +22,7 @@ export default async function (pi: ExtensionAPI) {
   let oauth: ReturnType<typeof createXaiOAuth>;
 
   const providerModels = (models: readonly XaiCatalogModel[]) =>
-    models.map(({ apiBackend: _apiBackend, ...model }) => model);
+    models.map(({ apiBackend: _apiBackend, inputProvenance: _inputProvenance, ...model }) => model);
 
   const providerConfig = () => ({
     name: "xAI (OAuth)",

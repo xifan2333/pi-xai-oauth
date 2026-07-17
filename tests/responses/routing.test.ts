@@ -226,6 +226,36 @@ describe("Responses routing and protected metadata", () => {
     );
   });
 
+  it.each(["xai-auth/grok-4.5", "XAI-AUTH/GROK-4.5"])(
+    "canonicalizes the OAuth model alias %s in body and proxy metadata",
+    async (alias) => {
+      const aliasModel = { ...TEST_MODEL, id: alias } as any;
+      const sessionId = `alias-${alias}`;
+      const stream = streamSimpleXaiResponses(
+        aliasModel,
+        { messages: [{ role: "user", content: "hello", timestamp: 1 }] } as any,
+        { apiKey: "oauth-token", sessionId } as any,
+      );
+      await stream.result();
+      const streamRequest = requests.at(-1)!;
+      expectProxy(streamRequest, "grok-4.5", sessionId, "text/event-stream");
+
+      await createXaiResponse(
+        { kind: "oauth-session", token: "oauth-token" },
+        { model: alias, input: "hello" },
+      );
+      const directRequest = requests.at(-1)!;
+      const directConversationId =
+        headerValue(directRequest.init.headers, "x-grok-conv-id") ?? "";
+      expectProxy(
+        directRequest,
+        "grok-4.5",
+        directConversationId,
+        "application/json",
+      );
+    },
+  );
+
   it("scopes redirect rejection across overlapping xAI streams", async () => {
     const pending: Array<() => void> = [];
     const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -326,6 +356,28 @@ describe("Responses routing and protected metadata", () => {
     expect(result.errorMessage).toMatch(/^xAI API error/i);
     expect(result.errorMessage).not.toMatch(/^OpenAI API error/i);
     expect(result.errorMessage).not.toContain("OpenAI API error: failed");
+  });
+
+  it("forces streaming SDK retries to zero", async () => {
+    const retryableFetch = vi.fn(async () =>
+      jsonResponse(
+        { error: { message: "RETRY_BODY_SECRET" } },
+        429,
+        { "Retry-After": "0" },
+      ),
+    );
+    vi.stubGlobal("fetch", retryableFetch);
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: 1 }] } as any,
+      {
+        apiKey: "oauth-token",
+        maxRetries: 4,
+      } as any,
+    );
+    const result = await stream.result();
+    expect(retryableFetch).toHaveBeenCalledTimes(1);
+    expect(result.errorMessage).not.toContain("RETRY_BODY_SECRET");
   });
 
   it("classifies proxy version gates without reflecting raw bodies", async () => {

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { rewriteXaiResponsesPayload } from "../../extensions/xai/payload";
+import {
+  canonicalizeXaiResponsesPayload,
+  rewriteXaiResponsesPayload,
+  XAI_PAYLOAD_CANONICALIZATION_ERROR,
+  xaiResponsesPayloadContainsImage,
+} from "../../extensions/xai/payload";
 import {
   CURATED_FALLBACK_MODELS,
   KNOWN_XAI_MODEL_METADATA,
@@ -203,5 +208,115 @@ describe("Responses payload normalization", () => {
         detail: "high",
       },
     ]);
+  });
+  it("detects only structural image content inside final Responses input", () => {
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: [{ type: "input_image", image_url: "redacted" }] }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: [{ type: "image", data: "redacted" }] }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ role: "user", content: "the words input_image and image_url are ordinary text" }],
+        metadata: { type: "input_image" },
+      }),
+    ).toBe(false);
+  });
+
+  it("detects URL-backed and file-backed computer screenshots", () => {
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{
+          type: "computer_call_output",
+          output: {
+            type: "computer_screenshot",
+            image_url: "https://example.test/private.png",
+          },
+        }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{
+          type: "computer_call_output",
+          output: { type: "computer_screenshot", file_id: "file_private" },
+        }],
+      }),
+    ).toBe(true);
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: [{ type: "computer_screenshot" }],
+        metadata: {
+          type: "computer_screenshot",
+          image_url: "https://example.test/not-input.png",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("walks payloads wider than V8's variadic argument limit", () => {
+    const wideInput = Array.from({ length: 150_000 }, () => null) as unknown[];
+    expect(
+      xaiResponsesPayloadContainsImage({
+        input: wideInput,
+      }),
+    ).toBe(false);
+    wideInput[0] = { type: "input_image", image_url: "redacted" };
+    expect(xaiResponsesPayloadContainsImage({ input: wideInput })).toBe(true);
+  });
+
+  it("canonicalizes a custom serializer exactly once into inert JSON", () => {
+    let calls = 0;
+    const canonical = canonicalizeXaiResponsesPayload({
+      model: "apparent",
+      input: "apparent",
+      toJSON() {
+        calls++;
+        return { model: "grok-4.5", input: "canonical" };
+      },
+    });
+    expect(calls).toBe(1);
+    expect(canonical).toEqual({ model: "grok-4.5", input: "canonical" });
+    expect(canonical).not.toHaveProperty("toJSON");
+  });
+
+  it("redacts canonicalization failures and rejects non-object results", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const throwing = {
+      toJSON() {
+        throw new Error("SERIALIZER_SECRET");
+      },
+    };
+    const throwingAccessor = Object.defineProperty({}, "input", {
+      enumerable: true,
+      get() {
+        throw new Error("ACCESSOR_SECRET");
+      },
+    });
+
+    for (const value of [
+      cyclic,
+      throwing,
+      throwingAccessor,
+      { value: 1n },
+      { toJSON: () => undefined },
+      { toJSON: () => [] },
+      { toJSON: () => "scalar" },
+    ]) {
+      let error: Error | undefined;
+      try {
+        canonicalizeXaiResponsesPayload(value);
+      } catch (caught) {
+        error = caught as Error;
+      }
+      expect(error?.message).toBe(XAI_PAYLOAD_CANONICALIZATION_ERROR);
+      expect(error?.message).not.toMatch(/SERIALIZER_SECRET|ACCESSOR_SECRET/);
+    }
   });
 });

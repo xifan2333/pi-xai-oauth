@@ -22,6 +22,13 @@ function xaiToolDisabledError(toolName: XaiNetworkToolName, details: Record<stri
   );
 }
 
+function invalidXaiImageInputError() {
+  return xaiToolError(
+    "Error: Invalid image input. Provide a valid image URL, data URL, or existing supported local file. No xAI request was sent.",
+    { error: true },
+  );
+}
+
 /** Register OAuth-backed custom xAI tools. */
 export function registerCustomXaiTools(pi: ExtensionAPI) {
     pi.registerTool({
@@ -55,7 +62,12 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
         }
 
         const model = params.model || activeModel.id || defaultXaiRuntimeModelId() || DEFAULT_XAI_MODEL;
-        const imageUrl = normalizeXaiImageInput(params.image_url);
+        let imageUrl: string | undefined;
+        try {
+          imageUrl = normalizeXaiImageInput(params.image_url);
+        } catch {
+          return invalidXaiImageInputError();
+        }
         const input = imageUrl
           ? [
               {
@@ -406,20 +418,26 @@ Be specific and cite examples where helpful.`;
       },
       execute: async (_toolCallId: string, params: { image?: string; question?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_analyze_image");
-        if (!activeModel) return xaiToolDisabledError("xai_analyze_image", { image: params?.image });
+        if (!activeModel) return xaiToolDisabledError("xai_analyze_image");
         const credential = await resolveXaiCredential(ctx);
         if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { image: params?.image });
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
         }
         const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
-        const imageInput = normalizeXaiImageInput(params.image) || params.image;
+        let imageInput: string | undefined;
+        try {
+          imageInput = normalizeXaiImageInput(params.image);
+        } catch {
+          return invalidXaiImageInputError();
+        }
+        if (!imageInput) return invalidXaiImageInputError();
         const input = [{ role: "user", content: [{ type: "input_image", image_url: imageInput, detail: "high" }, { type: "input_text", text: question }] }];
         let data: any;
         try {
           data = await createXaiResponse(credential, { model: activeModel.id, input, reasoning: { effort: "medium" } }, _signal);
         } catch (error) {
           const status = statusFromError(error);
-          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, image: params.image });
+          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status });
         }
         const text = extractResponsesText(data) || "Image analysis completed.";
         return { content: [{ type: "text", text }], details: { image: params.image, question } };

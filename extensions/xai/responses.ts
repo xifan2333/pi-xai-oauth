@@ -2,8 +2,18 @@ import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/p
 import { openAIResponsesApi } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import { compactXaiInlineImages } from "./images";
-import { isXaiRuntimeModelEntitled, xaiModelForRequest } from "./models";
-import { rewriteXaiResponsesPayload } from "./payload";
+import {
+  getXaiRuntimeModel,
+  isAuthenticatedXaiInputProvenance,
+  normalizedXaiModelId,
+  xaiModelForRequest,
+} from "./models";
+import {
+  canonicalizeXaiResponsesPayload,
+  rewriteXaiResponsesPayload,
+  XAI_PAYLOAD_CANONICALIZATION_ERROR,
+  xaiResponsesPayloadContainsImage,
+} from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
 import {
   safeXaiTransportErrorMessage,
@@ -16,6 +26,10 @@ import {
 type AssistantStreamEvent = Record<string, any>;
 
 const streamSimpleOpenAIResponses = openAIResponsesApi().streamSimple;
+const SAFE_TEXT_ONLY_ERROR_PATTERN =
+  /^xAI OAuth model [A-Za-z0-9][A-Za-z0-9._:-]{0,127} is explicitly text-only in the authenticated model catalog; no xAI request was sent$/;
+const SAFE_PAYLOAD_MODEL_ERROR =
+  "xAI OAuth payload hooks cannot change the selected model; no xAI request was sent";
 
 const guardedRedirectUrls = new Map<string, number>();
 let unguardedFetch: typeof fetch | undefined;
@@ -77,11 +91,16 @@ function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEv
     ...event,
     error: {
       ...error,
-      errorMessage: safeXaiTransportErrorMessage(
-        error.errorMessage,
-        typeof error.status === "number" ? error.status : undefined,
-        "responses-proxy",
-      ),
+      errorMessage:
+        SAFE_TEXT_ONLY_ERROR_PATTERN.test(error.errorMessage) ||
+        error.errorMessage === SAFE_PAYLOAD_MODEL_ERROR ||
+        error.errorMessage === XAI_PAYLOAD_CANONICALIZATION_ERROR
+        ? error.errorMessage
+        : safeXaiTransportErrorMessage(
+            error.errorMessage,
+            typeof error.status === "number" ? error.status : undefined,
+            "responses-proxy",
+          ),
     },
   };
 }
@@ -183,22 +202,67 @@ export async function postXaiJson(
   return response.json();
 }
 
+function pinXaiPayloadModel(modelId: string, payload: unknown): void {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error(SAFE_PAYLOAD_MODEL_ERROR);
+  }
+  const body = payload as Record<string, unknown>;
+  if (
+    body.model !== undefined &&
+    (typeof body.model !== "string" ||
+      normalizedXaiModelId(body.model) !== normalizedXaiModelId(modelId))
+  ) {
+    throw new Error(SAFE_PAYLOAD_MODEL_ERROR);
+  }
+  body.model = modelId;
+}
+
+/** Assert the current authenticated entitlement permits the final Responses payload. */
+export function assertXaiRuntimeModelAcceptsPayload(modelId: string, payload: unknown): void {
+  const runtimeModel = getXaiRuntimeModel(modelId);
+  if (!runtimeModel) {
+    throw new Error(`xAI OAuth model ${modelId} is not present in the authenticated model catalog`);
+  }
+  if (
+    isAuthenticatedXaiInputProvenance(runtimeModel.inputProvenance) &&
+    !runtimeModel.input.includes("image") &&
+    xaiResponsesPayloadContainsImage(payload)
+  ) {
+    throw new Error(
+      `xAI OAuth model ${runtimeModel.id} is explicitly text-only in the authenticated model catalog; no xAI request was sent`,
+    );
+  }
+}
+
 /** Create one xAI Responses result using explicit credential-aware routing. */
 export async function createXaiResponse(
   credential: XaiCredential,
   body: Record<string, any>,
   signal?: AbortSignal,
 ): Promise<any> {
-  const requestedModel = typeof body.model === "string" ? body.model : undefined;
+  const canonicalBody = canonicalizeXaiResponsesPayload(body);
+  const requestedModel = typeof canonicalBody.model === "string" ? canonicalBody.model : undefined;
   const model = xaiModelForRequest(requestedModel, credential.kind);
-  if (credential.kind === "oauth-session" && !isXaiRuntimeModelEntitled(model.id)) {
+  const runtimeModel = credential.kind === "oauth-session"
+    ? getXaiRuntimeModel(model.id)
+    : undefined;
+  if (credential.kind === "oauth-session" && !runtimeModel) {
     throw new Error(`xAI OAuth model ${model.id} is not present in the authenticated model catalog`);
   }
+  const selectedModelId = runtimeModel?.id ?? model.id;
+  const requestModel = selectedModelId === model.id ? model : { ...model, id: selectedModelId };
   const route = resolveXaiRoute(credential.kind, "responses");
-  const rewritten = rewriteXaiResponsesPayload(body, model);
+  const rewritten = rewriteXaiResponsesPayload(canonicalBody, requestModel);
+  pinXaiPayloadModel(selectedModelId, rewritten);
+  if (credential.kind === "oauth-session") {
+    assertXaiRuntimeModelAcceptsPayload(selectedModelId, rewritten);
+  }
   const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
+  if (credential.kind === "oauth-session") {
+    assertXaiRuntimeModelAcceptsPayload(selectedModelId, payload);
+  }
   const requestSessionId = randomUUID();
-  const requestHeaders = xaiProxyRequestHeaders(model.id, credential.kind, {
+  const requestHeaders = xaiProxyRequestHeaders(selectedModelId, credential.kind, {
     conversationId: requestSessionId,
     requestId: randomUUID(),
     sessionId: requestSessionId,
@@ -223,7 +287,8 @@ export async function createXaiResponse(
  * @returns A forwarding assistant stream compatible with pi's async iterator and `result()` contract.
  */
 export function streamSimpleXaiResponses(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
-  if (!isXaiRuntimeModelEntitled(model.id)) {
+  const runtimeModel = getXaiRuntimeModel(model.id);
+  if (!runtimeModel) {
     const stream = createForwardingAssistantStream();
     const message = streamErrorMessage(
       model,
@@ -245,8 +310,9 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   // https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits
   const sessionId = options?.sessionId;
   const routingSessionId = sessionId || randomUUID();
+  const selectedModelId = runtimeModel.id;
   const requestHeaders = xaiProxyRequestHeaders(
-    model.id,
+    selectedModelId,
     credentialKind,
     {
       conversationId: routingSessionId,
@@ -257,6 +323,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   );
   const streamModel = {
     ...model,
+    id: selectedModelId,
     baseUrl: route.baseUrl,
     headers: scrubXaiReservedHeaders((model as any).headers) as Record<string, string>,
   };
@@ -288,13 +355,26 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
           // rewrite below still receives the stable session for cache keys.
           sessionId: undefined,
           headers,
+          // A retry would reuse a once-validated payload after the current
+          // entitlement snapshot may have changed. Higher layers can retry by
+          // starting a fresh request that repeats every local guard.
+          maxRetries: 0,
           async onPayload(payload) {
             const rewritten = rewriteXaiResponsesPayload(payload, streamModel, {
               ...options,
               sessionId: sessionId || routingSessionId,
             });
             const userRewritten = await options?.onPayload?.(rewritten, streamModel);
-            return compactXaiInlineImages(userRewritten === undefined ? rewritten : userRewritten);
+            const canonicalPayload = canonicalizeXaiResponsesPayload(
+              userRewritten === undefined ? rewritten : userRewritten,
+            );
+            pinXaiPayloadModel(selectedModelId, canonicalPayload);
+            assertXaiRuntimeModelAcceptsPayload(selectedModelId, canonicalPayload);
+            const finalPayload = await compactXaiInlineImages(
+              canonicalPayload,
+            );
+            assertXaiRuntimeModelAcceptsPayload(selectedModelId, finalPayload);
+            return finalPayload;
           },
         },
       );

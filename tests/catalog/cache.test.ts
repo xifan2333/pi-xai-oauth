@@ -17,6 +17,7 @@ import {
   XAI_MODEL_CATALOG_MAX_BYTES,
   XAI_MODEL_CATALOG_MAX_STALE_MS,
 } from "../../extensions/xai/constants";
+import { XaiModelInputProvenance } from "../../extensions/xai/models";
 import { createTempDir } from "../fixtures/temp";
 import apiKeyOnlyFixture from "../fixtures/models-v2/api-key-only.json";
 import { headerValue, jsonResponse } from "../fixtures/http";
@@ -48,12 +49,17 @@ const removalsPayload = {
 };
 const additions = normalizeXaiCatalogPayload(additionsPayload);
 
-async function writeCache(path: string, fetchedAt: number, models = additions) {
+async function writeCache(
+  path: string,
+  fetchedAt: number,
+  models = additions,
+  schemaVersion = XAI_MODEL_CATALOG_CACHE_SCHEMA,
+) {
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(
     path,
     JSON.stringify({
-      schemaVersion: XAI_MODEL_CATALOG_CACHE_SCHEMA,
+      schemaVersion,
       fetchedAt,
       models,
     }),
@@ -87,6 +93,113 @@ describe("catalog cache selection", () => {
     expect((await selectXaiModelCatalog({ cachePath: path, now })).source).toBe(
       "curated-fallback",
     );
+  });
+
+  it("migrates schema 1 in memory without promoting legacy input to authenticated evidence", async () => {
+    const path = join(temp.path, "legacy", "models-v2.json");
+    const legacyModels = additions.map(({ inputProvenance: _inputProvenance, ...model }) => ({
+      ...model,
+      input: model.id === "grok-4.5" ? ["text"] : ["text", "image"],
+    }));
+    await writeCache(path, now - 1, legacyModels as any, 1);
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("fresh migrated cache must not fetch");
+    });
+
+    const selection = await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl,
+    });
+
+    expect(selection.source).toBe("fresh-cache");
+    expect(selection.models.map(({ id }) => id)).toEqual(additions.map(({ id }) => id));
+    expect(selection.models[0]).toMatchObject({
+      input: ["text", "image"],
+      inputProvenance: XaiModelInputProvenance.Known,
+    });
+    expect(selection.models[1]).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.Default,
+    });
+    expect(JSON.parse(await readFile(path, "utf8")).schemaVersion).toBe(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("writes schema 2 on the next normal atomic refresh after loading schema 1", async () => {
+    const path = join(temp.path, "legacy-refresh", "models-v2.json");
+    const legacyModels = additions.map(({ inputProvenance: _inputProvenance, ...model }) => model);
+    await writeCache(path, now - XAI_MODEL_CATALOG_FRESH_TTL_MS, legacyModels as any, 1);
+
+    const selection = await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl: async () =>
+        jsonResponse({
+          data: [
+            {
+              model: "grok-4.5",
+              api_backend: "responses",
+              context_window: 500_000,
+              acceptsImages: false,
+            },
+          ],
+        }),
+    });
+
+    expect(selection.models.map(({ id }) => id)).toEqual(["grok-4.5"]);
+    const cached = JSON.parse(await readFile(path, "utf8"));
+    expect(cached.schemaVersion).toBe(2);
+    expect(cached.models[0]).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    });
+  });
+
+  it("rejects malformed schema-2 provenance instead of treating it as fresh", async () => {
+    const path = join(temp.path, "bad-provenance", "models-v2.json");
+    const malformed = additions.map((model, index) =>
+      index === 0 ? { ...model, inputProvenance: "authenticated" } : model,
+    );
+    await writeCache(path, now - 1, malformed as any);
+    const fetchImpl = vi.fn(async () => jsonResponse(removalsPayload));
+
+    const selection = await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl,
+    });
+
+    expect(selection.source).toBe("remote");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rejects impossible acceptsImages provenance/input combinations", async () => {
+    const path = join(temp.path, "bad-accepts-images", "models-v2.json");
+    const malformed = additions.map((model, index) =>
+      index === 0
+        ? {
+            ...model,
+            input: ["image"],
+            inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+          }
+        : model,
+    );
+    await writeCache(path, now - 1, malformed as any);
+    const fetchImpl = vi.fn(async () => jsonResponse(removalsPayload));
+
+    const selection = await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl,
+    });
+
+    expect(selection.source).toBe("remote");
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("refreshes stale data through only the pinned authenticated GET and replaces the cache", async () => {
@@ -252,6 +365,35 @@ describe("catalog cache selection", () => {
     ).toEqual(additions.map(({ id }) => id));
   });
 
+  it("restores exact schema-1 contents after post-rename cancellation", async () => {
+    const path = join(temp.path, "legacy-guard", "models-v2.json");
+    const legacyModels = additions.map(({ inputProvenance: _inputProvenance, ...model }) => ({
+      ...model,
+      input: model.id === "grok-4.5" ? ["text"] : ["text", "image"],
+    }));
+    await writeCache(
+      path,
+      now - XAI_MODEL_CATALOG_FRESH_TTL_MS,
+      legacyModels as any,
+      1,
+    );
+    const before = await readFile(path, "utf8");
+    let checks = 0;
+
+    await expect(
+      selectXaiModelCatalog({
+        credential: { access: token },
+        cachePath: path,
+        now,
+        commitAllowed: () => ++checks < 4,
+        fetchImpl: async () => jsonResponse(removalsPayload),
+      }),
+    ).rejects.toBeInstanceOf(XaiCatalogCancelledError);
+
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(JSON.parse(before).schemaVersion).toBe(1);
+  });
+
   it("invalidates stale entitlements after auth failure", async () => {
     const path = join(temp.path, "auth", "models-v2.json");
     await writeCache(path, now - XAI_MODEL_CATALOG_FRESH_TTL_MS);
@@ -363,6 +505,38 @@ describe("catalog cache selection", () => {
     expect(cache).not.toMatch(
       /MUST_NOT_REACH_CACHE|XAI_API_KEY|OAUTH_TOKEN_MUST_NEVER_REACH_CACHE/,
     );
+  });
+
+  it("persists normalized modality provenance without raw capability or identity fields", async () => {
+    const path = join(temp.path, "modality-privacy", "models-v2.json");
+    await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl: async () =>
+        jsonResponse({
+          data: [
+            {
+              model: "private-shape",
+              api_backend: "responses",
+              context_window: 100_000,
+              acceptsImages: false,
+              inputModalities: ["text", "image"],
+              user_id: "IDENTITY_MUST_NOT_REACH_CACHE",
+              endpoint: "ENDPOINT_MUST_NOT_REACH_CACHE",
+            },
+          ],
+        }),
+    });
+
+    const cache = await readFile(path, "utf8");
+    expect(cache).not.toMatch(
+      /acceptsImages|inputModalities|IDENTITY_MUST_NOT_REACH_CACHE|ENDPOINT_MUST_NOT_REACH_CACHE|OAUTH_TOKEN_MUST_NEVER_REACH_CACHE/,
+    );
+    expect(JSON.parse(cache).models[0]).toMatchObject({
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    });
   });
 
   it("preserves deferred Pi refresh intent after a successful authenticated fetch", async () => {
