@@ -14,11 +14,21 @@
 - [x] Opened draft PR #92 with the original reviewed implementation.
 - [x] Merged issue #93 compatibility work is available on main at 0d51d0a with exact Pi 0.80.1/0.80.10 policy.
 
+- [x] Rebased PR #92 onto merged PR #94/current main and reconciled tracked docs/state without dropping Pi 0.80.10 compatibility.
+- [x] Focused protocol/OAuth validation passed: 10 files / 110 tests.
+- [x] Strict full tests passed after review fixes: 29 files / 253 tests plus loader smoke and typecheck.
+- [x] Coverage passed at 83.57% statements, 75.31% branches, 86.07% functions, and 87.11% lines.
+- [x] Live policy/registry/pack/unsupported checks passed with an 87-file package.
+- [x] Exact packed Pi 0.80.1 and 0.80.10 matrices passed under CI's npm 11.6.2 resolver.
+
+- [x] Independent review found and the sole writer fixed redirect replay exposure plus generic delegate affinity-header injection.
+- [x] Added concurrent-stream guard coverage proving pinned xAI redirects are rejected, unrelated fetches remain unchanged, and the global fetch surface is restored before terminal results resolve.
+
+- [x] Focused final independent review returned CLEAN with no blocker.
+
 ## In progress
 
-- [ ] Rebase PR #92 onto current main and reconcile tracked docs/state.
-- [ ] Re-run full validation and independent review.
-- [ ] Force-push and mark PR #92 ready.
+- [ ] Commit, force-push, refresh PR #92, and mark it ready.
 
 ## Residual
 

@@ -41,7 +41,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Kept startup credential discovery compatible with Pi 0.80.1 and Pi 0.80.10 by using the new read-only `readStoredCredential()` API when available and a synchronous JSON-only fallback on older supported hosts, without creating credential storage.
 - Migrated the real Pi credential-persistence integration test to exercise `ModelRuntime` and `InMemoryCredentialStore` on current Pi while retaining the legacy boundary path.
 - Explicitly negotiated `text/event-stream` for streaming Responses while keeping direct Responses and media requests on JSON Accept semantics.
-- Scrubbed caller/model authorization, content negotiation, User-Agent, proxy metadata, unsupported IDs, and unknown `x-grok-*` headers before applying the approved route contract.
+- Scrubbed caller/model authorization, content negotiation, User-Agent, proxy metadata, generic delegate affinity IDs, unsupported IDs, and unknown `x-grok-*` headers before applying the approved route contract.
+- Rejected redirects for streaming/direct Responses and media POSTs before fetch can replay request bodies or metadata to another origin.
 - Replaced raw direct-response error reflection with bounded status/route classification and actionable, non-impersonating proxy version-gate guidance.
 - Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.

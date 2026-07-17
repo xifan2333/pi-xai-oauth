@@ -41,6 +41,9 @@ const proxyHeaderNames = [
   "x-grok-session-id",
 ];
 const unsupportedProxyHeaderNames = [
+  "session_id",
+  "x-client-request-id",
+  "x-session-id",
   "x-grok-agent-id",
   "x-grok-turn-idx",
   "x-grok-user-id",
@@ -81,6 +84,7 @@ function expectProxy(
 ): string {
   const requestId = headerValue(request.init.headers, "x-grok-req-id") ?? "";
   expect(request.init.method).toBe("POST");
+  expect(request.init.redirect).toBe("error");
   expect(request.body.model).toBe(modelId);
   expect(request.url).toBe(XAI_CLI_RESPONSES_URL);
   expect(new URL(request.url).origin).toBe("https://cli-chat-proxy.grok.com");
@@ -144,6 +148,7 @@ describe("Responses routing and protected metadata", () => {
         sessionId,
         "text/event-stream",
       );
+      expect(streamRequest.body.prompt_cache_key).toBe(sessionId);
       if (modelId === "grok-composer-2.5-fast") {
         expect(streamRequest.body.reasoning).toBeUndefined();
       }
@@ -188,6 +193,9 @@ describe("Responses routing and protected metadata", () => {
       "x-grok-req-id": "spoofed-request",
       "x-grok-model-override": "spoofed-model",
       "x-grok-session-id": "spoofed-session",
+      session_id: "spoofed-openai-session",
+      "x-client-request-id": "spoofed-client-request",
+      "x-session-id": "spoofed-openrouter-session",
       "x-grok-agent-id": "spoofed-agent",
       "x-grok-turn-idx": "999",
       "x-grok-user-id": "spoofed-user",
@@ -218,6 +226,43 @@ describe("Responses routing and protected metadata", () => {
     );
   });
 
+  it("scopes redirect rejection across overlapping xAI streams", async () => {
+    const pending: Array<() => void> = [];
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const baseFetch = vi.fn(async (url: any, init: RequestInit = {}) => {
+      calls.push({ url: String(url), init });
+      if (String(url) === XAI_CLI_RESPONSES_URL) {
+        await new Promise<void>((resolve) => pending.push(resolve));
+      }
+      return jsonResponse({ id: "resp", output_text: "OK" });
+    });
+    vi.stubGlobal("fetch", baseFetch);
+
+    const streamA = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "a", timestamp: 1 }] } as any,
+      { apiKey: "oauth-token", sessionId: "session-a" } as any,
+    );
+    const streamB = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "b", timestamp: 2 }] } as any,
+      { apiKey: "oauth-token", sessionId: "session-b" } as any,
+    );
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+
+    expect(globalThis.fetch).not.toBe(baseFetch);
+    await globalThis.fetch("https://example.test/unrelated");
+    const unrelated = calls.find(({ url }) => url.includes("unrelated"))!;
+    expect(unrelated.init.redirect).toBeUndefined();
+    for (const release of pending.splice(0)) release();
+    await Promise.all([streamA.result(), streamB.result()]);
+
+    const xaiCalls = calls.filter(({ url }) => url === XAI_CLI_RESPONSES_URL);
+    expect(xaiCalls).toHaveLength(2);
+    expect(xaiCalls.every(({ init }) => init.redirect === "error")).toBe(true);
+    expect(globalThis.fetch).toBe(baseFetch);
+  });
+
   it("routes explicit API keys through api.x.ai with no proxy metadata", async () => {
     await createXaiResponse(
       { kind: "api-key", token: "api-key-token" },
@@ -225,6 +270,7 @@ describe("Responses routing and protected metadata", () => {
     );
     const request = requests.at(-1)!;
     expect(request.init.method).toBe("POST");
+    expect(request.init.redirect).toBe("error");
     expect(new URL(request.url).origin).toBe("https://api.x.ai");
     expect(request.url).toBe(XAI_RESPONSES_URL);
     expect(headerValue(request.init.headers, "Content-Type")).toBe(

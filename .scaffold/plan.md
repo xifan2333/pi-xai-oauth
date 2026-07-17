@@ -15,9 +15,10 @@ Pin and document the reviewed Grok Build wire contract without impersonating the
 3. [x] Apply the contract to streaming/direct Responses, catalog, OAuth/device/token, and direct media requests without changing pinned routes.
 4. [x] Add deterministic request-shape, client-mode, SSE/direct, privacy, and safe gate-error coverage.
 5. [x] Add the revision-pinned compatibility matrix/review procedure and update package documentation.
-6. [ ] Complete rebase onto merged PR #94 without dropping protocol or Pi 0.80.10 behavior.
-7. [ ] Run focused suites, strict full tests, coverage, typecheck, live compatibility checks, and exact 0.80.1/0.80.10 boundaries.
-8. [ ] Complete independent review, apply accepted fixes, force-push, refresh PR #92, and mark it ready.
+6. [x] Complete rebase onto merged PR #94 without dropping protocol or Pi 0.80.10 behavior.
+7. [x] Run focused suites, strict full tests, coverage, typecheck, live compatibility checks, and exact 0.80.1/0.80.10 boundaries.
+8. [x] Complete independent review, fix redirect replay and generic delegate affinity headers, revalidate, and obtain a CLEAN focused re-review.
+9. [ ] Commit and force-push the rebased branch, refresh PR #92, mark it ready, and wait for fresh required checks.
 
 ## Validation contract
 

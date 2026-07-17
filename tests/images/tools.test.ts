@@ -50,6 +50,7 @@ describe("xAI image generation tool", () => {
     expect(result.content[0].text).toMatch(/Generated 1 image/);
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toBe("https://api.x.ai/v1/images/generations");
+    expect(requests[0].init.redirect).toBe("error");
     expect(requests[0].body).toEqual({
       model: "grok-imagine-image-quality",
       prompt: "a diagram",

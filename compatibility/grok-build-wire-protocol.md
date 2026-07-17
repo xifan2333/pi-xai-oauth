@@ -42,10 +42,10 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 | Browser/device/refresh token | `https://auth.x.ai/oauth2/token` | JSON accept, form content type, truthful User-Agent, client version/surface | No CLI-proxy headers; no response-body reflection |
 | OIDC discovery/JWKS | Pinned issuer discovery and JWKS URLs | JSON accept, redirect rejection, issuer/algorithm/key validation | No bearer, caller endpoint, or proxy metadata |
 | OAuth model catalog | `https://cli-chat-proxy.grok.com/v1/models-v2` | Bearer, JSON accept, truthful identity/version/User-Agent, token-auth, authenticate-response, client mode | No conversation, request, model, session, agent, turn, user, or deployment IDs |
-| OAuth streaming Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Bearer, JSON content, `Accept: text/event-stream`, truthful identity/version/User-Agent, proxy auth, client mode, conversation/request/model/session metadata | No unsupported identity IDs; no caller route |
-| OAuth direct Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Same proxy metadata with `Accept: application/json` | No SSE accept; no unsupported identity IDs |
-| API-key direct Responses | `https://api.x.ai/v1/responses` | Bearer, JSON accept/content, truthful User-Agent | No CLI-proxy metadata |
-| OAuth or API-key image generation | `https://api.x.ai/v1/images/generations` | Bearer, JSON accept/content, truthful User-Agent | No CLI-proxy metadata |
+| OAuth streaming Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Bearer, JSON content, `Accept: text/event-stream`, truthful identity/version/User-Agent, proxy auth, client mode, conversation/request/model/session metadata, redirect rejection | No unsupported identity IDs, generic SDK affinity IDs, or caller route |
+| OAuth direct Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Same proxy metadata with `Accept: application/json` and redirect rejection | No SSE accept, unsupported identity IDs, or generic SDK affinity IDs |
+| API-key direct Responses | `https://api.x.ai/v1/responses` | Bearer, JSON accept/content, truthful User-Agent, redirect rejection | No CLI-proxy metadata or generic SDK affinity IDs |
+| OAuth or API-key image generation | `https://api.x.ai/v1/images/generations` | Bearer, JSON accept/content, truthful User-Agent, redirect rejection | No CLI-proxy metadata |
 
 ### Header classification
 
@@ -55,7 +55,7 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 - Route mode: `x-grok-client-mode`, resolved as `interactive` only for a text TTY and `headless` for print/JSON/RPC/non-TTY operation.
 - Streaming only: `Accept: text/event-stream`.
 - Affinity/routing metadata: conversation, request, model override, and session IDs on OAuth Responses only.
-- Unsupported: agent, turn, deployment, and user IDs. Unknown caller-supplied `x-grok-*` names are also rejected.
+- Unsupported: agent, turn, deployment, and user IDs. Unknown caller-supplied `x-grok-*` names are rejected. Generic delegate affinity headers (`session_id`, `x-client-request-id`, and `x-session-id`) are suppressed so only the reviewed xAI conversation/request/session fields leave the process.
 
 ## ID ownership
 
@@ -70,7 +70,7 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 
 ## Privacy and failure policy
 
-The header sanitizer removes authorization, accept/content type, User-Agent, proxy auth, and every caller-provided `x-grok-*` value before adding the approved route contract. This prevents client impersonation and privacy-sensitive ID injection while preserving unrelated non-reserved headers.
+The header sanitizer removes authorization, accept/content type, User-Agent, proxy auth, generic SDK affinity IDs, and every caller-provided `x-grok-*` value before adding the approved route contract. This prevents client impersonation and privacy-sensitive ID injection while preserving unrelated non-reserved headers. Responses and media POSTs reject redirects before fetch can replay request bodies or metadata to another origin.
 
 Unsuccessful direct HTTP responses are read through a 16 KiB bound for classification only. Raw response bodies, request headers, credentials, and request bodies are never included in the thrown/displayed message. Errors preserve HTTP status and route classification. Proxy version-gate signals return stable update/report guidance and the last reviewed revision; they do not recommend copying an official Grok version.
 

@@ -14,8 +14,11 @@ const RESERVED_HEADER_NAMES = new Set([
   "accept",
   "authorization",
   "content-type",
+  "session_id",
   "user-agent",
   "x-authenticateresponse",
+  "x-client-request-id",
+  "x-session-id",
   "x-xai-token-auth",
 ]);
 const APPROVED_PROXY_HEADER_NAMES = new Set([

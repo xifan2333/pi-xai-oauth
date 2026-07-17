@@ -17,6 +17,46 @@ type AssistantStreamEvent = Record<string, any>;
 
 const streamSimpleOpenAIResponses = openAIResponsesApi().streamSimple;
 
+const guardedRedirectUrls = new Map<string, number>();
+let unguardedFetch: typeof fetch | undefined;
+let redirectGuardFetch: typeof fetch | undefined;
+
+function fetchRequestUrl(input: string | URL | Request): string {
+  return input instanceof Request ? input.url : String(input);
+}
+
+function acquireRedirectGuard(url: string): () => void {
+  if (!redirectGuardFetch) {
+    unguardedFetch = globalThis.fetch;
+    const baseFetch = unguardedFetch;
+    redirectGuardFetch = (input, init) =>
+      baseFetch(
+        input,
+        guardedRedirectUrls.has(fetchRequestUrl(input))
+          ? { ...init, redirect: "error" }
+          : init,
+      );
+    globalThis.fetch = redirectGuardFetch;
+  }
+  guardedRedirectUrls.set(url, (guardedRedirectUrls.get(url) ?? 0) + 1);
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = (guardedRedirectUrls.get(url) ?? 1) - 1;
+    if (remaining > 0) guardedRedirectUrls.set(url, remaining);
+    else guardedRedirectUrls.delete(url);
+    if (guardedRedirectUrls.size === 0) {
+      if (globalThis.fetch === redirectGuardFetch && unguardedFetch) {
+        globalThis.fetch = unguardedFetch;
+      }
+      redirectGuardFetch = undefined;
+      unguardedFetch = undefined;
+    }
+  };
+}
+
 function resultFromStreamEvent(event: AssistantStreamEvent): any {
   if (event.type === "done") return event.message;
   if (event.type === "error") return event.error;
@@ -132,6 +172,7 @@ export async function postXaiJson(
     method: "POST",
     headers: xaiJsonPostHeaders(authToken, contractHeaders),
     body: JSON.stringify(body),
+    redirect: "error",
     signal,
   });
 
@@ -231,29 +272,45 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
 
   const stream = createForwardingAssistantStream();
   void (async () => {
+    // Pi's generic OpenAI delegate does not expose fetch redirect controls.
+    // Keep one URL-scoped guard installed only for the lifetime of active xAI
+    // streams; unrelated requests pass through unchanged, and overlapping xAI
+    // streams share the same guard until the last request completes.
+    const releaseRedirectGuard = acquireRedirectGuard(route.url);
     try {
-      const inner = streamSimpleOpenAIResponses(openAIResponsesModel as Model<"openai-responses">, context, {
-        ...options,
-        // Ensure rewriteXaiResponsesPayload can always stamp prompt_cache_key.
-        sessionId: sessionId || routingSessionId,
-        headers,
-        async onPayload(payload) {
-          const rewritten = rewriteXaiResponsesPayload(payload, streamModel, {
-            ...options,
-            sessionId: sessionId || routingSessionId,
-          });
-          const userRewritten = await options?.onPayload?.(rewritten, streamModel);
-          return compactXaiInlineImages(userRewritten === undefined ? rewritten : userRewritten);
+      const inner = streamSimpleOpenAIResponses(
+        openAIResponsesModel as Model<"openai-responses">,
+        context,
+        {
+          ...options,
+          // Prevent Pi's generic OpenAI delegate from adding its own
+          // session_id/x-client-request-id affinity headers. The xAI payload
+          // rewrite below still receives the stable session for cache keys.
+          sessionId: undefined,
+          headers,
+          async onPayload(payload) {
+            const rewritten = rewriteXaiResponsesPayload(payload, streamModel, {
+              ...options,
+              sessionId: sessionId || routingSessionId,
+            });
+            const userRewritten = await options?.onPayload?.(rewritten, streamModel);
+            return compactXaiInlineImages(userRewritten === undefined ? rewritten : userRewritten);
+          },
         },
-      });
+      );
       for await (const event of inner as AsyncIterable<AssistantStreamEvent>) {
+        if (event.type === "done" || event.type === "error") releaseRedirectGuard();
         stream.push(normalizeXaiStreamEvent(event));
       }
+      releaseRedirectGuard();
       stream.end();
     } catch (error) {
+      releaseRedirectGuard();
       const message = streamErrorMessage(model, error);
       stream.push({ type: "error", reason: "error", error: message });
       stream.end(message);
+    } finally {
+      releaseRedirectGuard();
     }
   })();
   return stream;
