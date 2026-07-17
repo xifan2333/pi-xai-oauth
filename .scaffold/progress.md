@@ -27,7 +27,10 @@
 
 ## In progress
 
-- [ ] Commit the final reviewed delta, push with lease, and verify fresh PR checks without merging.
+- [x] Committed the final reviewed implementation as `b29c119` (`fix: finalize bounded image editing`).
+- [x] Replaced the known pre-rebase remote head with an exact force-with-lease and refreshed PR #91's description.
+- [x] Verified fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 checks are green.
+- [x] Kept PR #91 open and unmerged for maintainer approval.
 
 ## Delivery
 

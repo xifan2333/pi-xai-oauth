@@ -18,7 +18,7 @@ Finish PR #91 as a disabled-by-default, bounded `xai_edit_image` feature integra
 7. [x] Synthesize cumulative docs/scaffold content and remove stale counts, versions, and one-to-four claims.
 8. [x] Run focused, typecheck, strict full, coverage, package, loader, and exact Pi boundary validation.
 9. [x] Complete range-diff/invariant review and independent final reviews.
-10. [ ] Push the rebased branch with lease, refresh PR #91, and verify all checks without merging.
+10. [x] Push the rebased branch with lease, refresh PR #91, and verify all checks without merging.
 
 ## Validation contract
 
