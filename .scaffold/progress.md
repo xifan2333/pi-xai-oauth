@@ -22,10 +22,16 @@
 - [x] Passed focused tool/media tests, strict TypeScript, the full 404-test suite plus loader, V8 coverage, and exact Pi 0.80.1/0.80.10 packed boundaries.
 - [x] Passed the final reviewer-driven gate: 405 tests plus loader, strict TypeScript, 86.07% statement / 79.35% branch / 86.17% function / 89.88% line coverage, and clean packed Pi 0.80.1/0.80.10 matrices.
 - [x] Completed independent production and regression re-review with no remaining findings under the documented trusted-parent assumption.
+- [x] Committed the hardened implementation and regressions as `2892dc6`.
+- [x] Replaced the known original remote head `a4e9746` with an exact force-with-lease.
+- [x] Refreshed PR #95's title and description with the complete root cause, fix, regression, validation, and residual-assumption record.
+- [x] Verified there are no conversation comments, reviews, or unresolved review threads.
+- [x] Verified policy, Socket, and exact Pi 0.80.1/0.80.10 GitHub checks are green.
+- [x] Marked PR #95 ready for review without merging it.
 
-## In progress
+## Delivery
 
-- [ ] Complete final diff review, commit, force-push with exact lease, refresh the PR description, and verify GitHub checks/comments.
+- [x] PR #95 is ready and unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/95
 
 ## Residual
 

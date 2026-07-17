@@ -16,7 +16,7 @@ Keep `Delete` unable to remove the workspace root or traverse physical filesyste
 4. [x] Resolve the real workspace and target parent before destructive deletion.
 5. [x] Reject physical root/outside aliases and pass only the validated target to `fs.rm`.
 6. [x] Run focused tests, the original reproducer, strict TypeScript, full tests, coverage, loader, package checks, and exact Pi boundaries.
-7. [ ] Commit, push with exact lease, refresh PR #95, and verify checks/comments after clean independent review.
+7. [x] Commit, push with exact lease, refresh PR #95, verify checks/comments, and mark it ready after clean independent review.
 
 ## Validation contract
 
