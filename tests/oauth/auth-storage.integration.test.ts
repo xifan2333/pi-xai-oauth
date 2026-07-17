@@ -95,11 +95,13 @@ async function createPiAuthHarness(id: string, initial?: any) {
     };
   }
 
-  const legacyOAuth = (await import("@earendil-works/pi-ai/oauth")) as any;
-  legacyOAuth.registerOAuthProvider({ id, ...oauthWithClock() });
+  const oauth = oauthWithClock();
   const storage = codingAgent.AuthStorage.inMemory(initial ? { [id]: initial } : {});
   return {
-    login: (callbacks: OAuthLoginCallbacks) => storage.login(id, callbacks),
+    login: async (callbacks: OAuthLoginCallbacks) => {
+      const credentials = await oauth.login(callbacks);
+      storage.set(id, { ...credentials, type: "oauth" });
+    },
     read: async () => storage.get(id),
   };
 }

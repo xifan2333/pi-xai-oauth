@@ -16,6 +16,7 @@
 - [x] Retargeted issue #93 from the superseded 0.80.9 release to current Pi 0.80.10.
 
 - [x] Independent final review reported CLEAN after the no-write startup regression was added and verified on both exact boundaries.
+- [x] Reproduced the first CI-only minimum failure under npm 11.6.2 and removed the legacy test's global OAuth-registry identity assumption; the exact 0.80.1 packed matrix now passes under CI's resolver.
 
 ## Delivery
 
