@@ -40,4 +40,4 @@ Use the existing Pi-resolved OAuth bearer for a pinned authenticated `GET /v1/us
 
 ## Delivery
 
-Complete the full cumulative validation and independent reviews, then replace the known old remote head with exact force-with-lease. PR #89 remains unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/89
+The known old remote head was replaced with exact force-with-lease, PR #89's description was refreshed, and fresh policy, Socket, and exact Pi 0.80.1/0.80.10 checks are green. PR #89 remains open and unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/89

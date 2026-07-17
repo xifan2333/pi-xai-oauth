@@ -32,10 +32,12 @@
 - [x] Measured final V8 coverage at 86.03% statements, 79.27% branches, 86.09% functions, and 89.88% lines.
 - [x] Passed independent security re-review of OAuth removal, stale one-shot suppression, billing-only identity handling, and caller `x-userid` scrubbing.
 - [x] Passed independent final test review after adding real exact-boundary registry coverage, version-adaptive strict OAuth provenance, non-blocking hostile-stream cancellation, and a due/stalled turn lifecycle regression.
+- [x] Replaced the known old PR head with exact force-with-lease and refreshed PR #89's description.
+- [x] Verified fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 compatibility checks are green.
 
-## In progress
+## Delivery
 
-- [ ] Force-push with exact lease, refresh PR #89 if needed, and verify fresh checks without merging.
+- [x] Kept PR #89 open and unmerged for maintainer approval: https://github.com/BlockedPath/pi-xai-oauth/pull/89
 
 ## Residual
 
