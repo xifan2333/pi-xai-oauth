@@ -123,6 +123,20 @@ describe("Cursor/Grok CLI shims", () => {
       (await run("Delete", { file_path: "out.txt" })).content[0].text,
     ).toMatch(/Deleted/);
   });
+  it("refuses Delete on the workspace root even with recursive=true", async () => {
+    await writeFile(join(temp.path, "keep.txt"), "important");
+    for (const path of [".", "./", temp.path]) {
+      await expect(
+        run("Delete", { path, recursive: true }),
+      ).rejects.toThrow(/workspace root/);
+    }
+    expect(await readFile(join(temp.path, "keep.txt"), "utf8")).toBe(
+      "important",
+    );
+    expect(await readFile(join(temp.path, "src/a.ts"), "utf8")).toMatch(
+      /VALUE/,
+    );
+  });
   it("keeps WebSearch disabled until opt-in, routes Composer calls, and blocks stale contexts", async () => {
     const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
     const controller = new AbortController();

@@ -8,6 +8,7 @@ import {
   normalizeShellArgs,
   normalizeWriteArgs,
   objectFromCursorArgs,
+  safeWorkspaceChildPath,
   safeWorkspacePath,
 } from "../../extensions/xai/tools/cursor-args";
 
@@ -58,5 +59,18 @@ describe("Cursor argument normalization", () => {
     expect(() => safeWorkspacePath("/tmp/work", "../secret")).toThrow(
       /outside the workspace/,
     );
+  });
+  it("allows the workspace root for reads but refuses it for destructive child paths", () => {
+    expect(safeWorkspacePath("/tmp/work", ".")).toBe("/tmp/work");
+    expect(safeWorkspacePath("/tmp/work", "./")).toBe("/tmp/work");
+    expect(safeWorkspacePath("/tmp/work", "/tmp/work")).toBe("/tmp/work");
+    expect(safeWorkspaceChildPath("/tmp/work", "src/a.ts")).toBe(
+      "/tmp/work/src/a.ts",
+    );
+    for (const requested of [".", "./", "/tmp/work"]) {
+      expect(() => safeWorkspaceChildPath("/tmp/work", requested)).toThrow(
+        /workspace root/,
+      );
+    }
   });
 });

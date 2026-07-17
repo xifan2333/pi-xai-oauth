@@ -167,13 +167,33 @@ export function normalizeDeleteArgs(args: unknown) {
   };
 }
 
-/** Resolve a requested path while refusing operations outside the workspace. */
+/**
+ * Resolve a requested path while refusing operations outside the workspace.
+ *
+ * The workspace root itself is allowed (for whole-tree reads such as Grep).
+ * Destructive tools must use {@link safeWorkspaceChildPath} instead.
+ */
 export function safeWorkspacePath(cwd: string, requestedPath: string): string {
   const resolved = isAbsolute(requestedPath) ? resolve(requestedPath) : resolve(cwd, requestedPath);
   const workspace = resolve(cwd);
   const workspaceRelativePath = relative(workspace, resolved);
   if (workspaceRelativePath.startsWith("..") || isAbsolute(workspaceRelativePath)) {
     throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
+  }
+  return resolved;
+}
+
+/**
+ * Resolve a path that must stay inside the workspace and must not be the
+ * workspace root itself.
+ *
+ * Delete and other destructive tools use this so `"."`, `"./"`, or an absolute
+ * cwd path cannot recursively wipe the entire session workspace.
+ */
+export function safeWorkspaceChildPath(cwd: string, requestedPath: string): string {
+  const resolved = safeWorkspacePath(cwd, requestedPath);
+  if (resolved === resolve(cwd)) {
+    throw new Error(`Refusing to operate on the workspace root: ${requestedPath}`);
   }
   return resolved;
 }
