@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import extension from "../../extensions/xai-oauth";
 import {
   CURATED_FALLBACK_MODELS,
+  expandXaiCatalogWithAliases,
   KNOWN_XAI_MODEL_METADATA,
   setXaiRuntimeModels,
 } from "../../extensions/xai/models";
@@ -31,7 +32,9 @@ describe("provider registration", () => {
       baseUrl: "https://cli-chat-proxy.grok.com/v1",
       authHeader: true,
     });
-    expect(provider.models.map(({ id }: any) => id)).toEqual(["grok-4.5"]);
+    expect(provider.models.map(({ id }: any) => id)).toEqual(
+      expandXaiCatalogWithAliases(CURATED_FALLBACK_MODELS).map((model) => model.id),
+    );
     expect(provider.models[0]).toMatchObject({
       contextWindow: 500_000,
       reasoning: true,

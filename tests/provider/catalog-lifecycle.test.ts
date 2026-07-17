@@ -83,9 +83,14 @@ describe.sequential("authenticated provider catalog lifecycle", () => {
       ],
     });
     expect(credentials.access).toBe("login-access");
-    expect(h.providers.get("xai-auth").models.map(({ id }: any) => id)).toEqual(
-      ["grok-4.5", "new-entitled"],
-    );
+    expect(h.providers.get("xai-auth").models.map(({ id }: any) => id)).toEqual([
+      "grok-4.5",
+      "new-entitled",
+      // Known aliases of entitled grok-4.5 only — not invented families.
+      "grok-4.5-latest",
+      "grok-build-latest",
+      "grok-composer-2.5-fast",
+    ]);
   });
   it("advertises authenticated modalities without exposing internal provenance", async () => {
     const { h } = await loadAndLogin({
