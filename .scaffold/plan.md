@@ -21,7 +21,7 @@ Derive advertised model input modalities from bounded authenticated evidence whe
 8. [x] Complete the rebase onto current main while retaining issue #78 wire/security and issue #93 Pi 0.80.10 behavior.
 9. [x] Run focused suites, strict full tests, typecheck, coverage, package checks, and exact packed Pi 0.80.1/0.80.10 boundaries.
 10. [x] Obtain clean independent re-reviews after accepted security/correctness fixes.
-11. [ ] Commit and force-push, refresh PR #90, mark it ready, and wait for fresh required checks.
+11. [x] Commit and force-push, refresh PR #90, keep it ready, and receive fresh green policy plus exact Pi 0.80.1/0.80.10 checks.
 
 ## Validation contract
 

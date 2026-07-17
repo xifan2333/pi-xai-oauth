@@ -28,9 +28,12 @@
 - [x] Exact clean packed Pi 0.80.1 and 0.80.10 matrices passed 282 tests, loader smoke, and typecheck under npm 11.6.2.
 - [x] Two independent final re-reviews returned CLEAN with no merge blockers.
 
+- [x] Committed and force-pushed the rebased branch and refreshed PR #90 with current scope and validation.
+- [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+
 ## In progress
 
-- [ ] Commit, force-push, refresh PR #90, and wait for green checks.
+- [ ] Merge PR #90 after final maintainer approval.
 
 ## Residual
 
