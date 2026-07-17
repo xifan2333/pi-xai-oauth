@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -24,6 +24,13 @@ afterEach(async () => {
 });
 
 describe("credential resolution", () => {
+  it("does not create Pi auth storage during an absent startup read", async () => {
+    expect(getStartupXaiCatalogAuth()).toMatchObject({
+      credential: null,
+      needsRegistryRefresh: false,
+    });
+    await expect(access(join(temp.path, ".pi"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("reads official Grok CLI credentials without modifying them", async () => {
     const path = join(temp.path, ".grok/auth.json");
     await mkdir(join(path, ".."), { recursive: true });
