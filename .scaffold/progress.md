@@ -40,9 +40,12 @@
 - [x] Live policy/registry, 90-file pack, unsupported-peer checks, and clean packed Pi 0.80.1/0.80.10 test/loader/typecheck matrices passed.
 - [x] Two independent final read-only re-reviews returned CLEAN after canonical model binding and pre/post-compaction enforcement were added.
 
-## In progress
+## Delivery
 
-- [ ] Commit, push, and refresh PR #90 without merging.
+- [x] Committed the reviewed transport hardening as `b935cbe` (`fix: harden Responses payload enforcement`).
+- [x] Pushed the existing feature branch without force and posted the finding-by-finding resolution evidence on PR #90.
+- [x] Fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+- [x] Kept PR #90 open and unmerged for maintainer approval.
 
 ## Residual
 

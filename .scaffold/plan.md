@@ -23,7 +23,7 @@ Derive advertised model input modalities from bounded authenticated evidence whe
 10. [x] Obtain clean independent re-reviews after accepted security/correctness fixes.
 11. [x] Commit and force-push, refresh PR #90, keep it ready, and receive fresh green policy plus exact Pi 0.80.1/0.80.10 checks.
 12. [x] Resolve final transport review findings by canonicalizing caller-controlled JSON once, recognizing computer screenshots, forcing zero delegated retries, using canonical error IDs, and avoiding variadic traversal.
-13. [ ] Re-run focused/full/coverage/package/boundary validation, obtain independent review, and push one follow-up fix commit without merging.
+13. [x] Re-run focused/full/coverage/package/boundary validation, obtain independent review, and push the reviewed follow-up without merging.
 
 ## Validation contract
 
