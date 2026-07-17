@@ -12,6 +12,7 @@ export const XAI_NETWORK_TOOL_NAMES = [
   "xai_deep_research",
   "xai_code_execution",
   "xai_generate_image",
+  "xai_edit_image",
   "xai_analyze_image",
   "xai_critique",
   "WebSearch",

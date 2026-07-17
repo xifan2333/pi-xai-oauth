@@ -1,28 +1,32 @@
-# Shared Agent Context — Issue #80
+# Shared Agent Context — Issue #83
 
-**Branch:** feature/issue-80-model-modalities
-**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/80
-**Original baseline:** 579f965
-**Rebased baseline:** c0c89b0
-**Reviewed upstream:** `xai-org/grok-build@b189869b7755d2b482969acf6c92da3ecfeffd36`
+**Branch:** feature/issue-83-image-editing
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/83
+**Original commits:** `4a61389`, `e31303f`
+**Post-PR-90 baseline:** `b0556a8`
+**Safety branch:** `safety/issue-83-pre-pr90-rebase`
 
-## Evidence
+## Evidence and decisions
 
-- A bounded redacted authenticated `/models-v2` observation on 2026-07-16 found no `acceptsImages` or `inputModalities` fields in either entry or `_meta`. Raw responses, credentials, headers, identity fields, endpoints, and account membership were not retained.
-- The pinned Grok Build source recognizes `acceptsImages` before `inputModalities`, defaults missing evidence image-capable in its own client, and does not establish Composer as text-only.
-- Current main includes issue #78's centralized route/header contract, redirect rejection, safe errors, and generic affinity suppression, plus issue #93's Pi 0.80.10 compatibility migration.
+- Pinned source: `xai-org/grok-build@b189869b7755d2b482969acf6c92da3ecfeffd36`.
+- Current first-party documentation limits edits to three source images, so the final package contract is one to three.
+- Use Pi's public worker-backed `resizeImage`; add no image dependency.
+- Keep the source-backed 400 KiB pass-through, 768 px compression maximum, 256 px floor, and quality steps inside stricter package-owned byte/pixel budgets.
+- Route both credential provenance tags to the pinned public edit endpoint without adding API-key environment fallback.
+- Persist one verified output under hashed Pi session storage and return only safe metadata.
 
-## Decisions
+## Integration focus
 
-- Keep distinct normalized provenance for authenticated `acceptsImages`, authenticated `inputModalities`, known metadata, and conservative unknown default.
-- Accept only exact `text` / `image` values in nonempty arrays of at most two unique entries, with canonical ordering.
-- Authenticated `acceptsImages` wins over authenticated `inputModalities`; entry wins over `_meta` for the same key; malformed values fall through.
-- Missing/malformed evidence uses known metadata when available, so Composer remains image-capable unless stronger evidence says otherwise. Unknown models remain conservative text without authenticated-denial provenance.
-- Read schema 1 safely in memory by rederiving input from known/default policy; the next normal atomic write emits schema 2.
-- Keep provenance internal to runtime/cache and omit it from Pi provider definitions.
-- Reject image input only for authenticated text-only provenance, using the current runtime snapshot after all rewrites/hooks/compaction and immediately before OAuth transport. Image generation is unchanged.
-- Keep Pi's generic delegate `sessionId` undefined to suppress its affinity headers while passing the stable session only to payload rewriting for `prompt_cache_key`.
+- PR #90 is merged exactly as reviewed. Preserve its catalog modality, payload canonicalization, retry, canonical-model, and privacy behavior.
+- Adopt shared direct-JSON header construction and route classification from `wire.ts`; edits remain direct public media requests, never proxy requests.
+- Keep disabled zero-I/O behavior and permit explicitly enabled edits under an authenticated text-only active Responses model.
+- Reapply decoded output side and pixel limits after codec verification and redact all codec/compression failures.
 
-## Validation focus
+## Validation state
 
-Guard against malformed/missing metadata becoming denial, schema-1 input gaining authenticated provenance, raw-field leakage, stale snapshot capture, pre-hook enforcement, image-generation conflation, weakened entitlement/cache races, wire-header regressions, redirect-guard leakage, or Pi-boundary drift.
+- Rebase started from clean `e31303f` after verifying `origin/main=b0556a8` contains the exact reviewed PR #90 tree.
+- No live xAI request is part of deterministic validation.
+
+## Delivery
+
+The original implementation (`4a61389`) and delivery record (`e31303f`) were pushed to unmerged PR #91. The branch is now being rebased and revalidated before its next push: https://github.com/BlockedPath/pi-xai-oauth/pull/91

@@ -22,6 +22,7 @@ try {
   assert.equal(result.extensions.length, 1, "real Pi loader should load exactly one extension");
   const loaded = result.extensions[0];
   assert.ok(loaded.tools.has("xai_generate_text"), "representative xAI tool should be registered");
+  assert.ok(loaded.tools.has("xai_edit_image"), "bounded xAI image-edit tool should be registered");
   assert.ok(loaded.tools.has("Grep"), "representative Cursor shim should be registered");
   assert.ok(loaded.commands.has("xai-tools"), "/xai-tools should be registered");
   assert.equal(runtime.pendingProviderRegistrations.length, 1, "one provider should be queued");

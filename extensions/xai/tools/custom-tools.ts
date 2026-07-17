@@ -1,6 +1,12 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveXaiCredential } from "../auth";
 import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL } from "../constants";
+import {
+  executeXaiImageEdit,
+  ImageEditOperationError,
+  validateXaiEditImageInput,
+} from "../image-edit";
+import { IMAGE_EDIT_MAX_PROMPT_CHARS, IMAGE_EDIT_MAX_REFERENCES } from "../media/constants";
 import { normalizeXaiImageInput } from "../images";
 import { defaultXaiRuntimeModelId, grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
@@ -10,8 +16,8 @@ import { xaiTextInput, xaiToolError } from "./common";
 import { activeXaiModel, isXaiNetworkToolActive, type XaiNetworkToolName } from "./model-scope";
 
 function activeModelForXaiTool(pi: ExtensionAPI, ctx: any, toolName: XaiNetworkToolName) {
+  if (!isXaiNetworkToolActive(pi, toolName)) return undefined;
   const model = activeXaiModel(ctx);
-  if (!model || !isXaiNetworkToolActive(pi, toolName)) return undefined;
   return model;
 }
 
@@ -363,6 +369,104 @@ Be specific and cite examples where helpful.`;
           ? `Generated ${urls.length} image(s):\n${urls.map((u: string) => `- ${u}`).join("\n")}` 
           : "Image generation completed but no URLs returned.";
         return { content: [{ type: "text", text }], details: { prompt: params.prompt, urls, count: urls.length } };
+      },
+    } as any);
+
+    pi.registerTool({
+      name: "xai_edit_image",
+      label: "xAI Edit Image",
+      description:
+        "Opt-in paid image editing through xAI Imagine using bounded PNG/JPEG workspace files or data URLs. Enable via /xai-tools and call only when the user explicitly requests an edit.",
+      promptGuidelines: [
+        "Call xai_edit_image only when the user explicitly asks to edit or transform supplied images with xAI.",
+        "Use only user-supplied workspace paths or PNG/JPEG data URLs; never invent paths or send remote URLs.",
+      ],
+      executionMode: "sequential",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            minLength: 1,
+            maxLength: IMAGE_EDIT_MAX_PROMPT_CHARS,
+            description: "Description of the requested edit or transformation",
+          },
+          image: {
+            type: "array",
+            minItems: 1,
+            maxItems: IMAGE_EDIT_MAX_REFERENCES,
+            description: "One to three bounded local workspace or data-URL references",
+            items: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: { path: { type: "string", description: "PNG/JPEG path inside the current workspace" } },
+                  required: ["path"],
+                  additionalProperties: false,
+                },
+                {
+                  type: "object",
+                  properties: { data_url: { type: "string", description: "Strict bounded PNG/JPEG base64 data URL" } },
+                  required: ["data_url"],
+                  additionalProperties: false,
+                },
+              ],
+            },
+          },
+          aspect_ratio: {
+            type: "string",
+            enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "2:1", "1:2", "19.5:9", "9:19.5", "20:9", "9:20", "auto"],
+            description: "Required for multiple references; omitted on the wire for one reference",
+          },
+        },
+        required: ["prompt", "image"],
+        additionalProperties: false,
+      },
+      execute: async (_toolCallId: string, params: any, signal: AbortSignal | undefined, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_edit_image")) {
+          return xaiToolDisabledError("xai_edit_image");
+        }
+
+        let input;
+        try {
+          input = validateXaiEditImageInput(params);
+        } catch (error) {
+          const message = error instanceof ImageEditOperationError ? error.message : "Image edit input is invalid.";
+          return xaiToolError(`Error: ${message}`, { error: true, code: "invalid_input" });
+        }
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", {
+            error: true,
+          });
+        }
+
+        try {
+          const output = await executeXaiImageEdit({
+            credential,
+            input,
+            workspaceRoot: ctx?.cwd,
+            sessionManager: ctx?.sessionManager,
+            signal,
+          });
+          return {
+            content: [{
+              type: "text",
+              text: `Edited image saved to ${output.path} (${output.mimeType}, ${output.width}x${output.height}, ${output.byteLength} bytes).`,
+            }],
+            details: output,
+          };
+        } catch (error) {
+          const operationError = error instanceof ImageEditOperationError ? error : undefined;
+          return xaiToolError(
+            `Error: ${operationError?.message ?? "xAI image edit failed safely."}`,
+            {
+              error: true,
+              code: operationError?.code ?? "output_failure",
+              ...(operationError?.status ? { status: operationError.status } : {}),
+            },
+          );
+        }
       },
     } as any);
 

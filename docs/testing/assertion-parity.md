@@ -104,6 +104,16 @@ replacement tests pass alongside the legacy verifier.
 | `verify-extension.js:1058-1124` | direct/stream/hook compaction | `tests/responses/images.test.ts` | [x] |
 | `verify-extension.js:2543-2598` | analysis part ordering; direct Images route; default model; omitted unsupported defaults; schema min/max; explicit count; unsupported size and invalid count fail before network | `tests/images/tools.test.ts` | [x] |
 
+### Issue #83 bounded image-edit additions
+
+| New behavior | Destination | Status |
+|---|---|---|
+| strict PNG/JPEG headers, canonical data URLs, byte/pixel/side limits | `tests/media/primitives.test.ts` | [x] |
+| workspace realpath containment, traversal/symlink/special-file rejection, cancellation | `tests/media/paths.test.ts` | [x] |
+| source-backed compression policy, real worker codec, aggregate/count bounds, atomic 0700/0600 storage | `tests/media/compression-storage.test.ts` | [x] |
+| pinned edit route, exact singular/plural payloads, timeout/cancellation, redaction, response/output validation, successful save | `tests/images/image-edit.test.ts` | [x] |
+| disabled zero-I/O guard, explicit intent, opt-in lifecycle, registration and loader smoke | `tests/tools/custom-tools.test.ts`, `tests/tools/commands.test.ts`, `tests/provider/registration.test.ts`, `scripts/verify-extension-loader.mjs` | [x] |
+
 ### Network-tool lifecycle and `/xai-tools`
 
 | Legacy source | Behavior preserved | Destination | Status |
@@ -182,6 +192,6 @@ not in another monolith.
 
 **Completed evidence:** all legacy and replacement behavior tests passed together
 under strict unhandled-rejection handling before the four legacy files were
-removed. The final replacement suite has 246 named tests across 29 files, the
-loader smoke is 40 lines, every live destination path above exists, and three
-independent parity review rounds ended with a CLEAN focused re-review.
+removed. Three independent parity review rounds ended with a CLEAN focused
+re-review. Issue #83 extends that suite with bounded image-edit coverage; the
+real loader smoke remains intentionally small.

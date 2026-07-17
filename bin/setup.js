@@ -224,6 +224,7 @@ function printNextSteps(nonInteractive = false) {
   console.log("   • xai_x_search          — Native X/Twitter search");
   console.log("   • xai_code_execution    — Native code interpreter");
   console.log("   • xai_generate_image    — Image generation");
+  console.log("   • xai_edit_image        — Bounded local PNG/JPEG image editing");
   console.log("   • xai_analyze_image     — Image analysis");
   console.log("   • xai_critique          — Structured critique");
   console.log("   • xai_deep_research     — Deep research with web/X tools\n");

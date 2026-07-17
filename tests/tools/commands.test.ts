@@ -43,6 +43,16 @@ describe("/xai-tools command", () => {
       ]),
     );
   });
+  it("requires explicit edit intent and local-reference guidance", () => {
+    const h = createExtensionHarness();
+    registerCustomXaiTools(h.api);
+    expect(h.tools.get("xai_edit_image").promptGuidelines).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/explicitly asks to edit or transform/),
+        expect.stringMatching(/workspace paths or PNG\/JPEG data URLs/),
+      ]),
+    );
+  });
 
   it("reports every tool status and eligibility", async () => {
     const { notices, run } = setup();
@@ -202,7 +212,7 @@ describe("/xai-tools command", () => {
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
   });
 
-  it("wraps Page Up and Page Down when Composer exposes exactly ten rows", async () => {
+  it("wraps Page Up and Page Down across the expanded Composer tool catalog", async () => {
     const { h, notices } = setup();
     let afterPageUp = "";
     let afterPageDown = "";
@@ -244,7 +254,7 @@ describe("/xai-tools command", () => {
     });
 
     await h.commands.get("xai-tools").handler("", ctx);
-    expect(afterPageUp).toMatch(/WebSearch/);
+    expect(afterPageUp).toMatch(/xai_web_search/);
     expect(afterPageDown).toMatch(/xai_generate_text/);
   });
 });

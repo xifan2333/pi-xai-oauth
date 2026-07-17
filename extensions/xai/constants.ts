@@ -30,6 +30,7 @@ export const XAI_RESPONSES_URL = "https://api.x.ai/v1/responses";
 export const XAI_CLI_RESPONSES_URL = "https://cli-chat-proxy.grok.com/v1/responses";
 export const XAI_CLI_MODELS_URL = "https://cli-chat-proxy.grok.com/v1/models-v2";
 export const XAI_IMAGES_GENERATIONS_URL = "https://api.x.ai/v1/images/generations";
+export const XAI_IMAGES_EDITS_URL = "https://api.x.ai/v1/images/edits";
 
 export const XAI_MODEL_CATALOG_CACHE_SCHEMA = 2;
 export const XAI_MODEL_CATALOG_FRESH_TTL_MS = 15 * 60 * 1000;

@@ -2,6 +2,7 @@ import {
   XAI_API_BASE_URL,
   XAI_CLI_BASE_URL,
   XAI_CLI_RESPONSES_URL,
+  XAI_IMAGES_EDITS_URL,
   XAI_IMAGES_GENERATIONS_URL,
   XAI_RESPONSES_URL,
 } from "./constants";
@@ -13,7 +14,7 @@ export interface XaiCredential {
   token: string;
 }
 
-export type XaiRequestKind = "responses" | "image-generation";
+export type XaiRequestKind = "responses" | "image-generation" | "image-edit";
 
 export interface XaiRoute {
   baseUrl: string;
@@ -26,10 +27,12 @@ const XAI_ROUTES: Record<XaiCredentialKind, Record<XaiRequestKind, XaiRoute>> = 
     // Official Grok Build sends Imagine requests directly to api.x.ai for
     // both OAuth sessions and BYOK credentials rather than via the chat proxy.
     "image-generation": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_GENERATIONS_URL },
+    "image-edit": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_EDITS_URL },
   },
   "api-key": {
     responses: { baseUrl: XAI_API_BASE_URL, url: XAI_RESPONSES_URL },
     "image-generation": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_GENERATIONS_URL },
+    "image-edit": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_EDITS_URL },
   },
 };
 

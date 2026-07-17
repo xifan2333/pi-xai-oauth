@@ -1,53 +1,45 @@
-# Execution Progress — Issue #80
+# Execution Progress — Issue #83
 
-**Branch:** feature/issue-80-model-modalities
-**Original baseline:** 579f965
-**Rebased baseline:** c0c89b0
+**Branch:** feature/issue-83-image-editing
+**Baseline:** `b0556a8`
 
 ## Completed
 
-- [x] Audited issue #80, the pinned Grok Build revision, current runtime boundaries, fixtures, tests, and documentation.
-- [x] Performed one bounded authenticated schema observation without retaining secrets, raw bodies, endpoints, identity, or account membership.
-- [x] Added bounded capability precedence with authenticated/known/default provenance.
-- [x] Added schema-2 cache validation and safe in-memory schema-1 migration without changing exact entitlement membership.
-- [x] Kept provenance in cloned runtime snapshots while stripping it from provider model definitions.
-- [x] Added final current-snapshot image-input enforcement after package rewriting, caller hooks, and compaction for streaming/direct OAuth Responses and shared custom tools.
-- [x] Added redacted fixtures and focused normalization, cache, provider, payload, transport, and custom-tool regressions.
-- [x] Documented observed schema absence, pinned source revision, precedence, fallback, cache/privacy, and local rejection behavior.
-- [x] Original branch validation passed 270 tests, loader smoke, typecheck, coverage, package checks, and its then-current exact boundaries; independent review was clean.
-- [x] Merged PR #92 is present on current main at c0c89b0, including redirect rejection and generic delegate affinity suppression.
-- [x] Read-only conflict reviews identified the required combined catalog/Responses resolution.
+- [x] Confirmed PR #90 merged as `b0556a8` and contains exact reviewed head `fe0b95f`.
+- [x] Confirmed the issue-83 worktree and remote branch were clean at `e31303f`.
+- [x] Created `safety/issue-83-pre-pr90-rebase`.
+- [x] Started rebasing the original implementation/docs commits onto merged main.
+- [x] Preserved the original bounded media implementation, focused tests, and disabled-by-default tool lifecycle for semantic integration.
+- [x] Completed the rebase as `316884d` plus `f3e0fd8` on merged baseline `b0556a8`.
+- [x] Enforced one to three references and cheap validation of every supplied aspect ratio.
+- [x] Added shared protected direct-media headers and edit-route error classification without proxy metadata.
+- [x] Reapplied decoded output limits, redacted codec/compression failures, and hardened body/output cancellation.
+- [x] Added regressions for four-reference zero-I/O rejection, both credential provenance tags, stalled bodies, request-ID filtering, decoded dimensions, and text-only active models.
+- [x] Passed the primary and cumulative focused image-edit/media/provider/tool suites plus strict TypeScript.
+- [x] Passed the strict full suite, real loader smoke, and V8 coverage above every configured floor.
+- [x] Passed policy/registry, packed-manifest, unsupported-peer, and package dry-run checks.
+- [x] Passed clean packed test/loader/typecheck matrices with exact Pi 0.80.1 and 0.80.10.
+- [x] Applied security review feedback so disabled tools prove explicit opt-in before reading active-model context, with a throwing-getter regression.
+- [x] Replaced a false-positive cancellation test with deterministic cleanup checks after temporary write and final rename, and added POSIX FIFO rejection coverage.
+- [x] Completed the old-vs-rebased range diff and verified protected PR #90/OAuth/catalog/package-policy files were not replaced.
+- [x] Functional, security/privacy, and test/validation re-reviews returned CLEAN after their accepted fixes.
+- [x] Confirmed PR #91 has no review submissions or unresolved review threads; its only comments are review-bot usage-limit notices.
 
-- [x] Rebased issue #80 onto c0c89b0 and retained centralized catalog headers, redirect rejection, generic affinity suppression, and Pi 0.80.10 credential compatibility.
-- [x] Fixed the merged stream seam so bounded text-only errors remain actionable while upstream errors stay sanitized and fetch guards restore before terminal results.
-- [x] Review fixes now reject impossible cached provenance/input pairs, preserve exact schema-1 files on post-rename cancellation, and remove image locations/data from all image-analysis error details.
-- [x] Final focused transport/cache/tool validation passed: 5 files / 70 tests.
-- [x] Strict full tests passed: 29 files / 282 tests plus loader smoke and typecheck.
-- [x] Coverage passed at 84.73% statements, 76.70% branches, 87.26% functions, and 88.28% lines.
-- [x] Live policy/registry/90-file pack/unsupported-peer checks passed.
-- [x] Exact clean packed Pi 0.80.1 and 0.80.10 matrices passed 282 tests, loader smoke, and typecheck under npm 11.6.2.
-- [x] Two independent final re-reviews returned CLEAN with no merge blockers.
+## In progress
 
-- [x] Committed and force-pushed the rebased branch and refreshed PR #90 with current scope and validation.
-- [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
-- [x] Confirmed the final review's five findings against the exact clean PR head at `09a60f4`.
-- [x] Added inert JSON canonicalization before direct/stream model and modality enforcement, including stable redacted serialization failures.
-- [x] Added computer-screenshot detection, canonical model IDs in text-only errors, iterative wide-payload traversal, and forced zero SDK retries.
-- [x] Added direct/stream serializer-bypass, screenshot URL/file ID, retry, redaction, canonical-ID, entitlement-race, and wide-payload regressions.
-- [x] Applied independent review feedback so runtime catalog IDs now drive OAuth rewrite, body, headers, checks, and errors, with modality checks both before compaction and immediately before transport.
-- [x] Final focused validation passed 73 tests plus typecheck; strict full validation passed 299 tests and loader smoke.
-- [x] Coverage passed at 84.88% statements, 77.02% branches, 87.03% functions, and 88.40% lines.
-- [x] Live policy/registry, 90-file pack, unsupported-peer checks, and clean packed Pi 0.80.1/0.80.10 test/loader/typecheck matrices passed.
-- [x] Two independent final read-only re-reviews returned CLEAN after canonical model binding and pre/post-compaction enforcement were added.
+- [x] Committed the final reviewed implementation as `b29c119` (`fix: finalize bounded image editing`).
+- [x] Replaced the known pre-rebase remote head with an exact force-with-lease and refreshed PR #91's description.
+- [x] Verified fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 checks are green.
+- [x] Kept PR #91 open and unmerged for maintainer approval.
 
 ## Delivery
 
-- [x] Committed the reviewed transport hardening as `b935cbe` (`fix: harden Responses payload enforcement`).
-- [x] Pushed the existing feature branch without force and posted the finding-by-finding resolution evidence on PR #90.
-- [x] Fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 compatibility checks passed.
-- [x] Kept PR #90 open and unmerged for maintainer approval.
+- Apply the one-to-three, shared-header, decoded-output-limit, redaction, and modality-independence changes from the final handoff.
+- Run the complete post-rebase validation and independent review contract.
+- Original implementation commit `4a61389` and delivery record `e31303f` were pushed to unmerged PR #91 before this rebase.
+- PR #91 remains open and must not be merged until the rebased branch passes the full gate: https://github.com/BlockedPath/pi-xai-oauth/pull/91
 
 ## Residual
 
-- No live xAI request or interactive OAuth flow is part of the deterministic compatibility gate.
-- Encrypted reasoning remains deferred to issue #79.
+- No live xAI request or interactive OAuth flow is part of this offline gate.
+- Parent-directory replacement remains a documented trusted-parent filesystem assumption.

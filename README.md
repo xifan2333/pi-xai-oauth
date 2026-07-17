@@ -372,6 +372,7 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_deep_research` | Research | High/variable model and web/X tool usage |
 | `xai_code_execution` | Execution | Model tokens plus code-interpreter usage |
 | `xai_generate_image` | Image generation | Charged per generated image; supports 1-4 images |
+| `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-3 local references |
 | `xai_analyze_image` | Vision | Separate model-token and image-input usage |
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
 | `WebSearch` | Search | Grok Build/Composer model tokens plus native tool usage |
@@ -393,6 +394,7 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 /xai-tools enable xai_web_search
 /xai-tools disable xai_web_search
 /xai-tools enable xai_generate_image
+/xai-tools enable xai_edit_image
 ```
 
 `WebSearch` appears in the picker only for Grok Build and Composer models. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
@@ -468,6 +470,25 @@ Opt-in analysis of an image URL, data URL, or local `.png` / `.jpg` path with Gr
 }
 ```
 
+### `xai_edit_image`
+
+Opt-in paid image editing through xAI Imagine. Enable it through `/xai-tools` first, then explicitly request the edit. Supply one to three references. One reference preserves its input aspect ratio; a supported `aspect_ratio` may be supplied but is omitted from the wire. Multiple references require a supported `aspect_ratio`.
+
+```json
+{
+  "prompt": "Keep the subject, replace the background with a clean studio gradient",
+  "image": [{ "path": "assets/reference.png" }]
+}
+```
+
+References are limited to 1-3 byte-validated PNG/JPEG files inside the current workspace or strict bounded `data:image/png;base64,...` / `data:image/jpeg;base64,...` values. Paths are resolved through realpath, so `..` escapes and symlinks leaving the workspace are rejected. HTTPS URLs, `file://` URLs, current-turn attachment tokens, arbitrary outside paths, SVG, WebP, GIF, and HEIC are intentionally unsupported.
+
+Reference handling uses the pinned Grok Build policy as its starting point: sources are capped at 8 MiB and 12 million decoded pixels; compatible references up to 400 KiB pass through after decode verification; larger references are re-encoded under 400 KiB with a 768 px maximum side, a 256 px compression floor, and reviewed quality steps. The package separately limits aggregate reference bytes to 1,200 KiB and caps reference count, request JSON, response JSON, output base64, decoded output bytes, output pixels, and output dimensions.
+
+Exactly one verified PNG/JPEG output is saved atomically with a collision-resistant name under Pi's session directory at `pi-xai-oauth/<session-hash>/image-edits/`. Directories use mode `0700`, files use `0600`, and the tool returns path/dimension/size metadata instead of raw base64. Prompts, source paths, data URLs, image bytes, credentials, headers, and raw authenticated error bodies are never included in image-edit errors.
+
+Image editing can consume xAI Imagine allowances, credits, or rate limits. Exact pricing and quota behavior are controlled by xAI; see [xAI pricing](https://docs.x.ai/developers/pricing) before enabling the tool.
+
 ### `xai_critique`
 Opt-in structured critique for code, designs, writing, or ideas. Enable it through `/xai-tools` first.
 
@@ -488,7 +509,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 }
 ```
 
-> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. Responses-based helpers use the OAuth session proxy. Image generation is the intentional exception: matching official Grok Build behavior, it sends the OAuth bearer directly to `https://api.x.ai/v1/images/generations` and is charged per generated image. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
+> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. Responses-based helpers use the OAuth session proxy. Image generation and image editing are intentional exceptions: matching official Grok Build behavior, they send the OAuth bearer directly to the pinned public Images routes at `https://api.x.ai/v1/images/generations` and `https://api.x.ai/v1/images/edits`. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
 
 ---
 
@@ -786,6 +807,8 @@ pi-xai-oauth/
 │       ├── responses.ts      # xAI request + streaming helpers
 │       ├── routing.ts        # Credential-aware Responses and Images endpoints
 │       ├── wire.ts           # Route-aware headers, scrubbing, identity, safe errors
+│       ├── image-edit.ts     # Bounded edit request/response orchestration
+│       ├── media/            # Reusable strict media parsing, compression, paths, and storage
 │       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
@@ -799,6 +822,7 @@ pi-xai-oauth/
 │   ├── provider/              # Registration, routing, credentials, lifecycle, and races
 │   ├── responses/             # Payload, stream, error, routing, and image transport
 │   ├── images/                # Codec budgets and Images tool behavior
+│   ├── media/                 # Strict media/path/compression/storage primitives
 │   ├── tools/                 # Network lifecycle, command, custom, and Cursor shims
 │   └── setup/                 # Installer/settings behavior
 ├── scripts/
