@@ -147,6 +147,20 @@ describe("custom xAI tools", () => {
     ).toEqual(["input_image", "input_text"]);
   });
   it.each([
+    ["xai_generate_text", { prompt: "describe", image_url: "/private/missing/generate-secret.png" }],
+    ["xai_analyze_image", { image: "/private/missing/analyze-secret.png", question: "what?" }],
+  ])("sanitizes invalid local image errors for %s", async (name, params) => {
+    setXaiNetworkToolActive(h.api, TEST_MODEL, name as any, true);
+
+    const result = await h.tools
+      .get(name)
+      .execute("call", params, undefined, () => {}, authContext(TEST_MODEL));
+
+    expect(result.content[0].text).toMatch(/Invalid image input.*No xAI request was sent/);
+    expect(JSON.stringify(result)).not.toMatch(/private|missing|secret\.png/);
+    expect(requests).toHaveLength(0);
+  });
+  it.each([
     ["xai_generate_text", { prompt: "describe", image_url: "https://example.test/generate-private.png" }],
     ["xai_analyze_image", { image: "https://example.test/analyze-private.png", question: "what?" }],
   ])("blocks %s image input for authenticated text-only evidence before fetch", async (name, params) => {
@@ -164,7 +178,7 @@ describe("custom xAI tools", () => {
       .execute("call", params, undefined, () => {}, authContext(activeModel));
 
     expect(result.content[0].text).toMatch(/explicitly text-only.*no xAI request was sent/);
-    expect(result.content[0].text).not.toMatch(/generate-private|analyze-private/);
+    expect(JSON.stringify(result)).not.toMatch(/generate-private|analyze-private/);
     expect(requests).toHaveLength(0);
   });
   it("keeps image generation separate from active-model image-input capability", async () => {

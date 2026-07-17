@@ -34,7 +34,7 @@ Only the exact camelCase keys are read. A valid higher-priority value wins in th
 
 Authenticated evidence overrides known metadata. Missing or malformed evidence does not become authenticated denial: known models retain their curated capability, while unknown models use the conservative text default. In particular, missing fields do not make `grok-composer-2.5-fast` text-only.
 
-The normalized cache records only the final input array and one bounded provenance label. Cache schema 2 preserves whether the result came from authenticated `acceptsImages`, authenticated `inputModalities`, known metadata, or the conservative default. Schema-1 caches are migrated in memory: exact model membership and non-input metadata are retained, but input is rederived as known/default and never promoted to authenticated evidence. A later normal atomic catalog write emits schema 2.
+The normalized cache records only the final input array and one bounded provenance label. Cache schema 2 preserves whether the result came from authenticated `acceptsImages`, authenticated `inputModalities`, known metadata, or the conservative default. Schema-1 caches are migrated in memory: exact model membership and non-input metadata are retained, but input is rederived as known/default and never promoted to authenticated evidence. A later successful normal atomic catalog write emits schema 2; cancellation restores the exact prior schema-1 file instead of upgrading it.
 
 ## Transport enforcement
 

@@ -112,6 +112,7 @@ describe("Responses image preparation", () => {
 
   it("rejects images injected by the final payload hook before stream transport", async () => {
     setXaiRuntimeModels([textOnlyEntitlement]);
+    const baseFetch = globalThis.fetch;
     const stream = streamSimpleXaiResponses(
       TEST_MODEL,
       { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] } as any,
@@ -132,6 +133,41 @@ describe("Responses image preparation", () => {
     expect(result.errorMessage).toMatch(/explicitly text-only.*no xAI request was sent/);
     expect(result.errorMessage).not.toContain("hook-private.png");
     expect(requests).toHaveLength(0);
+    expect(globalThis.fetch).toBe(baseFetch);
+  });
+
+  it("rejects payload hooks that change the selected model before fetch", async () => {
+    const alternateTextOnly = {
+      ...KNOWN_XAI_MODEL_METADATA[1],
+      input: ["text"] as ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    };
+    setXaiRuntimeModels([authenticatedImageEntitlement, alternateTextOnly]);
+    const baseFetch = globalThis.fetch;
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        sessionId: "model-hook",
+        onPayload(payload: any, hookModel: any) {
+          payload.model = alternateTextOnly.id;
+          hookModel.id = alternateTextOnly.id;
+          payload.input = [
+            {
+              role: "user",
+              content: [{ type: "input_image", image_url: "https://example.test/private.png" }],
+            },
+          ];
+        },
+      } as any,
+    );
+
+    const result = await stream.result();
+    expect(result.errorMessage).toMatch(/payload hooks cannot change the selected model/);
+    expect(result.errorMessage).not.toContain(alternateTextOnly.id);
+    expect(requests).toHaveLength(0);
+    expect(globalThis.fetch).toBe(baseFetch);
   });
 
   it("allows a payload hook to remove image input before the final guard", async () => {

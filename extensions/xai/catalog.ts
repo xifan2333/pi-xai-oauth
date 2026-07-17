@@ -62,6 +62,8 @@ type CacheRecord = {
   schemaVersion: number;
   fetchedAt: number;
   models: XaiCatalogModel[];
+  /** Exact validated schema-1 contents used only if an atomic refresh must roll back. */
+  rollbackContents?: string;
 };
 
 type CacheTombstone = {
@@ -461,7 +463,11 @@ function validateCachedModel(value: unknown, schemaVersion: number): XaiCatalogM
       provenance !== XaiModelInputProvenance.Default
     ) return undefined;
     if (!equalInput(parsedInput, obj.input as XaiInputModality[])) return undefined;
-    if (provenance === XaiModelInputProvenance.Known) {
+    if (provenance === XaiModelInputProvenance.AuthenticatedAcceptsImages) {
+      // A boolean acceptsImages field always implies text input and can only
+      // add or omit image; image-only cache entries are impossible evidence.
+      if (!parsedInput.includes("text")) return undefined;
+    } else if (provenance === XaiModelInputProvenance.Known) {
       if (!known || !equalInput(parsedInput, known.input)) return undefined;
     } else if (provenance === XaiModelInputProvenance.Default) {
       if (known || !equalInput(parsedInput, ["text"])) return undefined;
@@ -522,7 +528,8 @@ async function readCache(cachePath: string, now: number): Promise<CacheRecord | 
     if (info.isSymbolicLink() || !info.isFile() || info.size <= 0 || info.size > XAI_MODEL_CATALOG_MAX_BYTES) return undefined;
     if ((info.mode & 0o077) !== 0) await chmod(cachePath, 0o600);
     await chmod(dirname(cachePath), 0o700).catch(() => {});
-    const parsed = JSON.parse(await readFile(cachePath, "utf8")) as unknown;
+    const contents = await readFile(cachePath, "utf8");
+    const parsed = JSON.parse(contents) as unknown;
     const obj = objectValue(parsed);
     if (
       !obj ||
@@ -540,7 +547,12 @@ async function readCache(cachePath: string, now: number): Promise<CacheRecord | 
       if (ids.has(key) || API_KEY_ONLY_MODEL_IDS.has(key)) return undefined;
       ids.add(key);
     }
-    return { schemaVersion: XAI_MODEL_CATALOG_CACHE_SCHEMA, fetchedAt, models: models as XaiCatalogModel[] };
+    return {
+      schemaVersion: XAI_MODEL_CATALOG_CACHE_SCHEMA,
+      fetchedAt,
+      models: models as XaiCatalogModel[],
+      ...(obj.schemaVersion === 1 ? { rollbackContents: contents } : {}),
+    };
   } catch {
     return undefined;
   }
@@ -559,9 +571,9 @@ async function withCacheWriteQueue(cachePath: string, operation: () => Promise<v
   }
 }
 
-async function writeAtomicJson(
+async function writeAtomicContents(
   cachePath: string,
-  value: CacheRecord | CacheTombstone,
+  contents: string,
   commitAllowed: () => boolean = () => true,
   clearInvalidationMarker = false,
 ): Promise<void> {
@@ -572,7 +584,7 @@ async function writeAtomicJson(
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(tempPath, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify(value)}\n`, "utf8");
+    await handle.writeFile(contents, "utf8");
     await handle.sync();
     await handle.close();
     handle = undefined;
@@ -589,6 +601,21 @@ async function writeAtomicJson(
   }
 }
 
+async function writeAtomicJson(
+  cachePath: string,
+  value: CacheRecord | CacheTombstone,
+  commitAllowed: () => boolean = () => true,
+  clearInvalidationMarker = false,
+): Promise<void> {
+  const { rollbackContents: _rollbackContents, ...persisted } = value as CacheRecord;
+  await writeAtomicContents(
+    cachePath,
+    `${JSON.stringify(persisted)}\n`,
+    commitAllowed,
+    clearInvalidationMarker,
+  );
+}
+
 async function cacheMatchesRecord(cachePath: string, expected: CacheRecord): Promise<boolean> {
   try {
     const value = JSON.parse(await readFile(cachePath, "utf8")) as unknown;
@@ -603,7 +630,9 @@ async function cacheMatchesRecord(cachePath: string, expected: CacheRecord): Pro
 }
 
 async function restorePreviousCache(cachePath: string, previous: CacheRecord | undefined): Promise<void> {
-  if (previous) {
+  if (previous?.rollbackContents !== undefined) {
+    await writeAtomicContents(cachePath, previous.rollbackContents, () => true, true);
+  } else if (previous) {
     await writeAtomicJson(cachePath, previous, () => true, true);
   } else {
     await unlink(cachePath).catch(() => {});

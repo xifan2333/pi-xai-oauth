@@ -18,9 +18,10 @@ Derive advertised model input modalities from bounded authenticated evidence whe
 5. [x] Add final current-snapshot image-input enforcement after payload hooks and before direct/stream OAuth network I/O.
 6. [x] Add redacted/synthetic fixtures and focused catalog, cache, provider, Responses, and custom-tool coverage.
 7. [x] Document observed schema absence, source revision, precedence, fallback, cache migration/privacy, and local rejection behavior.
-8. [ ] Complete the rebase onto current main while retaining issue #78 wire/security and issue #93 Pi 0.80.10 behavior.
-9. [ ] Run focused suites, strict full tests, typecheck, coverage, package checks, and exact packed Pi 0.80.1/0.80.10 boundaries.
-10. [ ] Obtain independent final review, apply accepted fixes, force-push, refresh PR #90, and wait for fresh required checks.
+8. [x] Complete the rebase onto current main while retaining issue #78 wire/security and issue #93 Pi 0.80.10 behavior.
+9. [x] Run focused suites, strict full tests, typecheck, coverage, package checks, and exact packed Pi 0.80.1/0.80.10 boundaries.
+10. [x] Obtain clean independent re-reviews after accepted security/correctness fixes.
+11. [ ] Commit and force-push, refresh PR #90, mark it ready, and wait for fresh required checks.
 
 ## Validation contract
 

@@ -6,6 +6,7 @@ import {
   getXaiRuntimeModel,
   isAuthenticatedXaiInputProvenance,
   isXaiRuntimeModelEntitled,
+  normalizedXaiModelId,
   xaiModelForRequest,
 } from "./models";
 import { rewriteXaiResponsesPayload, xaiResponsesPayloadContainsImage } from "./payload";
@@ -21,6 +22,10 @@ import {
 type AssistantStreamEvent = Record<string, any>;
 
 const streamSimpleOpenAIResponses = openAIResponsesApi().streamSimple;
+const SAFE_TEXT_ONLY_ERROR_PATTERN =
+  /^xAI OAuth model [A-Za-z0-9][A-Za-z0-9._:-]{0,127} is explicitly text-only in the authenticated model catalog; no xAI request was sent$/;
+const SAFE_PAYLOAD_MODEL_ERROR =
+  "xAI OAuth payload hooks cannot change the selected model; no xAI request was sent";
 
 const guardedRedirectUrls = new Map<string, number>();
 let unguardedFetch: typeof fetch | undefined;
@@ -82,11 +87,15 @@ function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEv
     ...event,
     error: {
       ...error,
-      errorMessage: safeXaiTransportErrorMessage(
-        error.errorMessage,
-        typeof error.status === "number" ? error.status : undefined,
-        "responses-proxy",
-      ),
+      errorMessage:
+        SAFE_TEXT_ONLY_ERROR_PATTERN.test(error.errorMessage) ||
+        error.errorMessage === SAFE_PAYLOAD_MODEL_ERROR
+        ? error.errorMessage
+        : safeXaiTransportErrorMessage(
+            error.errorMessage,
+            typeof error.status === "number" ? error.status : undefined,
+            "responses-proxy",
+          ),
     },
   };
 }
@@ -188,6 +197,21 @@ export async function postXaiJson(
   return response.json();
 }
 
+function pinXaiStreamPayloadModel(modelId: string, payload: unknown): void {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error(SAFE_PAYLOAD_MODEL_ERROR);
+  }
+  const body = payload as Record<string, unknown>;
+  if (
+    body.model !== undefined &&
+    (typeof body.model !== "string" ||
+      normalizedXaiModelId(body.model) !== normalizedXaiModelId(modelId))
+  ) {
+    throw new Error(SAFE_PAYLOAD_MODEL_ERROR);
+  }
+  body.model = modelId;
+}
+
 /** Assert the current authenticated entitlement permits the final Responses payload. */
 export function assertXaiRuntimeModelAcceptsPayload(modelId: string, payload: unknown): void {
   const runtimeModel = getXaiRuntimeModel(modelId);
@@ -278,6 +302,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
     },
     { streaming: true },
   );
+  const selectedModelId = model.id;
   const streamModel = {
     ...model,
     baseUrl: route.baseUrl,
@@ -320,7 +345,8 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
             const finalPayload = await compactXaiInlineImages(
               userRewritten === undefined ? rewritten : userRewritten,
             );
-            assertXaiRuntimeModelAcceptsPayload(streamModel.id, finalPayload);
+            pinXaiStreamPayloadModel(selectedModelId, finalPayload);
+            assertXaiRuntimeModelAcceptsPayload(selectedModelId, finalPayload);
             return finalPayload;
           },
         },

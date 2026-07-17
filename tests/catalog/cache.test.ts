@@ -177,6 +177,31 @@ describe("catalog cache selection", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it("rejects impossible acceptsImages provenance/input combinations", async () => {
+    const path = join(temp.path, "bad-accepts-images", "models-v2.json");
+    const malformed = additions.map((model, index) =>
+      index === 0
+        ? {
+            ...model,
+            input: ["image"],
+            inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+          }
+        : model,
+    );
+    await writeCache(path, now - 1, malformed as any);
+    const fetchImpl = vi.fn(async () => jsonResponse(removalsPayload));
+
+    const selection = await selectXaiModelCatalog({
+      credential: { access: token },
+      cachePath: path,
+      now,
+      fetchImpl,
+    });
+
+    expect(selection.source).toBe("remote");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("refreshes stale data through only the pinned authenticated GET and replaces the cache", async () => {
     const path = join(temp.path, "stale", "models-v2.json");
     await writeCache(path, now - XAI_MODEL_CATALOG_FRESH_TTL_MS);
@@ -338,6 +363,35 @@ describe("catalog cache selection", () => {
         (model: any) => model.id,
       ),
     ).toEqual(additions.map(({ id }) => id));
+  });
+
+  it("restores exact schema-1 contents after post-rename cancellation", async () => {
+    const path = join(temp.path, "legacy-guard", "models-v2.json");
+    const legacyModels = additions.map(({ inputProvenance: _inputProvenance, ...model }) => ({
+      ...model,
+      input: model.id === "grok-4.5" ? ["text"] : ["text", "image"],
+    }));
+    await writeCache(
+      path,
+      now - XAI_MODEL_CATALOG_FRESH_TTL_MS,
+      legacyModels as any,
+      1,
+    );
+    const before = await readFile(path, "utf8");
+    let checks = 0;
+
+    await expect(
+      selectXaiModelCatalog({
+        credential: { access: token },
+        cachePath: path,
+        now,
+        commitAllowed: () => ++checks < 4,
+        fetchImpl: async () => jsonResponse(removalsPayload),
+      }),
+    ).rejects.toBeInstanceOf(XaiCatalogCancelledError);
+
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(JSON.parse(before).schemaVersion).toBe(1);
   });
 
   it("invalidates stale entitlements after auth failure", async () => {
