@@ -1,9 +1,13 @@
+import { execFile } from "node:child_process";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readBoundedWorkspaceImageFile } from "../../extensions/xai/media/paths";
 import { createTempDir } from "../fixtures/temp";
 import { tinyPngBytes } from "../fixtures/images";
+
+const execFileAsync = promisify(execFile);
 
 describe("bounded workspace image reads", () => {
   let temp: Awaited<ReturnType<typeof createTempDir>>;
@@ -64,5 +68,21 @@ describe("bounded workspace image reads", () => {
     await expect(readBoundedWorkspaceImageFile("inside.png", workspace, controller.signal)).rejects.toMatchObject({
       name: "AbortError",
     });
+  });
+
+  it.runIf(process.platform !== "win32")("rejects a FIFO without blocking", async () => {
+    const fifo = join(workspace, "special.png");
+    await execFileAsync("mkfifo", [fifo]);
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await expect(Promise.race([
+        readBoundedWorkspaceImageFile("special.png", workspace),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error("FIFO rejection timed out")), 1_000);
+        }),
+      ])).rejects.toThrow(/regular file/);
+    } finally {
+      clearTimeout(timeout);
+    }
   });
 });

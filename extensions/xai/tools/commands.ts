@@ -24,7 +24,7 @@ const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
   { name: "xai_deep_research", category: "research", costRisk: "high/variable", summary: "multi-step web/X research" },
   { name: "xai_code_execution", category: "execution", costRisk: "token + tool", summary: "xAI code interpreter" },
   { name: "xai_generate_image", category: "image", costRisk: "per image", summary: "generate 1-4 images" },
-  { name: "xai_edit_image", category: "image", costRisk: "Imagine usage", summary: "edit 1-4 local image references" },
+  { name: "xai_edit_image", category: "image", costRisk: "Imagine usage", summary: "edit 1-3 local image references" },
   { name: "xai_analyze_image", category: "vision", costRisk: "token usage", summary: "analyze an image with Grok" },
   { name: "xai_critique", category: "reasoning", costRisk: "token usage", summary: "separate high-reasoning critique" },
   { name: "WebSearch", category: "search", costRisk: "token + tool", summary: "Grok Build/Composer native web search" },

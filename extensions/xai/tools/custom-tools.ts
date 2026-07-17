@@ -16,8 +16,8 @@ import { xaiTextInput, xaiToolError } from "./common";
 import { activeXaiModel, isXaiNetworkToolActive, type XaiNetworkToolName } from "./model-scope";
 
 function activeModelForXaiTool(pi: ExtensionAPI, ctx: any, toolName: XaiNetworkToolName) {
+  if (!isXaiNetworkToolActive(pi, toolName)) return undefined;
   const model = activeXaiModel(ctx);
-  if (!model || !isXaiNetworkToolActive(pi, toolName)) return undefined;
   return model;
 }
 
@@ -395,7 +395,7 @@ Be specific and cite examples where helpful.`;
             type: "array",
             minItems: 1,
             maxItems: IMAGE_EDIT_MAX_REFERENCES,
-            description: "One to four bounded local workspace or data-URL references",
+            description: "One to three bounded local workspace or data-URL references",
             items: {
               oneOf: [
                 {

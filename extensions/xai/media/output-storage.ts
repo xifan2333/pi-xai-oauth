@@ -106,7 +106,9 @@ export async function saveVerifiedOutputImage(
     throwIfAborted(options.signal);
     await rename(temporaryPath, finalPath);
     finalCreated = true;
+    throwIfAborted(options.signal);
     await chmod(finalPath, IMAGE_EDIT_OUTPUT_FILE_MODE);
+    throwIfAborted(options.signal);
     return {
       path: finalPath,
       mimeType: image.mimeType,

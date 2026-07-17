@@ -95,7 +95,9 @@ describe("custom xAI tools", () => {
       undefined,
       () => {},
       {
-        model: TEST_MODEL,
+        get model() {
+          throw new Error("disabled tool must not inspect active model context");
+        },
         get cwd() {
           throw new Error("disabled tool must not inspect cwd");
         },

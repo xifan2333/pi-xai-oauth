@@ -11,7 +11,7 @@ export const MEDIA_MAX_SOURCE_PIXELS = 12_000_000;
 /** Package-owned input and request budgets. */
 export const MEDIA_MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 export const MEDIA_MAX_DATA_URL_CHARS = 12 * 1024 * 1024;
-export const IMAGE_EDIT_MAX_REFERENCES = 4;
+export const IMAGE_EDIT_MAX_REFERENCES = 3;
 export const IMAGE_EDIT_MAX_AGGREGATE_REFERENCE_BYTES =
   3 * MEDIA_REFERENCE_PASSTHROUGH_MAX_BYTES;
 export const IMAGE_EDIT_MAX_PROMPT_CHARS = 4_000;

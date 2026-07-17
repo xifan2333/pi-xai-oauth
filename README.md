@@ -372,7 +372,7 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_deep_research` | Research | High/variable model and web/X tool usage |
 | `xai_code_execution` | Execution | Model tokens plus code-interpreter usage |
 | `xai_generate_image` | Image generation | Charged per generated image; supports 1-4 images |
-| `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-4 local references |
+| `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-3 local references |
 | `xai_analyze_image` | Vision | Separate model-token and image-input usage |
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
 | `WebSearch` | Search | Grok Build/Composer model tokens plus native tool usage |
@@ -472,7 +472,7 @@ Opt-in analysis of an image URL, data URL, or local `.png` / `.jpg` path with Gr
 
 ### `xai_edit_image`
 
-Opt-in paid image editing through xAI Imagine. Enable it through `/xai-tools` first, then explicitly request the edit. One reference preserves its input aspect ratio; multiple references require a supported `aspect_ratio`.
+Opt-in paid image editing through xAI Imagine. Enable it through `/xai-tools` first, then explicitly request the edit. Supply one to three references. One reference preserves its input aspect ratio; a supported `aspect_ratio` may be supplied but is omitted from the wire. Multiple references require a supported `aspect_ratio`.
 
 ```json
 {
@@ -481,7 +481,7 @@ Opt-in paid image editing through xAI Imagine. Enable it through `/xai-tools` fi
 }
 ```
 
-References are limited to 1-4 byte-validated PNG/JPEG files inside the current workspace or strict bounded `data:image/png;base64,...` / `data:image/jpeg;base64,...` values. Paths are resolved through realpath, so `..` escapes and symlinks leaving the workspace are rejected. HTTPS URLs, `file://` URLs, current-turn attachment tokens, arbitrary outside paths, SVG, WebP, GIF, and HEIC are intentionally unsupported.
+References are limited to 1-3 byte-validated PNG/JPEG files inside the current workspace or strict bounded `data:image/png;base64,...` / `data:image/jpeg;base64,...` values. Paths are resolved through realpath, so `..` escapes and symlinks leaving the workspace are rejected. HTTPS URLs, `file://` URLs, current-turn attachment tokens, arbitrary outside paths, SVG, WebP, GIF, and HEIC are intentionally unsupported.
 
 Reference handling uses the pinned Grok Build policy as its starting point: sources are capped at 8 MiB and 12 million decoded pixels; compatible references up to 400 KiB pass through after decode verification; larger references are re-encoded under 400 KiB with a 768 px maximum side, a 256 px compression floor, and reviewed quality steps. The package separately limits aggregate reference bytes to 1,200 KiB and caps reference count, request JSON, response JSON, output base64, decoded output bytes, output pixels, and output dimensions.
 

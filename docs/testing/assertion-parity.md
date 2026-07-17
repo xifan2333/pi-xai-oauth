@@ -192,7 +192,6 @@ not in another monolith.
 
 **Completed evidence:** all legacy and replacement behavior tests passed together
 under strict unhandled-rejection handling before the four legacy files were
-removed. At issue #68 completion, the replacement suite had 246 named tests
-across 29 files and three independent parity review rounds ended with a CLEAN
-focused re-review. Issue #83 extends that suite to 291 tests across 34 files;
-the real loader smoke remains intentionally small at 41 lines.
+removed. Three independent parity review rounds ended with a CLEAN focused
+re-review. Issue #83 extends that suite with bounded image-edit coverage; the
+real loader smoke remains intentionally small.

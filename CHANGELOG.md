@@ -11,7 +11,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added a revision-pinned Grok Build wire-protocol matrix, ID-ownership policy, repeatable upstream review procedure, and an explicit encrypted-reasoning handoff to issue #79.
 - Added deterministic streaming/direct Responses, catalog, OAuth form, client-mode, media-boundary, reserved-header, bounded-error, and proxy version-gate request-shape coverage.
 - Added bounded authenticated `acceptsImages` / `inputModalities` normalization with explicit input-capability provenance and redacted schema fixtures.
-- Added 246 focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
+- Added focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
 - Added the disabled-by-default `xai_edit_image` tool with exact singular/plural Imagine edit payloads, a distinct pinned `/images/edits` route, timeout/cancellation, and redacted errors.
 - Added reusable bounded media primitives for byte-validated PNG/JPEG data URLs and workspace files, source-backed compression, explicit request/response/output budgets, and atomic 0700/0600 Pi-session storage.
 - Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.

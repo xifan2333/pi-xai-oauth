@@ -22,6 +22,7 @@ import { inspectSupportedImageBytes } from "./media/image-info";
 import { imageEditOutputRoot, saveVerifiedOutputImage } from "./media/output-storage";
 import { readBoundedWorkspaceImageFile } from "./media/paths";
 import type { PreparedImageReference, SavedImageOutput, VerifiedImageBytes } from "./media/types";
+import { xaiDirectMediaJsonHeaders } from "./wire";
 
 export const IMAGE_EDIT_ASPECT_RATIOS = [
   "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "2:1", "1:2",
@@ -141,8 +142,17 @@ export function validateXaiEditImageInput(input: unknown): XaiEditImageInput {
   }
   const image = record.image.map(validateReferenceShape);
   const aspectRatio = record.aspect_ratio;
+  if (
+    aspectRatio !== undefined
+    && (
+      typeof aspectRatio !== "string"
+      || !(IMAGE_EDIT_ASPECT_RATIOS as readonly string[]).includes(aspectRatio)
+    )
+  ) {
+    return invalidInput("Image edit aspect_ratio must be supported when supplied.");
+  }
   if (image.length > 1) {
-    if (typeof aspectRatio !== "string" || !(IMAGE_EDIT_ASPECT_RATIOS as readonly string[]).includes(aspectRatio)) {
+    if (typeof aspectRatio !== "string") {
       return invalidInput("Multiple image references require a supported aspect_ratio.");
     }
   }
@@ -189,10 +199,17 @@ async function readBoundedResponse(response: Response, maxBytes: number, signal:
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  const abortError = () => new DOMException("The operation was cancelled.", "AbortError");
+  let rejectOnAbort: ((reason: unknown) => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectOnAbort = reject;
+  });
+  const onAbort = () => rejectOnAbort?.(abortError());
+  signal.addEventListener("abort", onAbort, { once: true });
   try {
+    if (signal.aborted) throw abortError();
     while (true) {
-      if (signal.aborted) throw new DOMException("The operation was cancelled.", "AbortError");
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), aborted]);
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
@@ -202,6 +219,8 @@ async function readBoundedResponse(response: Response, maxBytes: number, signal:
       chunks.push(value);
     }
   } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (signal.aborted) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total).toString("utf8");
@@ -232,10 +251,7 @@ async function postBoundedImageEdit(
     try {
       response = await (dependencies.fetch ?? fetch)(route.url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${credential.token}`,
-        },
+        headers: xaiDirectMediaJsonHeaders(credential.token),
         body: JSON.stringify(body),
         redirect: "error",
         signal: controller.signal,
@@ -305,6 +321,16 @@ async function verifyOutputImage(
     });
     const image: VerifiedImageBytes = { bytes, ...inspected, source: "output" };
     const decoded = await codec.verify(image, signal);
+    if (
+      !Number.isSafeInteger(decoded.width)
+      || !Number.isSafeInteger(decoded.height)
+      || decoded.width <= 0
+      || decoded.height <= 0
+      || Math.max(decoded.width, decoded.height) > IMAGE_EDIT_MAX_OUTPUT_SIDE_PX
+      || decoded.width > Math.floor(IMAGE_EDIT_MAX_OUTPUT_PIXELS / decoded.height)
+    ) {
+      throw new Error("Decoded image dimensions exceed the output limit.");
+    }
     return { ...image, ...decoded };
   } catch (error) {
     if (isAbortError(error)) throw error;
@@ -318,6 +344,9 @@ export async function executeXaiImageEdit(
   dependencies: ImageEditDependencies = {},
 ): Promise<SavedImageOutput> {
   const input = validateXaiEditImageInput(options.input);
+  if (options.signal?.aborted) {
+    throw new ImageEditOperationError("xAI image edit was cancelled.", "cancelled");
+  }
   const codec = dependencies.codec ?? defaultImageCodec();
   let sessionRoot: string;
   let outputRoot: string;
@@ -351,7 +380,7 @@ export async function executeXaiImageEdit(
   } catch (error) {
     if (isAbortError(error)) throw new ImageEditOperationError("xAI image edit was cancelled.", "cancelled");
     throw new ImageEditOperationError(
-      error instanceof Error ? error.message : "Image reference could not be compressed safely.",
+      "Image reference could not be verified or compressed safely.",
       "invalid_input",
     );
   }

@@ -80,6 +80,62 @@ describe("xai_edit_image tool adapter", () => {
     expect(credentialReads).toBe(0);
   });
 
+  it("rejects four references before credentials, filesystem context, or network", async () => {
+    let credentialReads = 0;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await harness.tools.get("xai_edit_image").execute(
+      "call",
+      {
+        prompt: "edit",
+        image: Array.from({ length: 4 }, () => ({ data_url: dataUrl })),
+        aspect_ratio: "1:1",
+      },
+      undefined,
+      () => {},
+      {
+        model: TEST_MODEL,
+        get modelRegistry() {
+          credentialReads += 1;
+          throw new Error("must not resolve");
+        },
+        get cwd() {
+          throw new Error("must not inspect filesystem context");
+        },
+        get sessionManager() {
+          throw new Error("must not inspect session storage");
+        },
+      },
+    );
+    expect(result.content[0].text).toMatch(/1-3 references/);
+    expect(credentialReads).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("runs under an authenticated text-only active Responses model", async () => {
+    const textOnlyModel = { ...TEST_MODEL, id: "text-only-edit-host", input: ["text"] };
+    setXaiNetworkToolActive(harness.api, textOnlyModel as any, "xai_edit_image", true);
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ data: [{ b64_json: png.toString("base64") }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await harness.tools.get("xai_edit_image").execute(
+      "call",
+      { prompt: "make it blue", image: [{ data_url: dataUrl }] },
+      undefined,
+      () => {},
+      {
+        ...authContext(textOnlyModel),
+        cwd: workspace,
+        sessionManager: {
+          getSessionDir: () => sessions,
+          getSessionId: () => "text-only-tool-adapter-session",
+        },
+      },
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.content[0].text).toMatch(/Edited image saved/);
+  });
+
   it("returns redacted HTTP errors without reflecting prompt, data URL, or token", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
       error: `oauth-token dangerous prompt ${dataUrl}`,

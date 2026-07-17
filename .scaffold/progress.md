@@ -10,10 +10,24 @@
 - [x] Created `safety/issue-83-pre-pr90-rebase`.
 - [x] Started rebasing the original implementation/docs commits onto merged main.
 - [x] Preserved the original bounded media implementation, focused tests, and disabled-by-default tool lifecycle for semantic integration.
+- [x] Completed the rebase as `316884d` plus `f3e0fd8` on merged baseline `b0556a8`.
+- [x] Enforced one to three references and cheap validation of every supplied aspect ratio.
+- [x] Added shared protected direct-media headers and edit-route error classification without proxy metadata.
+- [x] Reapplied decoded output limits, redacted codec/compression failures, and hardened body/output cancellation.
+- [x] Added regressions for four-reference zero-I/O rejection, both credential provenance tags, stalled bodies, request-ID filtering, decoded dimensions, and text-only active models.
+- [x] Passed the primary and cumulative focused image-edit/media/provider/tool suites plus strict TypeScript.
+- [x] Passed the strict full suite, real loader smoke, and V8 coverage above every configured floor.
+- [x] Passed policy/registry, packed-manifest, unsupported-peer, and package dry-run checks.
+- [x] Passed clean packed test/loader/typecheck matrices with exact Pi 0.80.1 and 0.80.10.
+- [x] Applied security review feedback so disabled tools prove explicit opt-in before reading active-model context, with a throwing-getter regression.
+- [x] Replaced a false-positive cancellation test with deterministic cleanup checks after temporary write and final rename, and added POSIX FIFO rejection coverage.
+- [x] Completed the old-vs-rebased range diff and verified protected PR #90/OAuth/catalog/package-policy files were not replaced.
+- [x] Functional, security/privacy, and test/validation re-reviews returned CLEAN after their accepted fixes.
+- [x] Confirmed PR #91 has no review submissions or unresolved review threads; its only comments are review-bot usage-limit notices.
 
 ## In progress
 
-- [ ] Resolve cumulative docs/scaffold conflicts and audit every auto-merged runtime hunk.
+- [ ] Commit the final reviewed delta, push with lease, and verify fresh PR checks without merging.
 
 ## Delivery
 

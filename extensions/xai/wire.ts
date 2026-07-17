@@ -2,6 +2,7 @@ import {
   XAI_CLIENT_IDENTIFIER,
   XAI_CLI_RESPONSES_URL,
   XAI_GROK_BUILD_REVIEWED_REVISION,
+  XAI_IMAGES_EDITS_URL,
   XAI_IMAGES_GENERATIONS_URL,
   XAI_PROXY_CLIENT_VERSION,
   XAI_RESPONSES_URL,
@@ -42,6 +43,7 @@ export type XaiHttpRouteKind =
   | "responses-proxy"
   | "responses-direct"
   | "image-generation"
+  | "image-edit"
   | "unknown";
 
 export interface XaiProxyRequestMetadata {
@@ -171,10 +173,16 @@ export function xaiJsonPostHeaders(
   };
 }
 
+/** Build the exact protected header contract for direct public media JSON requests. */
+export function xaiDirectMediaJsonHeaders(authToken: string): Record<string, string> {
+  return xaiJsonPostHeaders(authToken);
+}
+
 function routeKindForUrl(url: string): XaiHttpRouteKind {
   if (url === XAI_CLI_RESPONSES_URL) return "responses-proxy";
   if (url === XAI_RESPONSES_URL) return "responses-direct";
   if (url === XAI_IMAGES_GENERATIONS_URL) return "image-generation";
+  if (url === XAI_IMAGES_EDITS_URL) return "image-edit";
   return "unknown";
 }
 
@@ -193,6 +201,7 @@ function isProxyVersionGate(status: number | undefined, detail: string): boolean
 function routeLabel(routeKind: XaiHttpRouteKind): string {
   if (routeKind === "responses-proxy" || routeKind === "responses-direct") return "Responses";
   if (routeKind === "image-generation") return "image generation";
+  if (routeKind === "image-edit") return "image editing";
   return "request";
 }
 

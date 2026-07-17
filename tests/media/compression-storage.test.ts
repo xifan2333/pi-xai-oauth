@@ -29,6 +29,16 @@ function fakeCodec(compressed = image(pngHeaderBytes(512, 512), 512, 512)): Imag
   };
 }
 
+function abortSignalOnRead(readNumber: number): AbortSignal {
+  let reads = 0;
+  return {
+    get aborted() {
+      reads += 1;
+      return reads >= readNumber;
+    },
+  } as AbortSignal;
+}
+
 describe("bounded reference compression", () => {
   it("decode-verifies but preserves sub-400 KiB PNG bytes", async () => {
     const codec = fakeCodec();
@@ -75,14 +85,18 @@ describe("bounded reference compression", () => {
     await expect(prepareImageReferences([large], { codec: fakeCodec(image(pngHeaderBytes(200, 200), 200, 200)) })).rejects.toThrow(/floor/);
   });
 
-  it("enforces a package-owned aggregate budget below four maximum-sized references", async () => {
-    const bytes = Buffer.concat([pngHeaderBytes(10, 10), Buffer.alloc(350 * 1024)]);
-    expect(bytes.length).toBeLessThan(MEDIA_REFERENCE_PASSTHROUGH_MAX_BYTES);
-    expect(bytes.length * 4).toBeGreaterThan(IMAGE_EDIT_MAX_AGGREGATE_REFERENCE_BYTES);
+  it("accepts exactly the package-owned aggregate boundary for three references", async () => {
+    const header = pngHeaderBytes(10, 10);
+    const bytes = Buffer.concat([
+      header,
+      Buffer.alloc(MEDIA_REFERENCE_PASSTHROUGH_MAX_BYTES - header.length),
+    ]);
+    expect(bytes.length * 3).toBe(IMAGE_EDIT_MAX_AGGREGATE_REFERENCE_BYTES);
     const source = image(bytes, 10, 10);
-    await expect(
-      prepareImageReferences([source, source, source, source], { codec: fakeCodec() }),
-    ).rejects.toThrow(/aggregate byte limit/);
+    await expect(prepareImageReferences(
+      [source, source, source],
+      { codec: fakeCodec() },
+    )).resolves.toHaveLength(3);
   });
 
   it("decode-verifies a real JPEG without changing under-budget bytes", async () => {
@@ -168,5 +182,18 @@ describe("atomic session image storage", () => {
       name: "AbortError",
     });
     await expect(lstat(outputRoot)).rejects.toThrow();
+  });
+
+  it.each([
+    ["temporary write", 3],
+    ["final rename", 4],
+  ])("removes all output when cancellation follows %s", async (_stage, abortRead) => {
+    const outputRoot = imageEditOutputRoot(manager());
+    await expect(saveVerifiedOutputImage(image(), {
+      outputRoot,
+      sessionRoot,
+      signal: abortSignalOnRead(abortRead),
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(await readdir(outputRoot)).toEqual([]);
   });
 });

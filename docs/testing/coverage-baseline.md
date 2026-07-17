@@ -29,16 +29,18 @@ cache invalidation, and fail-closed tool branches are covered directly.
 ## Issue #83 measurement
 
 After adding bounded image-edit parsing, workspace containment, compression,
-transport, and atomic session storage, the focused suite contains 291 tests in
-34 files. The new security-heavy production surface increases the measured
-statement denominator while remaining above every established floor:
+transport, and atomic session storage, the security-heavy production surface
+increases the measured denominator while remaining above every configured
+floor:
 
 | Metric | Measured | Configured floor |
 |---|---:|---:|
-| Statements | 82.91% (2204/2658) | 82% |
-| Branches | 75.53% (1701/2252) | 74% |
-| Functions | 84.31% (328/389) | 84% |
-| Lines | 87.10% (2013/2311) | 85% |
+| Statements | 84.68% (2467/2913) | 82% |
+| Branches | 77.71% (1932/2486) | 74% |
+| Functions | 85.48% (371/434) | 84% |
+| Lines | 88.72% (2243/2528) | 85% |
+
+`npm run test:coverage` remains the source of truth for future changes.
 
 The image-edit tests directly cover endpoint pinning, disabled zero-I/O,
 workspace and symlink escapes, strict media validation, per-item and aggregate
