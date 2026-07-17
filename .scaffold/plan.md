@@ -17,7 +17,7 @@ Adopt Pi 0.80.10 as the latest exact compatibility boundary while preserving the
 6. [x] Update README, CHANGELOG, AGENTS, and scaffold state.
 7. [x] Run full latest and exact 0.80.1/0.80.10 validation.
 8. [x] Complete independent review and apply accepted fixes.
-9. [ ] Commit, push, and open the issue #93 PR.
+9. [x] Commit, push, and open PR #94 for issue #93.
 
 ## Validation contract
 

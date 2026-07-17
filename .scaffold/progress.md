@@ -17,9 +17,10 @@
 
 - [x] Independent final review reported CLEAN after the no-write startup regression was added and verified on both exact boundaries.
 
-## In progress
+## Delivery
 
-- [ ] Commit, push, and open the issue #93 PR.
+- [x] Committed the reviewed implementation as `a74b9e3` (`chore: validate Pi 0.80.10 compatibility`).
+- [x] Pushed `feature/issue-93-pi-0.80.10` and opened PR #94: https://github.com/BlockedPath/pi-xai-oauth/pull/94
 
 ## Residual
 
