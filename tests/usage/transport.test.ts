@@ -48,6 +48,7 @@ describe("xAI usage transport", () => {
     ["identity auth failure", jsonResponse({ error: "SECRET_BODY" }, 401)],
     ["identity redirect", jsonResponse({}, 302, { Location: "https://attacker.invalid" })],
     ["malformed identity", new Response("{not-json")],
+    ["invalid UTF-8 identity", new Response(Uint8Array.from([0xc3, 0x28]))],
     ["oversized identity", new Response("x".repeat(64 * 1024 + 1))],
   ])("fails closed before billing on %s", async (_label, response) => {
     const fetchMock = vi.fn(async () => response);
@@ -77,18 +78,50 @@ describe("xAI usage transport", () => {
     expect(transportError.message).toBe("xAI usage request failed.");
   });
 
+  it("cancels unsuccessful response bodies before returning a redacted error", async () => {
+    const cancel = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchXaiUsage(credential)).rejects.toMatchObject({
+      code: "http",
+      status: 500,
+      message: "xAI usage request failed with status 500.",
+    });
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("propagates cancellation safely before billing", async () => {
     const controller = new AbortController();
-    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(new DOMException("SECRET", "AbortError")), { once: true });
-      }));
+    const cancel = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      new Response(new ReadableStream<Uint8Array>({ cancel })));
     vi.stubGlobal("fetch", fetchMock);
     const request = fetchXaiUsage(credential, controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     controller.abort();
     const error = await request.catch((caught) => caught as XaiUsageError);
     expect(error).toMatchObject({ code: "cancelled", message: "xAI usage request was cancelled." });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not await a response stream whose cancellation never settles", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const fetchMock = vi.fn(async () =>
+      new Response(new ReadableStream<Uint8Array>({ cancel })));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = fetchXaiUsage(credential, controller.signal)
+      .catch((caught) => caught as XaiUsageError);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    controller.abort();
+    await expect(request).resolves.toMatchObject({
+      code: "cancelled",
+      message: "xAI usage request was cancelled.",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("applies the 15-second timeout without leaking fetch errors", async () => {
@@ -103,6 +136,20 @@ describe("xAI usage transport", () => {
       code: "timeout",
       message: "xAI usage request timed out.",
     });
+  });
+
+  it("applies the timeout after response headers when the body stalls", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(new ReadableStream<Uint8Array>({ cancel }))));
+    const request = fetchXaiUsage(credential).catch((error) => error as XaiUsageError);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(request).resolves.toMatchObject({
+      code: "timeout",
+      message: "xAI usage request timed out.",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("rejects API-key provenance before any request", async () => {

@@ -239,8 +239,10 @@ export default async function (pi: ExtensionAPI) {
       }
       return syncXaiToolsForModel(pi, activeModel);
     });
-    (pi as any).on("turn_end", async (_event: any, ctx: any) => {
-      await xaiUsage.refreshStatus(ctx);
+    (pi as any).on("turn_end", (_event: any, ctx: any) => {
+      // Footer usage is cosmetic. Never delay pi's awaited turn lifecycle on
+      // credential resolution or two bounded network requests.
+      void xaiUsage.refreshStatus(ctx).catch(() => undefined);
     });
     (pi as any).on("session_shutdown", (_event: any, ctx: any) => {
       xaiUsage.reset(ctx);

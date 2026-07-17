@@ -28,8 +28,16 @@ Use the existing Pi-resolved OAuth bearer for a pinned authenticated `GET /v1/us
 - Missing optional fields are omitted. Unsupported/out-of-range optional fields are ignored; malformed root/history or over-limit structures fail safely.
 - PR #89 has no reviews or review threads; its three conversation comments are bot usage-limit notices.
 - The old policy failure was only the now-obsolete Pi 0.80.7 registry-drift check; merged PR #94 pins and validates 0.80.10.
-- The original clean remote head was `53b8013`; the rebase onto `af31e83` is in progress.
+- The original clean remote head was `53b8013`; it rebased onto `af31e83` as `9792282` plus `4c0f098`.
+- Usage headers now live in the shared wire module, and stalled response bodies are explicitly bounded by cancellation/timeout races.
+- Usage accepts only a resolver token that matches Pi's current stored OAuth credential after refresh, so stored/runtime API keys cannot be relabeled and sent to the CLI proxy.
+- Cosmetic footer refreshes are detached from Pi's awaited turn lifecycle, malformed calendar timestamps are omitted, and unsuccessful bodies are cancelled.
+- Caller/model `x-userid` is scrubbed globally and added only by the protected billing-header contract after bounded `/user` validation.
+- Stored OAuth removal disables status before throttling; account/session resets abort and suppress stale one-shot or footer completions.
+- Focused usage/provider/wire coverage passes 7 files / 74 tests; strict TypeScript, real loader, direct pack contract, and diff check pass.
+- The final cumulative gate passes 37 files / 398 tests, 86.03% statement coverage, the 111-file pack contract, policy checks, and exact Pi 0.80.1/0.80.10 matrices.
+- Independent security and final test re-reviews are clean.
 
 ## Delivery
 
-Revalidate the cumulative branch against the current merged baseline, complete independent review, and replace the known old remote head with exact force-with-lease. PR #89 remains unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/89
+Complete the full cumulative validation and independent reviews, then replace the known old remote head with exact force-with-lease. PR #89 remains unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/89

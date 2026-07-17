@@ -53,6 +53,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - [Pi Compatibility](#pi-compatibility)
 - [Authentication](#authentication)
 - [Usage](#usage)
+  - [Subscription usage (unofficial)](#subscription-usage-unofficial)
   - [Switching Models](#switching-models)
   - [Reasoning / Thinking Levels](#reasoning--thinking-levels)
 - [Custom Tools](#custom-tools)
@@ -248,7 +249,7 @@ Run an explicit one-shot usage lookup from pi:
 
 The command displays only validated fields that xAI actually returned, such as included usage percentage, legacy included-credit totals, current reset time, on-demand usage/cap, prepaid balance, and bounded history count. Missing optional fields stay omitted.
 
-The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
+The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. The command requires a current Pi-stored OAuth credential and rejects stored or runtime `--api-key` provenance. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
 
 The compact footer status is off by default and requires a separate per-session opt-in while an `xai-auth` model is active:
 
@@ -258,7 +259,7 @@ The compact footer status is off by default and requires a separate per-session 
 /xai-usage status off
 ```
 
-Enabling status performs one immediate lookup. Later refreshes are event-driven after completed turns and occur no more than once per minute. The status disables and clears on model, provider, account, or session changes; it never refreshes for non-xAI models. Status failures clear silently and never interfere with chat. Every request rejects redirects, has a 15-second timeout, reads at most 64 KiB, and applies bounded JSON depth, collection counts, history length, and numeric ranges.
+Enabling status performs one immediate lookup. Later refreshes are event-driven after completed turns and occur no more than once per minute. The status disables and clears on model, provider, login, or session changes and on the next extension-handled event after stored OAuth removal; it never refreshes for non-xAI models. Status failures clear silently and never interfere with chat. Every request rejects redirects, has a 15-second timeout, reads at most 64 KiB, and applies bounded JSON depth, collection counts, history length, and numeric ranges.
 
 ### Switching Models
 

@@ -16,6 +16,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   setXaiRuntimeModels(CURATED_FALLBACK_MODELS);
+  vi.restoreAllMocks();
   await temp.cleanup();
 });
 
@@ -51,6 +52,9 @@ describe("provider registration", () => {
         "session_shutdown",
       ]),
     );
+    expect(
+      harness.handlers.get("turn_end")?.({}, { model: TEST_MODEL, ui: {} }),
+    ).toBeUndefined();
   });
   it("registers independently on a second Pi API object", async () => {
     const first = createExtensionHarness();
@@ -60,6 +64,90 @@ describe("provider registration", () => {
     expect(second.tools.size).toBe(first.tools.size);
     expect(second.commands.size).toBe(first.commands.size);
     expect(second.providers.has("xai-auth")).toBe(true);
+  });
+  it("wires usage status through turn, model, session-start, and shutdown events", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const harness = createExtensionHarness();
+    await extension(harness.api);
+    const notifications: Array<{ message: string; type?: string }> = [];
+    const statuses: Array<{ key: string; text?: string }> = [];
+    let storedCredential: any = {
+      type: "oauth",
+      access: "oauth-access",
+      refresh: "refresh",
+      expires: Date.now() + 60_000,
+    };
+    const ui = {
+      notify(message: string, type?: string) {
+        notifications.push({ message, type });
+      },
+      setStatus(key: string, text: string | undefined) {
+        statuses.push({ key, text });
+      },
+    };
+    const ctx = {
+      model: TEST_MODEL,
+      signal: undefined,
+      ui,
+      modelRegistry: {
+        authStorage: {
+          get: () => storedCredential,
+        },
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => storedCredential?.type === "oauth",
+        getApiKeyAndHeaders: async () => ({
+          ok: true,
+          apiKey: storedCredential?.access,
+        }),
+      },
+    };
+    let stallNext = false;
+    const fetchMock = vi.fn(async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      if (stallNext) {
+        stallNext = false;
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("cancelled", "AbortError")),
+            { once: true },
+          );
+        });
+      }
+      return String(input).endsWith("/user")
+        ? new Response(JSON.stringify({ userId: "user-registration-test" }))
+        : new Response(JSON.stringify({ config: { creditUsagePercent: 25 } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const usageCommand = harness.commands.get("xai-usage").handler;
+
+    await usageCommand("status on", ctx);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(statuses.at(-1)?.text).toBe("xAI 25% used");
+
+    now += 60_000;
+    stallNext = true;
+    expect(harness.handlers.get("turn_end")?.({}, ctx)).toBeUndefined();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    await harness.handlers.get("model_select")?.({ model: TEST_MODEL }, ctx);
+    expect(statuses.at(-1)).toEqual({ key: "xai-usage", text: undefined });
+    await usageCommand("status", ctx);
+    expect(notifications.at(-1)?.message).toMatch(/status is off/);
+
+    await usageCommand("status on", ctx);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    harness.handlers.get("session_shutdown")?.({}, ctx);
+    expect(statuses.at(-1)).toEqual({ key: "xai-usage", text: undefined });
+
+    await usageCommand("status on", ctx);
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    await harness.handlers.get("session_start")?.({}, { model: TEST_MODEL, ui });
+    await usageCommand("status", ctx);
+    expect(notifications.at(-1)?.message).toMatch(/status is off/);
   });
   it("wires model, session, and before-agent events to fail-closed tool synchronization", async () => {
     const harness = createExtensionHarness();

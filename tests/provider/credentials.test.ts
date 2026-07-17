@@ -1,10 +1,12 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
+import * as PiCodingAgent from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getGrokAuthCredentials,
   getStartupXaiCatalogAuth,
   resolveXaiCredential,
+  resolvePiManagedXaiOAuthCredential,
 } from "../../extensions/xai/auth";
 import {
   CURATED_FALLBACK_MODELS,
@@ -13,6 +15,85 @@ import {
 import { createTempDir } from "../fixtures/temp";
 import { TEST_MODEL } from "../fixtures/models";
 let temp: Awaited<ReturnType<typeof createTempDir>>;
+
+const boundaryProviderConfig = {
+  name: "xAI boundary fixture",
+  baseUrl: "https://example.invalid/v1",
+  api: "openai-responses",
+  authHeader: true,
+  oauth: {
+    name: "xAI boundary fixture",
+    async login() {
+      throw new Error("not used");
+    },
+    async refreshToken(credentials: any) {
+      return credentials;
+    },
+    getApiKey(credentials: any) {
+      return credentials.access;
+    },
+  },
+  models: [{
+    id: TEST_MODEL.id,
+    name: TEST_MODEL.name,
+    api: "openai-responses",
+    reasoning: true,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 1_000,
+    maxTokens: 100,
+  }],
+};
+
+async function realBoundaryRegistry(initialCredential: any) {
+  const codingAgent = PiCodingAgent as any;
+  if (codingAgent.ModelRuntime) {
+    let stored = initialCredential;
+    const credentialStore = {
+      async read(providerId: string) {
+        return providerId === "xai-auth" ? stored : undefined;
+      },
+      async list() {
+        return stored
+          ? [{ providerId: "xai-auth", type: stored.type }]
+          : [];
+      },
+      async modify(_providerId: string, update: (current: any) => Promise<any>) {
+        const next = await update(stored);
+        if (next !== undefined) stored = next;
+        return stored;
+      },
+      async delete() {
+        stored = undefined;
+      },
+    };
+    const runtime = await codingAgent.ModelRuntime.create({
+      credentials: credentialStore,
+      modelsPath: null,
+      allowModelNetwork: false,
+    });
+    const registry = new codingAgent.ModelRegistry(runtime);
+    registry.registerProvider("xai-auth", boundaryProviderConfig);
+    await runtime.refresh({ allowNetwork: false });
+    return {
+      registry,
+      setRuntimeApiKey: (key: string) => runtime.setRuntimeApiKey("xai-auth", key),
+    };
+  }
+
+  const authStorage = codingAgent.AuthStorage.inMemory({
+    "xai-auth": initialCredential,
+  });
+  const registry = codingAgent.ModelRegistry.inMemory(authStorage);
+  registry.registerProvider("xai-auth", boundaryProviderConfig);
+  return {
+    registry,
+    async setRuntimeApiKey(key: string) {
+      authStorage.setRuntimeApiKey("xai-auth", key);
+    },
+  };
+}
+
 beforeEach(async () => {
   temp = await createTempDir("pi-xai-auth-");
   vi.stubEnv("HOME", temp.path);
@@ -115,5 +196,143 @@ describe("credential resolution", () => {
       kind: "oauth-session",
       token: "header-token",
     });
+  });
+  it("accepts only a bearer that matches Pi's current stored OAuth credential", async () => {
+    let stored = {
+      type: "oauth",
+      access: "expired-access",
+      refresh: "refresh",
+      expires: 1,
+    };
+    const credential = await resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: {
+        authStorage: {
+          get: () => stored,
+        },
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => true,
+        getApiKeyAndHeaders: async () => {
+          stored = { ...stored, access: "refreshed-access", expires: Date.now() + 60_000 };
+          return { ok: true, apiKey: "refreshed-access" };
+        },
+      },
+    });
+    expect(credential).toEqual({
+      kind: "oauth-session",
+      token: "refreshed-access",
+    });
+  });
+  it("rejects stored and runtime API-key provenance for the usage surface", async () => {
+    const getApiKeyAndHeaders = vi.fn(async () => ({
+      ok: true,
+      apiKey: "RUNTIME_API_KEY",
+    }));
+    const storedApiKey = await resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: {
+        authStorage: {
+          get: () => ({ type: "api_key", key: "STORED_API_KEY" }),
+        },
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => false,
+        getApiKeyAndHeaders,
+      },
+    });
+    expect(storedApiKey).toBeNull();
+    expect(getApiKeyAndHeaders).not.toHaveBeenCalled();
+
+    const runtimeOverride = await resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: {
+        authStorage: {
+          get: () => ({
+            type: "oauth",
+            access: "stored-oauth-access",
+            refresh: "refresh",
+            expires: Date.now() + 60_000,
+          }),
+        },
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => true,
+        getApiKeyAndHeaders,
+      },
+    });
+    expect(runtimeOverride).toBeNull();
+    expect(getApiKeyAndHeaders).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ["runtime override", { configured: true, source: "runtime" }],
+    ["stored OAuth removal", { configured: false }],
+  ])("rejects a modern-registry %s introduced during resolution", async (_label, afterStatus) => {
+    let usingOAuth = true;
+    let status: any = { configured: true, source: "stored" };
+    const credential = await resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: {
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => usingOAuth,
+        getProviderAuthStatus: () => status,
+        getApiKeyAndHeaders: async () => {
+          usingOAuth = false;
+          status = afterStatus;
+          return { ok: true, apiKey: "STALE_OR_OVERRIDDEN_TOKEN" };
+        },
+      },
+    });
+    expect(credential).toBeNull();
+  });
+  it("does not use a Grok auth file when Pi has no stored OAuth credential", async () => {
+    const path = join(temp.path, ".grok/auth.json");
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(
+      path,
+      JSON.stringify({
+        "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {
+          key: "grok-file-access",
+          refresh_token: "grok-file-refresh",
+          expires_at: Date.now() + 3600_000,
+        },
+      }),
+    );
+    await expect(resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: {
+        authStorage: { get: () => undefined },
+        find: () => TEST_MODEL,
+        isUsingOAuth: () => false,
+        getApiKeyAndHeaders: vi.fn(),
+      },
+    })).resolves.toBeNull();
+  });
+  it("uses the real exact-boundary registry facade and rejects its runtime override", async () => {
+    const boundary = await realBoundaryRegistry({
+      type: "oauth",
+      access: "boundary-oauth-access",
+      refresh: "boundary-refresh",
+      expires: Date.now() + 60_000,
+    });
+    const ctx = {
+      model: TEST_MODEL,
+      modelRegistry: boundary.registry,
+    };
+
+    await expect(resolvePiManagedXaiOAuthCredential(ctx)).resolves.toEqual({
+      kind: "oauth-session",
+      token: "boundary-oauth-access",
+    });
+
+    await boundary.setRuntimeApiKey("BOUNDARY_RUNTIME_API_KEY");
+    await expect(resolvePiManagedXaiOAuthCredential(ctx)).resolves.toBeNull();
+  });
+  it("rejects a stored API key through the real exact-boundary registry facade", async () => {
+    const boundary = await realBoundaryRegistry({
+      type: "api_key",
+      key: "BOUNDARY_STORED_API_KEY",
+    });
+    await expect(resolvePiManagedXaiOAuthCredential({
+      model: TEST_MODEL,
+      modelRegistry: boundary.registry,
+    })).resolves.toBeNull();
   });
 });

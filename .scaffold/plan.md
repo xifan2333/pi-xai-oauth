@@ -17,8 +17,8 @@ Add an explicit `/xai-usage` command and an off-by-default session status withou
 6. [x] Add observed new/legacy JSON fixtures and focused parser, transport, cancellation, redaction, command, and lifecycle tests.
 7. [x] Document the unofficial revision pin, privacy boundary, command syntax, refresh policy, and limits in README, CHANGELOG, and AGENTS.
 8. [x] Create `safety/issue-82-pre-main-rebase` and rebase the clean PR branch onto merged `main` after PRs #90, #91, #92, and #94.
-9. [ ] Audit the automatic code merge against current wire, modality, credential, and lifecycle contracts; address findings.
-10. [ ] Run focused, strict full, typecheck, coverage, package, loader, and exact Pi 0.80.1/0.80.10 boundary validation.
+9. [x] Audit the automatic code merge against current wire, modality, credential, and lifecycle contracts; address findings.
+10. [x] Run focused, strict full, typecheck, coverage, package, loader, and exact Pi 0.80.1/0.80.10 boundary validation.
 11. [ ] Complete independent final review, force-push with exact lease, and verify fresh PR checks without merging.
 
 ## Validation contract

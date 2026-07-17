@@ -17,8 +17,14 @@ function setup(model: any = TEST_MODEL) {
   const notifications: Array<{ message: string; type?: string }> = [];
   const statuses: Array<{ key: string; text?: string }> = [];
   let now = 1_000;
+  let storedCredential: any = {
+    type: "oauth",
+    access: "SECRET",
+    refresh: "refresh",
+    expires: Date.now() + 60_000,
+  };
   const resolveCredential = vi.fn(async () => ({ kind: "oauth-session" as const, token: "SECRET" }));
-  const fetchUsage = vi.fn(async () => usage);
+  const fetchUsage = vi.fn(async (_credential: any, _signal?: AbortSignal) => usage);
   const feature = registerXaiUsage(harness.api, {
     resolveCredential,
     fetchUsage,
@@ -27,7 +33,13 @@ function setup(model: any = TEST_MODEL) {
   });
   const ctx = commandContext(model, notifications, {
     signal: undefined,
-    modelRegistry: {},
+    modelRegistry: {
+      authStorage: {
+        get: () => storedCredential,
+      },
+      find: () => TEST_MODEL,
+      isUsingOAuth: () => storedCredential?.type === "oauth",
+    },
     ui: {
       notify(message: string, type?: string) {
         notifications.push({ message, type });
@@ -48,6 +60,7 @@ function setup(model: any = TEST_MODEL) {
     run,
     statuses,
     setNow(value: number) { now = value; },
+    setStoredCredential(value: any) { storedCredential = value; },
   };
 }
 
@@ -135,6 +148,54 @@ describe("/xai-usage command and status lifecycle", () => {
     expect(state.statuses.at(-1)).toEqual({ key: "xai-usage", text: undefined });
     await state.feature.refreshStatus(state.ctx as any);
     expect(state.fetchUsage).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed on stored credential removal before the refresh throttle", async () => {
+    const state = setup();
+    await state.run("status on");
+    expect(state.fetchUsage).toHaveBeenCalledTimes(1);
+    state.setStoredCredential(undefined);
+    await state.feature.refreshStatus(state.ctx as any);
+    expect(state.fetchUsage).toHaveBeenCalledTimes(1);
+    expect(state.statuses.at(-1)).toEqual({ key: "xai-usage", text: undefined });
+    await state.run("status");
+    expect(state.notifications.at(-1)?.message).toMatch(/status is off/);
+  });
+
+  it("suppresses a stale one-shot completion after an account or session reset", async () => {
+    const state = setup();
+    state.fetchUsage.mockImplementationOnce(async (_credential: any, signal?: AbortSignal) =>
+      new Promise<XaiUsageSnapshot>((_resolve, reject) => {
+        signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("cancelled", "AbortError")),
+          { once: true },
+        );
+      }));
+    const pending = state.run("");
+    await vi.waitFor(() => expect(state.fetchUsage).toHaveBeenCalledTimes(1));
+    state.feature.reset(state.ctx as any);
+    await pending;
+    expect(state.notifications).toEqual([]);
+  });
+
+  it("aborts an in-flight status refresh without a late footer write", async () => {
+    const state = setup();
+    state.fetchUsage.mockImplementationOnce(async (_credential: any, signal?: AbortSignal) =>
+      new Promise<XaiUsageSnapshot>((_resolve, reject) => {
+        signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("cancelled", "AbortError")),
+          { once: true },
+        );
+      }));
+    const pending = state.run("status on");
+    await vi.waitFor(() => expect(state.fetchUsage).toHaveBeenCalledTimes(1));
+    state.feature.reset(state.ctx as any);
+    await pending;
+    expect(state.statuses.some(({ text }) => text?.includes("used"))).toBe(false);
+    await state.run("status");
+    expect(state.notifications.at(-1)?.message).toMatch(/status is off/);
   });
 
   it("fails closed and leaves status off after an initial refresh error", async () => {

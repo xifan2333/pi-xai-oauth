@@ -15,6 +15,7 @@ Pinned source starting points:
 - [Default auth, client, version, and User-Agent headers](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-sampler/src/client.rs#L399-L496)
 - [Proxy-specific injected headers](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/agent/mvp_agent/mod.rs#L1148-L1190)
 - [Responses defaults and dispatch](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-sampler/src/client.rs#L1081-L1160)
+- [Subscription billing structures and handler](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs#L1-L288)
 
 The upstream sampler posts paths relative to a configured base URL. That does not authorize this package to accept caller-, model-, or catalog-provided origins. The endpoint policy below remains pinned in source.
 
@@ -42,6 +43,8 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 | Browser/device/refresh token | `https://auth.x.ai/oauth2/token` | JSON accept, form content type, truthful User-Agent, client version/surface | No CLI-proxy headers; no response-body reflection |
 | OIDC discovery/JWKS | Pinned issuer discovery and JWKS URLs | JSON accept, redirect rejection, issuer/algorithm/key validation | No bearer, caller endpoint, or proxy metadata |
 | OAuth model catalog | `https://cli-chat-proxy.grok.com/v1/models-v2` | Bearer, JSON accept, truthful identity/version/User-Agent, token-auth, authenticate-response, client mode | No conversation, request, model, session, agent, turn, user, or deployment IDs |
+| OAuth account identity | `https://cli-chat-proxy.grok.com/v1/user` | Pi-stored OAuth bearer, token-auth, client version/mode, redirect rejection, 15-second timeout, 64 KiB response bound | No `x-userid`, API-key provenance, caller endpoint, or caller/model headers |
+| OAuth subscription usage | `https://cli-chat-proxy.grok.com/v1/billing?format=credits` | Same verified OAuth bearer plus the immediately preceding bounded `/user` result as transient `x-userid`; redirect/timeout/body/JSON bounds | No cached/persisted identity, API-key provenance, caller endpoint, or other identity/affinity IDs |
 | OAuth streaming Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Bearer, JSON content, `Accept: text/event-stream`, truthful identity/version/User-Agent, proxy auth, client mode, conversation/request/model/session metadata, redirect rejection | No unsupported identity IDs, generic SDK affinity IDs, or caller route |
 | OAuth direct Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Same proxy metadata with `Accept: application/json` and redirect rejection | No SSE accept, unsupported identity IDs, or generic SDK affinity IDs |
 | API-key direct Responses | `https://api.x.ai/v1/responses` | Bearer, JSON accept/content, truthful User-Agent, redirect rejection | No CLI-proxy metadata or generic SDK affinity IDs |
@@ -49,13 +52,14 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 
 ### Header classification
 
-- Always internally owned: `Authorization`, `Accept`, `Content-Type`, `User-Agent`, every `x-grok-*` header, `X-XAI-Token-Auth`, and `x-authenticateresponse`.
+- Always internally owned: `Authorization`, `Accept`, `Content-Type`, `User-Agent`, every `x-grok-*` header, `X-XAI-Token-Auth`, `x-authenticateresponse`, and `x-userid`.
 - Proxy-route authentication: `X-XAI-Token-Auth: xai-grok-cli` and `x-authenticateresponse: authenticate-response`.
 - Truthful attribution/gating: `x-grok-client-identifier`, `x-grok-client-version`, and `User-Agent`.
 - Route mode: `x-grok-client-mode`, resolved as `interactive` only for a text TTY and `headless` for print/JSON/RPC/non-TTY operation.
 - Streaming only: `Accept: text/event-stream`.
+- Usage billing only: `x-userid`, accepted only from the bounded authenticated `/user` response and never from caller/model headers.
 - Affinity/routing metadata: conversation, request, model override, and session IDs on OAuth Responses only.
-- Unsupported: agent, turn, deployment, and user IDs. Unknown caller-supplied `x-grok-*` names are rejected. Generic delegate affinity headers (`session_id`, `x-client-request-id`, and `x-session-id`) are suppressed so only the reviewed xAI conversation/request/session fields leave the process.
+- Unsupported outside the pinned billing request: agent, turn, deployment, and user IDs. Unknown caller-supplied `x-grok-*` names are rejected. Generic delegate affinity headers (`session_id`, `x-client-request-id`, and `x-session-id`) are suppressed so only the reviewed xAI conversation/request/session fields leave the process.
 
 ## ID ownership
 
@@ -66,11 +70,12 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 - `x-grok-model-override` comes only from the normalized selected/requested model ID.
 - `x-grok-agent-id` is omitted because upstream treats it as a persistent runtime/machine identity and Pi does not provide an equivalent consented value.
 - `x-grok-turn-idx` is omitted because Pi does not expose one authoritative value through all streaming and direct helper paths.
-- Deployment and user IDs are never derived from OAuth credentials, identity tokens, catalog bodies, or local machine state.
+- Subscription usage obtains `x-userid` only from the pinned authenticated `/user` lookup, uses it once for the immediately following billing request, and discards it.
+- Deployment and other user IDs are never derived from OAuth credentials, identity tokens, catalog bodies, or local machine state.
 
 ## Privacy and failure policy
 
-The header sanitizer removes authorization, accept/content type, User-Agent, proxy auth, generic SDK affinity IDs, and every caller-provided `x-grok-*` value before adding the approved route contract. This prevents client impersonation and privacy-sensitive ID injection while preserving unrelated non-reserved headers. Responses and media POSTs reject redirects before fetch can replay request bodies or metadata to another origin.
+The header sanitizer removes authorization, accept/content type, User-Agent, proxy auth, `x-userid`, generic SDK affinity IDs, and every caller-provided `x-grok-*` value before adding the approved route contract. This prevents client impersonation and privacy-sensitive ID injection while preserving unrelated non-reserved headers. The usage module alone adds its transient validated `x-userid` to the pinned billing GET. Responses, media POSTs, and usage GETs reject redirects before fetch can replay request bodies or metadata to another origin.
 
 Unsuccessful direct HTTP responses are read through a 16 KiB bound for classification only. Raw response bodies, request headers, credentials, and request bodies are never included in the thrown/displayed message. Errors preserve HTTP status and route classification. Proxy version-gate signals return stable update/report guidance and the last reviewed revision; they do not recommend copying an official Grok version.
 
@@ -106,12 +111,12 @@ Issue #78 does not change payload include handling, conversation persistence, ty
    ```
 
 3. Reclassify every changed header as internally required, route-specific, streaming-only, affinity, optional attribution, or unsupported. Trace where upstream values originate; do not assume the sampler generates IDs it only forwards.
-4. Re-audit `extensions/xai/constants.ts`, `routing.ts`, `wire.ts`, `responses.ts`, `catalog.ts`, `oauth.ts`, and `device-auth.ts`. Preserve pinned origins unless a separate security review explicitly changes them.
+4. Re-audit `extensions/xai/constants.ts`, `routing.ts`, `wire.ts`, `responses.ts`, `catalog.ts`, `usage.ts`, `oauth.ts`, and `device-auth.ts`. Preserve pinned origins unless a separate security review explicitly changes them.
 5. Update the reviewed revision and this matrix only after request-shape/privacy tests cover the new behavior.
 6. Run:
 
    ```bash
-   npm run test:unit -- tests/responses/routing.test.ts tests/catalog/cache.test.ts tests/oauth/browser-login.test.ts tests/oauth/refresh.test.ts tests/oauth/device-initiation.test.ts tests/oauth/device-polling.test.ts
+   npm run test:unit -- tests/responses/routing.test.ts tests/catalog/cache.test.ts tests/usage tests/oauth/browser-login.test.ts tests/oauth/refresh.test.ts tests/oauth/device-initiation.test.ts tests/oauth/device-polling.test.ts
    npm run typecheck
    npm test
    npm run compatibility:boundaries

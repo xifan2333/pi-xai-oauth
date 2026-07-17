@@ -4,9 +4,11 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
-import { resolvePiManagedXaiCredential } from "./auth";
 import {
-  XAI_CLIENT_VERSION,
+  hasPiManagedXaiOAuth,
+  resolvePiManagedXaiOAuthCredential,
+} from "./auth";
+import {
   XAI_CLI_BILLING_URL,
   XAI_CLI_USER_URL,
   XAI_PROVIDER_ID,
@@ -19,8 +21,8 @@ import {
   XAI_USAGE_STATUS_MIN_REFRESH_MS,
   XAI_USAGE_TIMEOUT_MS,
 } from "./constants";
-import { resolveXaiClientMode } from "./models";
 import type { XaiCredential } from "./routing";
+import { xaiUsageHeaders } from "./wire";
 
 const XAI_USAGE_STATUS_KEY = "xai-usage";
 const XAI_USAGE_COMMAND_HELP = "Usage: /xai-usage [status [on|off]]";
@@ -31,7 +33,8 @@ const MAX_CENTS = 1_000_000_000_000;
 const MIN_BILLING_YEAR = 2000;
 const MAX_BILLING_YEAR = 2200;
 const USER_ID_PATTERN = /^[\x21-\x7e]+$/;
-const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const RFC3339_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
 
 export interface XaiUsagePeriod {
   type?: string;
@@ -122,12 +125,58 @@ function boundedLabel(value: unknown): string | undefined {
 }
 
 function boundedTimestamp(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > MAX_TIMESTAMP_LENGTH) return undefined;
+  const match = value.match(RFC3339_PATTERN);
+  if (!match) return undefined;
+  const [
+    ,
+    yearText,
+    monthText,
+    dayText,
+    hourText,
+    minuteText,
+    secondText,
+    ,
+    offsetHourText,
+    offsetMinuteText,
+  ] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText);
+  const offsetMinute = offsetMinuteText === undefined ? 0 : Number(offsetMinuteText);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    leapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
   if (
-    typeof value !== "string"
-    || value.length > MAX_TIMESTAMP_LENGTH
-    || !RFC3339_PATTERN.test(value)
+    month < 1
+    || month > 12
+    || day < 1
+    || day > daysInMonth[month - 1]
+    || hour > 23
+    || minute > 59
+    || second > 59
+    || offsetHour > 23
+    || offsetMinute > 59
     || !Number.isFinite(Date.parse(value))
-  ) return undefined;
+  ) {
+    return undefined;
+  }
   return value;
 }
 
@@ -273,14 +322,28 @@ async function readBoundedBody(response: Response, signal: AbortSignal): Promise
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let bytes = 0;
   let text = "";
+  const abortError = () => new DOMException("The operation was cancelled.", "AbortError");
+  let rejectOnAbort: ((reason: unknown) => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectOnAbort = reject;
+  });
+  const onAbort = () => rejectOnAbort?.(signal.reason ?? abortError());
+  const cancelReader = () => {
+    try {
+      void reader.cancel().catch(() => undefined);
+    } catch {
+      // Cancellation is best-effort cleanup and must never extend the request bound.
+    }
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
   try {
+    if (signal.aborted) throw signal.reason ?? abortError();
     while (true) {
-      if (signal.aborted) throw signal.reason;
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), aborted]);
       if (done) break;
       bytes += value.byteLength;
       if (bytes > XAI_USAGE_MAX_RESPONSE_BYTES) {
-        void reader.cancel().catch(() => undefined);
+        cancelReader();
         throw new XaiUsageError("oversize", "xAI usage returned an oversized response.");
       }
       text += decoder.decode(value, { stream: true });
@@ -290,7 +353,13 @@ async function readBoundedBody(response: Response, signal: AbortSignal): Promise
     if (error instanceof XaiUsageError) throw error;
     throw new XaiUsageError("invalid", "xAI usage returned an invalid response body.");
   } finally {
-    reader.releaseLock();
+    signal.removeEventListener("abort", onAbort);
+    if (signal.aborted) cancelReader();
+    try {
+      reader.releaseLock();
+    } catch {
+      // A hostile pending read may retain the lock; request completion stays bounded.
+    }
   }
 }
 
@@ -318,7 +387,7 @@ function httpError(status: number): XaiUsageError {
 async function requestBoundedJson(
   url: string,
   credential: XaiCredential,
-  headers: Record<string, string>,
+  userId?: string,
   signal?: AbortSignal,
 ): Promise<unknown> {
   if (credential.kind !== "oauth-session" || !credential.token) {
@@ -341,20 +410,17 @@ async function requestBoundedJson(
         method: "GET",
         redirect: "error",
         signal: controller.signal,
-        headers: {
-          ...headers,
-          Authorization: `Bearer ${credential.token}`,
-          "X-XAI-Token-Auth": "xai-grok-cli",
-          "x-grok-client-version": XAI_CLIENT_VERSION,
-          "x-grok-client-mode": resolveXaiClientMode(),
-        },
+        headers: xaiUsageHeaders(credential.token, userId),
       });
     } catch {
       if (signal?.aborted) throw new XaiUsageError("cancelled", "xAI usage request was cancelled.");
       if (timedOut) throw new XaiUsageError("timeout", "xAI usage request timed out.");
       throw new XaiUsageError("transport", "xAI usage request failed.");
     }
-    if (!response.ok) throw httpError(response.status);
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
+      throw httpError(response.status);
+    }
     let body: string;
     try {
       body = await readBoundedBody(response, controller.signal);
@@ -380,12 +446,12 @@ export async function fetchXaiUsage(
   credential: XaiCredential,
   signal?: AbortSignal,
 ): Promise<XaiUsageSnapshot> {
-  const identity = await requestBoundedJson(XAI_CLI_USER_URL, credential, {}, signal);
+  const identity = await requestBoundedJson(XAI_CLI_USER_URL, credential, undefined, signal);
   const userId = parseXaiUserId(identity);
   const billing = await requestBoundedJson(
     XAI_CLI_BILLING_URL,
     credential,
-    { "x-userid": userId },
+    userId,
     signal,
   );
   return parseXaiUsage(billing);
@@ -468,7 +534,7 @@ export interface XaiUsageFeature {
 }
 
 interface XaiUsageDependencies {
-  resolveCredential: typeof resolvePiManagedXaiCredential;
+  resolveCredential: typeof resolvePiManagedXaiOAuthCredential;
   fetchUsage: typeof fetchXaiUsage;
   now: () => number;
   minimumRefreshMs: number;
@@ -486,7 +552,7 @@ export function registerXaiUsage(
   overrides: Partial<XaiUsageDependencies> = {},
 ): XaiUsageFeature {
   const dependencies: XaiUsageDependencies = {
-    resolveCredential: overrides.resolveCredential ?? resolvePiManagedXaiCredential,
+    resolveCredential: overrides.resolveCredential ?? resolvePiManagedXaiOAuthCredential,
     fetchUsage: overrides.fetchUsage ?? fetchXaiUsage,
     now: overrides.now ?? Date.now,
     minimumRefreshMs: overrides.minimumRefreshMs ?? XAI_USAGE_STATUS_MIN_REFRESH_MS,
@@ -496,6 +562,8 @@ export function registerXaiUsage(
   let generation = 0;
   let lastUi: ExtensionUIContext | undefined;
   let statusController: AbortController | undefined;
+  let oneShotController: AbortController | undefined;
+  let oneShotGeneration = 0;
   let refreshPromise: Promise<{ ok: boolean; error?: XaiUsageError }> | undefined;
 
   const clear = (ctx?: ExtensionContext) => {
@@ -512,8 +580,11 @@ export function registerXaiUsage(
     statusEnabled = false;
     lastRefreshAt = 0;
     generation++;
+    oneShotGeneration++;
     statusController?.abort();
+    oneShotController?.abort();
     statusController = undefined;
+    oneShotController = undefined;
     refreshPromise = undefined;
     clear(ctx);
   };
@@ -536,7 +607,11 @@ export function registerXaiUsage(
     force: boolean,
   ): Promise<{ ok: boolean; error?: XaiUsageError }> => {
     lastUi = ctx.ui;
-    if (!statusEnabled || ctx.model?.provider !== XAI_PROVIDER_ID) {
+    if (
+      !statusEnabled
+      || ctx.model?.provider !== XAI_PROVIDER_ID
+      || !hasPiManagedXaiOAuth(ctx)
+    ) {
       reset(ctx);
       return { ok: false };
     }
@@ -562,8 +637,12 @@ export function registerXaiUsage(
         }
         return { ok: true };
       } catch (error) {
-        if (refreshGeneration === generation) clear(ctx);
-        return { ok: false, error: safeUsageError(error) };
+        const safeError = safeUsageError(error);
+        if (refreshGeneration === generation) {
+          if (safeError.code === "auth") reset(ctx);
+          else clear(ctx);
+        }
+        return { ok: false, error: safeError };
       } finally {
         if (statusController === controller) statusController = undefined;
       }
@@ -581,11 +660,32 @@ export function registerXaiUsage(
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const parts = args.trim().split(/\s+/).filter(Boolean).map((part) => part.toLowerCase());
       if (parts.length === 0) {
+        oneShotController?.abort();
+        const controller = new AbortController();
+        oneShotController = controller;
+        const requestGeneration = ++oneShotGeneration;
+        const sessionGeneration = generation;
+        const forwardAbort = () => controller.abort();
+        ctx.signal?.addEventListener("abort", forwardAbort, { once: true });
+        if (ctx.signal?.aborted) controller.abort();
         try {
-          const usage = await resolveUsage(ctx, ctx.signal);
-          ctx.ui.notify(renderXaiUsage(usage), "info");
+          const usage = await resolveUsage(ctx, controller.signal);
+          if (
+            requestGeneration === oneShotGeneration
+            && sessionGeneration === generation
+          ) {
+            ctx.ui.notify(renderXaiUsage(usage), "info");
+          }
         } catch (error) {
-          ctx.ui.notify(safeUsageError(error).message, "error");
+          if (
+            requestGeneration === oneShotGeneration
+            && sessionGeneration === generation
+          ) {
+            ctx.ui.notify(safeUsageError(error).message, "error");
+          }
+        } finally {
+          ctx.signal?.removeEventListener("abort", forwardAbort);
+          if (oneShotController === controller) oneShotController = undefined;
         }
         return;
       }
@@ -594,6 +694,7 @@ export function registerXaiUsage(
         return;
       }
       if (!parts[1]) {
+        if (statusEnabled && !hasPiManagedXaiOAuth(ctx)) reset(ctx);
         ctx.ui.notify(`xAI usage status is ${statusEnabled ? "on" : "off"} for this session.`, "info");
         return;
       }
@@ -623,7 +724,12 @@ export function registerXaiUsage(
   return {
     reset,
     clearIfInactive(ctx) {
-      if (ctx.model?.provider !== XAI_PROVIDER_ID) reset(ctx);
+      if (
+        ctx.model?.provider !== XAI_PROVIDER_ID
+        || !hasPiManagedXaiOAuth(ctx)
+      ) {
+        reset(ctx);
+      }
     },
     async refreshStatus(ctx) {
       if (!statusEnabled) return;

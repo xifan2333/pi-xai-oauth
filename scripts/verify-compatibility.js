@@ -206,6 +206,7 @@ function verifyPackedPackage() {
       "LICENSE",
       "compatibility/pi-versions.json",
       "extensions/xai-oauth.ts",
+      "extensions/xai/usage.ts",
       "scripts/verify-compatibility.js",
       "scripts/run-compatibility-matrix.js",
       "scripts/verify-extension-loader.mjs",

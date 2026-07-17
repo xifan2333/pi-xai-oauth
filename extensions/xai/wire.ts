@@ -20,6 +20,7 @@ const RESERVED_HEADER_NAMES = new Set([
   "x-authenticateresponse",
   "x-client-request-id",
   "x-session-id",
+  "x-userid",
   "x-xai-token-auth",
 ]);
 const APPROVED_PROXY_HEADER_NAMES = new Set([
@@ -138,6 +139,21 @@ export function xaiCatalogHeaders(
     "x-grok-client-identifier": XAI_CLIENT_IDENTIFIER,
     "x-grok-client-version": XAI_PROXY_CLIENT_VERSION,
     "x-grok-client-mode": clientMode,
+  };
+}
+
+/** Build the exact authenticated CLI-proxy header contract for usage GET requests. */
+export function xaiUsageHeaders(
+  accessToken: string,
+  userId?: string,
+  clientMode: XaiClientMode = resolveXaiClientMode(),
+): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    "X-XAI-Token-Auth": "xai-grok-cli",
+    "x-grok-client-version": XAI_PROXY_CLIENT_VERSION,
+    "x-grok-client-mode": clientMode,
+    ...(userId ? { "x-userid": userId } : {}),
   };
 }
 

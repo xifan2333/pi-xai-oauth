@@ -54,7 +54,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Replaced raw direct-response error reflection with bounded status/route classification and actionable, non-impersonating proxy version-gate guidance.
 - Prevented authenticated text-only entitlements from sending image-bearing Responses payloads, including payload-hook mutations and image-input custom tools, without changing image generation.
 - Canonicalized final Responses payloads before model and modality enforcement, detected computer screenshots, disabled unsafe delegated retries, and hardened wide-payload traversal so custom serializers cannot bypass authenticated text-only policy.
-- Made usage identity resolution fail closed before billing and prevented account identity, authenticated headers, raw response bodies, and transport details from being cached, persisted, logged, or reflected in errors.
+- Made usage credential and identity resolution fail closed before billing, rejected stored/runtime API-key provenance, and prevented account identity, authenticated headers, raw response bodies, and transport details from being cached, persisted, logged, or reflected in errors.
 - Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.

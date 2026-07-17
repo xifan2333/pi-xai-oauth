@@ -76,6 +76,8 @@ describe("xAI usage parsing", () => {
         monthlyLimit: { val: -1 },
         used: { val: Number.MAX_SAFE_INTEGER },
         currentPeriod: { end: "not-a-time" },
+        billingPeriodStart: "2026-02-30T00:00:00Z",
+        billingPeriodEnd: "2026-01-01T24:00:00Z",
         history: [{ billingCycle: { year: 1900, month: 13 } }],
       },
       subscriptionTier: "x".repeat(81),
@@ -91,9 +93,31 @@ describe("xAI usage parsing", () => {
     })).toThrow(/too many billing periods/);
     expect(() => parseXaiUsage({ unrelated: Array.from({ length: 65 }, () => 1) }))
       .toThrow(/too many response entries/);
+    expect(parseXaiUsage(Object.fromEntries(
+      Array.from({ length: 64 }, (_, index) => [`field${index}`, null]),
+    ))).toEqual({ history: [] });
+    expect(() => parseXaiUsage(Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`field${index}`, null]),
+    ))).toThrow(/too many response fields/);
 
     let nested: Record<string, unknown> = {};
     for (let index = 0; index < 14; index += 1) nested = { nested };
     expect(() => parseXaiUsage(nested)).toThrow(/over-complex response/);
+
+    const tree = (depth: number): unknown =>
+      depth === 0 ? null : { left: tree(depth - 1), right: tree(depth - 1) };
+    expect(() => parseXaiUsage(tree(11))).toThrow(/over-complex response/);
+  });
+
+  it("accepts real leap days but omits impossible calendar timestamps", () => {
+    expect(parseXaiUsage({
+      config: { billingPeriodStart: "2024-02-29T00:00:00Z" },
+    }).currentPeriod).toEqual({ start: "2024-02-29T00:00:00Z" });
+    expect(parseXaiUsage({
+      config: {
+        billingPeriodStart: "2026-02-30T00:00:00Z",
+        billingPeriodEnd: "2026-01-01T24:00:00Z",
+      },
+    }).currentPeriod).toBeUndefined();
   });
 });

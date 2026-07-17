@@ -19,13 +19,22 @@
 - [x] Preserved the original reviewed implementation/docs commits (`d7ccd17`, `53b8013`) and open PR #89 on `safety/issue-82-pre-main-rebase`.
 - [x] Fetched `origin/main=af31e83`, verified the worktree was clean at remote head `53b8013`, and created `safety/issue-82-pre-main-rebase`.
 - [x] Started the semantic rebase onto current merged main while preserving #90/#91/#92/#94 behavior.
+- [x] Completed the rebase as `9792282` plus `4c0f098` with no unresolved markers or diff-check errors.
+- [x] Centralized the exact usage proxy-header contract in `wire.ts`.
+- [x] Bounded stalled response bodies with explicit abort races and deterministic cancellation/timeout coverage.
+- [x] Required the Pi-resolved bearer to match the current stored OAuth access token after refresh, rejecting stored and runtime API-key provenance.
+- [x] Detached cosmetic status refresh from Pi's awaited `turn_end` path, made calendar timestamp validation strict, and cancelled non-success bodies.
+- [x] Reserved `x-userid` across shared wire scrubbing and documented its single transient billing-only exception.
+- [x] Aborted/suppressed stale one-shot and footer completions on reset; stored OAuth removal now disables status before throttling.
+- [x] Added actual provider lifecycle, file-fallback rejection, parser node/key/timestamp, invalid UTF-8, loader-command, and pack-production regressions.
+- [x] Passed the post-finding focused usage/provider/wire suites (7 files / 74 tests), strict TypeScript, real loader, direct pack contract, and diff check.
+- [x] Passed the final cumulative gate: `npm test` (37 files / 398 tests), strict TypeScript, real loader, coverage, policy, 111-file pack contract, and exact Pi 0.80.1/0.80.10 boundaries.
+- [x] Measured final V8 coverage at 86.03% statements, 79.27% branches, 86.09% functions, and 89.88% lines.
+- [x] Passed independent security re-review of OAuth removal, stale one-shot suppression, billing-only identity handling, and caller `x-userid` scrubbing.
+- [x] Passed independent final test review after adding real exact-boundary registry coverage, version-adaptive strict OAuth provenance, non-blocking hostile-stream cancellation, and a due/stalled turn lifecycle regression.
 
 ## In progress
 
-- [ ] Finish conflict resolution and audit the automatically merged production/test code.
-- [ ] Address actionable functional/security/test findings.
-- [ ] Run focused, strict full, typecheck, coverage, package, loader, policy, and exact boundary validation.
-- [ ] Complete independent final review and range-diff/invariant review.
 - [ ] Force-push with exact lease, refresh PR #89 if needed, and verify fresh checks without merging.
 
 ## Residual
