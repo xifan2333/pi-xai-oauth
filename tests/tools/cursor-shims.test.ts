@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CURATED_FALLBACK_MODELS,
@@ -122,6 +122,13 @@ describe("Cursor/Grok CLI shims", () => {
     expect(
       (await run("Delete", { file_path: "out.txt" })).content[0].text,
     ).toMatch(/Deleted/);
+    await mkdir(join(temp.path, "nested"));
+    await writeFile(join(temp.path, "nested/child.txt"), "child");
+    expect(
+      (await run("Delete", { path: "nested", recursive: true })).content[0]
+        .text,
+    ).toMatch(/Deleted/);
+    await expect(lstat(join(temp.path, "nested"))).rejects.toThrow();
   });
   it("refuses Delete on the workspace root even with recursive=true", async () => {
     await writeFile(join(temp.path, "keep.txt"), "important");
@@ -137,6 +144,72 @@ describe("Cursor/Grok CLI shims", () => {
       /VALUE/,
     );
   });
+  it("refuses Delete through intermediate links to the workspace root or an outside target", async () => {
+    const outside = await createTempDir("pi-xai-shims-outside-");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    try {
+      await writeFile(join(temp.path, "keep.txt"), "important");
+      await writeFile(join(outside.path, "victim.txt"), "outside");
+      await symlink(dirname(temp.path), join(temp.path, "parent-link"), linkType);
+      await symlink(outside.path, join(temp.path, "outside-link"), linkType);
+
+      await expect(
+        run("Delete", {
+          path: `parent-link/${basename(temp.path)}`,
+          recursive: true,
+        }),
+      ).rejects.toThrow(/outside the workspace|workspace root/);
+      await expect(
+        run("Delete", { path: "outside-link/victim.txt" }),
+      ).rejects.toThrow(/outside the workspace/);
+
+      expect(await readFile(join(temp.path, "keep.txt"), "utf8")).toBe(
+        "important",
+      );
+      expect(await readFile(join(outside.path, "victim.txt"), "utf8")).toBe(
+        "outside",
+      );
+    } finally {
+      await outside.cleanup();
+    }
+  });
+  it("deletes a final symlink without deleting its outside target", async () => {
+    const outside = await createTempDir("pi-xai-shims-target-");
+    const link = join(temp.path, "outside-link.txt");
+    try {
+      await writeFile(join(outside.path, "target.txt"), "outside");
+      await symlink(join(outside.path, "target.txt"), link, "file");
+
+      await expect(
+        run("Delete", { path: "outside-link.txt" }),
+      ).resolves.toMatchObject({
+        content: [{ type: "text", text: "Deleted outside-link.txt" }],
+      });
+      await expect(lstat(link)).rejects.toThrow();
+      expect(await readFile(join(outside.path, "target.txt"), "utf8")).toBe(
+        "outside",
+      );
+    } finally {
+      await outside.cleanup();
+    }
+  });
+  it.runIf(process.platform === "win32")(
+    "refuses a case-variant absolute workspace root",
+    async () => {
+      const caseVariant = temp.path.replace(/[A-Za-z]/, (character) =>
+        character === character.toUpperCase()
+          ? character.toLowerCase()
+          : character.toUpperCase(),
+      );
+      expect(caseVariant).not.toBe(temp.path);
+      await expect(
+        run("Delete", { path: caseVariant, recursive: true }),
+      ).rejects.toThrow(/workspace root/);
+      expect(await readFile(join(temp.path, "src/a.ts"), "utf8")).toMatch(
+        /VALUE/,
+      );
+    },
+  );
   it("keeps WebSearch disabled until opt-in, routes Composer calls, and blocks stale contexts", async () => {
     const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
     const controller = new AbortController();
