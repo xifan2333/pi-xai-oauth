@@ -210,30 +210,30 @@ describe("Cursor/Grok CLI shims", () => {
       );
     },
   );
-  it("keeps WebSearch disabled until opt-in, routes Composer calls, and blocks stale contexts", async () => {
-    const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
+  it("keeps WebSearch disabled until opt-in, routes Grok Build calls, and blocks stale contexts", async () => {
+    const build = { ...TEST_MODEL, id: "grok-build" } as any;
     const controller = new AbortController();
     const disabled = await h.tools
       .get("WebSearch")
       .execute("call", { query: "must opt in" }, controller.signal, () => {}, {
         cwd: temp.path,
-        ...authContext(composer),
+        ...authContext(build),
       });
     expect(disabled.content[0].text).toMatch(/WebSearch is disabled/);
     expect(requests).toHaveLength(0);
 
-    expect(setXaiNetworkToolActive(h.api, composer, "WebSearch", true)).toEqual(
+    expect(setXaiNetworkToolActive(h.api, build, "WebSearch", true)).toEqual(
       { ok: true, active: true },
     );
     const enabled = await h.tools
       .get("WebSearch")
       .execute("call", { query: "xAI docs" }, controller.signal, () => {}, {
         cwd: temp.path,
-        ...authContext(composer),
+        ...authContext(build),
       });
     expect(enabled.content[0].text).toBe("OK");
     expect(requests).toHaveLength(1);
-    expect(requests[0].body.model).toBe("grok-composer-2.5-fast");
+    expect(requests[0].body.model).toBe("grok-build");
 
     const stale = await h.tools
       .get("WebSearch")
@@ -247,24 +247,30 @@ describe("Cursor/Grok CLI shims", () => {
           ...authContext({ provider: "anthropic", id: "claude" } as any),
         },
       );
-    expect(stale.content[0].text).toMatch(/requires an active xAI/);
+    expect(stale.content[0].text).toMatch(/requires an active entitled xAI Grok Build model|requires an active xAI/);
     expect(requests).toHaveLength(1);
   });
 
-  it("activates local shims only for Grok CLI models without duplication", () => {
+  it("activates local shims only for Grok Build without duplication", () => {
     h.setActiveTools(["read", "bash", "edit", "write"]);
     syncCursorToolShimsForModel(h.api, {
       ...TEST_MODEL,
-      id: "grok-composer-2.5-fast",
+      id: "grok-build",
     } as any);
     const first = h.getActiveTools();
     expect(first).toContain("Grep");
     expect(first).not.toContain("WebSearch");
     syncCursorToolShimsForModel(h.api, {
       ...TEST_MODEL,
-      id: "grok-composer-2.5-fast",
+      id: "grok-build",
     } as any);
     expect(h.getActiveTools()).toEqual(first);
+    // Composer alias and standard Grok 4.5 stay on pi tools.
+    syncCursorToolShimsForModel(h.api, {
+      ...TEST_MODEL,
+      id: "grok-composer-2.5-fast",
+    } as any);
+    expect(h.getActiveTools()).not.toContain("Grep");
     syncCursorToolShimsForModel(h.api, TEST_MODEL);
     expect(h.getActiveTools()).not.toContain("Grep");
   });

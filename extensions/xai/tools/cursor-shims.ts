@@ -546,7 +546,7 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
         const query = firstString(params?.query, params?.search_term, params?.value);
         if (!query) return xaiToolError("Error: WebSearch requires a query.");
         if (ctx?.model?.provider !== XAI_PROVIDER_ID || !isGrokCliCompatibilityModel(ctx.model.id)) {
-          return xaiToolError("Error: WebSearch requires an active xAI Grok Build or Composer model. No xAI request was sent.");
+          return xaiToolError("Error: WebSearch requires an active entitled xAI Grok Build model. No xAI request was sent.");
         }
         if (!isXaiNetworkToolActive(pi, "WebSearch")) {
           return xaiToolError("Error: WebSearch is disabled. Run /xai-tools to enable it and request it explicitly. No xAI request was sent.");

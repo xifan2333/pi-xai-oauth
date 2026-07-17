@@ -161,8 +161,8 @@ describe("provider registration", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await harness.handlers.get("model_select")?.(
-      { model: { ...TEST_MODEL, id: "grok-composer-2.5-fast" } },
-      { model: { ...TEST_MODEL, id: "grok-composer-2.5-fast" } },
+      { model: { ...TEST_MODEL, id: "grok-build" } },
+      { model: { ...TEST_MODEL, id: "grok-build" } },
     );
     expect(harness.getActiveTools()).toContain("Grep");
     expect(harness.getActiveTools()).not.toContain("WebSearch");
@@ -180,12 +180,12 @@ describe("provider registration", () => {
     ).toBe(true);
 
     await harness.handlers.get("model_select")?.(
-      { model: { ...TEST_MODEL, id: "grok-composer-2.5-fast" } },
-      { model: { ...TEST_MODEL, id: "grok-composer-2.5-fast" } },
+      { model: { ...TEST_MODEL, id: "grok-build" } },
+      { model: { ...TEST_MODEL, id: "grok-build" } },
     );
     await harness.handlers.get("before_agent_start")?.(
       {},
-      { model: { ...TEST_MODEL, id: "grok-composer-2.5-fast" } },
+      { model: { ...TEST_MODEL, id: "grok-build" } },
     );
     expect(harness.getActiveTools()).toContain("Grep");
     expect(harness.getActiveTools()).not.toContain("WebSearch");

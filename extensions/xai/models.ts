@@ -321,10 +321,15 @@ export function normalizedXaiModelId(modelId: string): string {
   return (modelId || "").toLowerCase().split("/").pop() || "";
 }
 
-/** Return true for models that need Grok CLI compatibility behavior. */
+/**
+ * Return true for models that still need Cursor/Grok CLI tool-name shims.
+ *
+ * Composer is treated as a Grok 4.5 alias and uses pi's normal tools. Only
+ * an explicitly entitled `grok-build` catalog entry keeps the legacy Cursor
+ * shim surface.
+ */
 export function isGrokCliCompatibilityModel(modelId: string): boolean {
-  const normalized = normalizedXaiModelId(modelId);
-  return normalized === "grok-build" || normalized === "grok-composer-2.5-fast";
+  return normalizedXaiModelId(modelId) === "grok-build";
 }
 
 /** Return true when xAI accepts an explicit Responses reasoning effort. */

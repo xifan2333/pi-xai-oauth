@@ -77,7 +77,7 @@ export function setXaiNetworkToolActive(
     return {
       ok: false,
       active: false,
-      error: "WebSearch is available only with xAI Grok Build or Composer models.",
+      error: "WebSearch is available only with an entitled xAI Grok Build model.",
     };
   }
   if (typeof api?.getActiveTools !== "function" || typeof api?.setActiveTools !== "function") {

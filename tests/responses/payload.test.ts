@@ -135,7 +135,7 @@ describe("Responses payload normalization", () => {
   });
   it("removes all system and reasoning replay for CLI models", () => {
     setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
-    const model = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
+    const model = { ...TEST_MODEL, id: "grok-build" } as any;
     const result: any = rewriteXaiResponsesPayload(
       {
         model: model.id,

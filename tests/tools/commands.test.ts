@@ -11,7 +11,7 @@ import {
   createExtensionHarness,
 } from "../fixtures/extension-api";
 import { TEST_MODEL } from "../fixtures/models";
-const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
+const build = { ...TEST_MODEL, id: "grok-build" } as any;
 
 function setup() {
   const h = createExtensionHarness();
@@ -70,9 +70,9 @@ describe("/xai-tools command", () => {
     await run("enable WebSearch");
     expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(false);
     expect(notices.at(-1).message).toMatch(
-      /only with xAI Grok Build or Composer/,
+      /only with an entitled xAI Grok Build model/,
     );
-    await run("enable WebSearch", composer);
+    await run("enable WebSearch", build);
     expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(true);
   });
   it("fails closed when registry reads or writes fail", async () => {
@@ -212,11 +212,11 @@ describe("/xai-tools command", () => {
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
   });
 
-  it("wraps Page Up and Page Down across the expanded Composer tool catalog", async () => {
+  it("wraps Page Up and Page Down across the expanded Grok Build tool catalog", async () => {
     const { h, notices } = setup();
     let afterPageUp = "";
     let afterPageDown = "";
-    const ctx = commandContext(composer, notices, {
+    const ctx = commandContext(build, notices, {
       ui: {
         notify(message: string, type?: string) {
           notices.push({ message, type });

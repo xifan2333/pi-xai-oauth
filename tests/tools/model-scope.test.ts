@@ -7,10 +7,10 @@ import {
 } from "../../extensions/xai/tools/model-scope";
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { TEST_MODEL } from "../fixtures/models";
-const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
+const build = { ...TEST_MODEL, id: "grok-build" } as any;
 
 describe("network-tool lifecycle", () => {
-  it("requires an active xAI model and Composer for WebSearch", () => {
+  it("requires an active xAI model and Grok Build for WebSearch", () => {
     const h = createExtensionHarness([...XAI_NETWORK_TOOL_NAMES]);
     expect(
       setXaiNetworkToolActive(h.api, undefined, "xai_web_search", true),
@@ -18,7 +18,7 @@ describe("network-tool lifecycle", () => {
     expect(
       setXaiNetworkToolActive(h.api, TEST_MODEL, "WebSearch", true),
     ).toMatchObject({ ok: false, active: false });
-    expect(setXaiNetworkToolActive(h.api, composer, "WebSearch", true)).toEqual(
+    expect(setXaiNetworkToolActive(h.api, build, "WebSearch", true)).toEqual(
       { ok: true, active: true },
     );
     expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(true);
