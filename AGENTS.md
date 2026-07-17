@@ -33,7 +33,7 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Fetch OAuth-visible models only from the pinned authenticated CLI proxy `/models-v2` endpoint
 - Treat successful catalog responses as exact entitlement state; additions appear and removals disappear
 - Keep the normalized token-free catalog cache atomic and apply the documented TTL/stale/fallback policy
-- Preserve known model metadata and compatibility behavior without advertising models absent from the authenticated catalog
+- Preserve known model metadata and compatibility behavior without inventing unentitled model families; known aliases of already-entitled models may be advertised at registration/runtime only (cache stays exact)
 - Keep both Pi peers aligned to the checked-in bounded range in `compatibility/pi-versions.json`
 - Install/report exact Pi matrix versions from a clean packed package; never reuse the repository lockfile for boundary jobs
 - Keep normal Pi dev dependencies exact at the policy's latest tested release and review candidate releases before widening support

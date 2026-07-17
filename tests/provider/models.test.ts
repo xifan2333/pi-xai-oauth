@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CURATED_FALLBACK_MODELS,
+  expandXaiCatalogWithAliases,
   getXaiRuntimeModels,
   grokSupportsReasoningEffort,
   isGrokCliCompatibilityModel,
+  isXaiRuntimeModelEntitled,
+  knownXaiModelMetadata,
   normalizedXaiModelId,
+  resolveXaiCanonicalModelId,
   resolveXaiClientMode,
   setXaiRuntimeModels,
+  XaiModelInputProvenance,
   xaiProxyRequestHeaders,
 } from "../../extensions/xai/models";
 import { xaiCatalogHeaders } from "../../extensions/xai/wire";
@@ -18,6 +23,63 @@ describe("model compatibility metadata", () => {
     expect(isGrokCliCompatibilityModel("grok-build")).toBe(true);
     expect(isGrokCliCompatibilityModel("grok-composer-2.5-fast")).toBe(true);
     expect(isGrokCliCompatibilityModel("grok-4.5")).toBe(false);
+  });
+
+  it("resolves known renamed model aliases to canonical catalog ids", () => {
+    expect(resolveXaiCanonicalModelId("xai-auth/grok-composer-2.5-fast")).toBe("grok-4.5");
+    expect(resolveXaiCanonicalModelId("grok-build-latest")).toBe("grok-4.5");
+    expect(resolveXaiCanonicalModelId("grok-4.20")).toBe("grok-4.20-0309-reasoning");
+    expect(resolveXaiCanonicalModelId("grok-4.20-multi-agent")).toBe("grok-4.20-multi-agent-0309");
+    expect(resolveXaiCanonicalModelId("grok-4.5")).toBe("grok-4.5");
+    expect(resolveXaiCanonicalModelId("unknown-model")).toBe("unknown-model");
+  });
+
+  it("expands only aliases of entitled models and preserves authenticated input", () => {
+    const entitled = {
+      ...CURATED_FALLBACK_MODELS[0],
+      id: "grok-4.5",
+      input: ["text"] as ("text" | "image")[],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    };
+    const expanded = expandXaiCatalogWithAliases([entitled]);
+    const ids = expanded.map((model) => model.id);
+
+    expect(ids).toContain("grok-4.5");
+    expect(ids).toContain("grok-composer-2.5-fast");
+    expect(ids).toContain("grok-build-latest");
+    expect(ids).toContain("grok-4.5-latest");
+    // Unentitled families stay hidden.
+    expect(ids).not.toContain("grok-4.20-0309-reasoning");
+    expect(ids).not.toContain("grok-4.20");
+    expect(ids).not.toContain("grok-build");
+
+    const composer = expanded.find((model) => model.id === "grok-composer-2.5-fast");
+    expect(composer).toMatchObject({
+      name: knownXaiModelMetadata("grok-composer-2.5-fast")?.name,
+      reasoning: false,
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+      contextWindow: entitled.contextWindow,
+    });
+
+    setXaiRuntimeModels(expanded);
+    expect(isXaiRuntimeModelEntitled("grok-composer-2.5-fast")).toBe(true);
+    expect(isXaiRuntimeModelEntitled("grok-4.20")).toBe(false);
+  });
+
+  it("does not invent aliases when the canonical model is absent", () => {
+    const onlyFourThree = expandXaiCatalogWithAliases([
+      {
+        ...CURATED_FALLBACK_MODELS[0],
+        id: "grok-4.3",
+        name: "Grok 4.3",
+      },
+    ]);
+    const ids = onlyFourThree.map((model) => model.id);
+    expect(ids).toContain("grok-4.3");
+    expect(ids).toContain("grok-latest");
+    expect(ids).not.toContain("grok-composer-2.5-fast");
+    expect(ids).not.toContain("grok-4.5");
   });
   it("looks up runtime reasoning case-insensitively", () => {
     setXaiRuntimeModels([

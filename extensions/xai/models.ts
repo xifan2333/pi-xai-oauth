@@ -32,9 +32,10 @@ export type XaiCatalogModel = {
 /**
  * Curated metadata for known xAI models.
  *
- * This table enriches models that the authenticated catalog actually returns;
- * it is not the provider advertisement and must never be unioned into a
- * successful entitlement response.
+ * This table enriches models that the authenticated catalog actually returns
+ * (and their known aliases after entitlement expansion). It is not the provider
+ * advertisement and must never be unioned wholesale into a successful entitlement
+ * response.
  */
 export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
   {
@@ -136,6 +137,50 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
 
 const KNOWN_MODEL_MAP = new Map(KNOWN_XAI_MODEL_METADATA.map((model) => [model.id, model]));
 
+/**
+ * Known OAuth model aliases mapped to the canonical catalog id they currently
+ * resolve to on xAI's session Responses proxy / public model registry.
+ *
+ * Only aliases of models that are already entitled are advertised. This keeps
+ * the authenticated catalog exact while preserving renamed settings patterns
+ * such as `grok-composer-2.5-fast` when the account only receives `grok-4.5`.
+ *
+ * Source evidence: official Grok catalog key/slug split, `api.x.ai/v1/models`
+ * alias lists, and OAuth Responses resolution (e.g. Composer → `grok-4.5-build`).
+ */
+export const XAI_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  // Grok 4.5 family absorbs former Build-latest / Composer routing.
+  "grok-4.5-latest": "grok-4.5",
+  "grok-build-latest": "grok-4.5",
+  "grok-composer-2.5-fast": "grok-4.5",
+
+  // Grok 4.3 short names.
+  "grok-4.3-latest": "grok-4.3",
+  "grok-latest": "grok-4.3",
+
+  // Grok 4.20 short / beta aliases → dated canonicals.
+  "grok-4.20": "grok-4.20-0309-reasoning",
+  "grok-4.20-0309": "grok-4.20-0309-reasoning",
+  "grok-4.20-reasoning": "grok-4.20-0309-reasoning",
+  "grok-4.20-reasoning-latest": "grok-4.20-0309-reasoning",
+  "grok-4.20-non-reasoning": "grok-4.20-0309-non-reasoning",
+  "grok-4.20-non-reasoning-latest": "grok-4.20-0309-non-reasoning",
+  "grok-4.20-multi-agent": "grok-4.20-multi-agent-0309",
+  "grok-4.20-multi-agent-latest": "grok-4.20-multi-agent-0309",
+};
+
+const XAI_ALIASES_BY_CANONICAL = (() => {
+  const map = new Map<string, string[]>();
+  for (const [alias, canonical] of Object.entries(XAI_MODEL_ALIASES)) {
+    const key = canonical.toLowerCase();
+    const list = map.get(key);
+    if (list) list.push(alias);
+    else map.set(key, [alias]);
+  }
+  for (const list of map.values()) list.sort();
+  return map;
+})();
+
 /** Minimal catalog used only when authenticated discovery cannot be used safely. */
 export const CURATED_FALLBACK_MODELS: readonly XaiCatalogModel[] = [
   { ...KNOWN_MODEL_MAP.get(DEFAULT_XAI_MODEL)! },
@@ -188,6 +233,70 @@ export function defaultXaiRuntimeModelId(): string | undefined {
 /** Return curated metadata for a known model without advertising it. */
 export function knownXaiModelMetadata(modelId: string): XaiCatalogModel | undefined {
   return KNOWN_MODEL_MAP.get(normalizedXaiModelId(modelId));
+}
+
+/**
+ * Resolve a model id through the known alias table to its canonical catalog id.
+ * Unknown ids are returned normalized without inventing an entitlement.
+ */
+export function resolveXaiCanonicalModelId(modelId: string): string {
+  const normalized = normalizedXaiModelId(modelId);
+  if (!normalized) return normalized;
+  return XAI_MODEL_ALIASES[normalized] ?? normalized;
+}
+
+/**
+ * Expand an exact entitlement snapshot with known aliases of currently entitled
+ * models. The remote/cache catalog stays exact; only the advertised runtime
+ * provider list gains compatibility aliases.
+ */
+export function expandXaiCatalogWithAliases(
+  models: readonly XaiCatalogModel[],
+): XaiCatalogModel[] {
+  const entitled = new Map<string, XaiCatalogModel>();
+  for (const model of models) {
+    entitled.set(model.id.toLowerCase(), {
+      ...model,
+      input: [...model.input],
+      cost: { ...model.cost },
+      ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
+    });
+  }
+
+  const expanded: XaiCatalogModel[] = [...entitled.values()];
+  const aliasEntries: Array<[string, XaiCatalogModel]> = [];
+  for (const [canonical, base] of entitled) {
+    const aliases = XAI_ALIASES_BY_CANONICAL.get(canonical) ?? [];
+    for (const alias of aliases) {
+      if (entitled.has(alias)) continue;
+      aliasEntries.push([alias, materializeAliasModel(alias, base)]);
+    }
+  }
+  aliasEntries.sort(([left], [right]) => left.localeCompare(right));
+  for (const [, model] of aliasEntries) expanded.push(model);
+  return expanded;
+}
+
+function materializeAliasModel(alias: string, base: XaiCatalogModel): XaiCatalogModel {
+  const known = knownXaiModelMetadata(alias);
+  const maxTokens = Math.min(known?.maxTokens ?? base.maxTokens, base.contextWindow);
+  return {
+    id: alias,
+    name: known?.name ?? base.name,
+    apiBackend: "responses",
+    reasoning: known?.reasoning ?? base.reasoning,
+    // Preserve authenticated modality evidence from the entitled canonical.
+    input: [...base.input],
+    inputProvenance: base.inputProvenance,
+    cost: known ? { ...known.cost } : { ...base.cost },
+    contextWindow: base.contextWindow,
+    maxTokens,
+    ...(known?.thinkingLevelMap
+      ? { thinkingLevelMap: { ...known.thinkingLevelMap } }
+      : base.thinkingLevelMap
+        ? { thinkingLevelMap: { ...base.thinkingLevelMap } }
+        : {}),
+  };
 }
 
 /** Build a pi model object for a credential-aware direct xAI request. */

@@ -31,7 +31,12 @@ try {
   assert.equal(provider.name, "xai-auth");
   assert.equal(provider.config.api, "xai-responses");
   assert.equal(provider.config.baseUrl, "https://cli-chat-proxy.grok.com/v1");
-  assert.deepEqual(provider.config.models.map((model) => model.id), ["grok-4.5"]);
+  const modelIds = provider.config.models.map((model) => model.id);
+  assert.deepEqual(modelIds.slice(0, 1), ["grok-4.5"], "curated fallback canonical should lead the advertised list");
+  assert.ok(modelIds.includes("grok-composer-2.5-fast"), "known aliases of entitled fallback models should be advertised");
+  assert.ok(modelIds.includes("grok-build-latest"));
+  assert.ok(modelIds.includes("grok-4.5-latest"));
+  assert.equal(modelIds.length, 4, "fallback should advertise grok-4.5 plus its known aliases only");
   console.log("verify-extension-loader: ok");
 } finally {
   if (previousHome === undefined) delete process.env.HOME;
