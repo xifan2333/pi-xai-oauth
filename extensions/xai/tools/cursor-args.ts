@@ -1,4 +1,13 @@
-import { isAbsolute, relative, resolve } from "path";
+import { lstat, realpath } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 /** Coerce Cursor/Grok CLI-style tool arguments into an object. */
 export function objectFromCursorArgs(value: unknown): Record<string, any> {
@@ -167,7 +176,12 @@ export function normalizeDeleteArgs(args: unknown) {
   };
 }
 
-/** Resolve a requested path while refusing operations outside the workspace. */
+/**
+ * Resolve a requested path while refusing operations outside the workspace.
+ *
+ * The workspace root itself is allowed (for whole-tree reads such as Grep).
+ * Destructive tools must use {@link safeWorkspaceChildPath} instead.
+ */
 export function safeWorkspacePath(cwd: string, requestedPath: string): string {
   const resolved = isAbsolute(requestedPath) ? resolve(requestedPath) : resolve(cwd, requestedPath);
   const workspace = resolve(cwd);
@@ -176,4 +190,61 @@ export function safeWorkspacePath(cwd: string, requestedPath: string): string {
     throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
   }
   return resolved;
+}
+
+function isOutsideWorkspace(workspace: string, candidate: string): boolean {
+  const difference = relative(workspace, candidate);
+  return difference === ".."
+    || difference.startsWith(`..${sep}`)
+    || isAbsolute(difference);
+}
+
+/** Return whether two already-resolved paths identify the same platform path. */
+export function isSameResolvedPath(
+  firstPath: string,
+  secondPath: string,
+  relativePath: (from: string, to: string) => string = relative,
+): boolean {
+  return relativePath(firstPath, secondPath) === "";
+}
+
+/**
+ * Resolve a destructive target whose physical location must remain below the
+ * workspace root.
+ *
+ * Intermediate links are resolved before containment is checked. A link in the
+ * final path component is returned without following it so Delete unlinks the
+ * link rather than its target.
+ */
+export async function safeWorkspaceChildPath(
+  cwd: string,
+  requestedPath: string,
+): Promise<string> {
+  const resolved = safeWorkspacePath(cwd, requestedPath);
+  const workspace = resolve(cwd);
+  if (isSameResolvedPath(workspace, resolved)) {
+    throw new Error(`Refusing to operate on the workspace root: ${requestedPath}`);
+  }
+
+  const [physicalWorkspace, physicalParent] = await Promise.all([
+    realpath(workspace),
+    realpath(dirname(resolved)),
+  ]);
+  if (isOutsideWorkspace(physicalWorkspace, physicalParent)) {
+    throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
+  }
+
+  const physicalCandidate = join(physicalParent, basename(resolved));
+  const candidateInfo = await lstat(physicalCandidate);
+  if (candidateInfo.isSymbolicLink()) return physicalCandidate;
+
+  const physicalTarget = await realpath(physicalCandidate);
+  const physicalDifference = relative(physicalWorkspace, physicalTarget);
+  if (physicalDifference === "") {
+    throw new Error(`Refusing to operate on the workspace root: ${requestedPath}`);
+  }
+  if (isOutsideWorkspace(physicalWorkspace, physicalTarget)) {
+    throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
+  }
+  return physicalTarget;
 }

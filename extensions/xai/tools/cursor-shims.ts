@@ -29,6 +29,7 @@ import {
   normalizeShellArgs,
   normalizeWriteArgs,
   objectFromCursorArgs,
+  safeWorkspaceChildPath,
   safeWorkspacePath,
 } from "./cursor-args";
 
@@ -445,7 +446,9 @@ export function registerCursorToolShims(pi: ExtensionAPI) {
         if (signal?.aborted) throw new Error("Operation aborted");
         const { path, recursive } = normalizeDeleteArgs(params);
         if (!path) throw new Error("Delete requires a path");
-        const absolutePath = safeWorkspacePath(ctx.cwd, path);
+        // Validate the physical child boundary before recursive removal.
+        const absolutePath = await safeWorkspaceChildPath(ctx.cwd, path);
+        if (signal?.aborted) throw new Error("Operation aborted");
         await rm(absolutePath, { recursive: !!recursive, force: false });
         return { content: [{ type: "text", text: `Deleted ${path}` }], details: undefined };
       },
