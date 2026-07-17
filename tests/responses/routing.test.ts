@@ -199,6 +199,7 @@ describe("Responses routing and protected metadata", () => {
       "x-grok-agent-id": "spoofed-agent",
       "x-grok-turn-idx": "999",
       "x-grok-user-id": "spoofed-user",
+      "x-userid": "spoofed-billing-user",
       "x-grok-deployment-id": "spoofed-deployment",
       "x-grok-unknown-private-id": "spoofed-private",
       Accept: "application/x-spoofed",
@@ -224,6 +225,7 @@ describe("Responses routing and protected metadata", () => {
     expect(headerValue(request.init.headers, "X-Custom-Safe")).toBe(
       "preserved",
     );
+    expect(headerValue(request.init.headers, "x-userid")).toBeUndefined();
   });
 
   it.each(["xai-auth/grok-4.5", "XAI-AUTH/GROK-4.5"])(

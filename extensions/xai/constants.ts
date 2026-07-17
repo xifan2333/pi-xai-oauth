@@ -29,6 +29,8 @@ export const XAI_CLI_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
 export const XAI_RESPONSES_URL = "https://api.x.ai/v1/responses";
 export const XAI_CLI_RESPONSES_URL = "https://cli-chat-proxy.grok.com/v1/responses";
 export const XAI_CLI_MODELS_URL = "https://cli-chat-proxy.grok.com/v1/models-v2";
+export const XAI_CLI_USER_URL = "https://cli-chat-proxy.grok.com/v1/user";
+export const XAI_CLI_BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 export const XAI_IMAGES_GENERATIONS_URL = "https://api.x.ai/v1/images/generations";
 export const XAI_IMAGES_EDITS_URL = "https://api.x.ai/v1/images/edits";
 
@@ -37,6 +39,15 @@ export const XAI_MODEL_CATALOG_FRESH_TTL_MS = 15 * 60 * 1000;
 export const XAI_MODEL_CATALOG_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 export const XAI_MODEL_CATALOG_TIMEOUT_MS = 5 * 1000;
 export const XAI_MODEL_CATALOG_MAX_BYTES = 1024 * 1024;
+
+export const XAI_USAGE_TIMEOUT_MS = 15 * 1000;
+export const XAI_USAGE_MAX_RESPONSE_BYTES = 64 * 1024;
+export const XAI_USAGE_MAX_JSON_DEPTH = 12;
+export const XAI_USAGE_MAX_JSON_ARRAY_ITEMS = 64;
+export const XAI_USAGE_MAX_JSON_OBJECT_KEYS = 64;
+export const XAI_USAGE_MAX_JSON_NODES = 2048;
+export const XAI_USAGE_MAX_HISTORY_PERIODS = 24;
+export const XAI_USAGE_STATUS_MIN_REFRESH_MS = 60 * 1000;
 
 export const XAI_CLIENT_IDENTIFIER = packageMetadata.name;
 export const XAI_PACKAGE_VERSION = packageMetadata.version;

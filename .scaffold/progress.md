@@ -1,45 +1,45 @@
-# Execution Progress — Issue #83
+# Execution Progress — Issue #82
 
-**Branch:** feature/issue-83-image-editing
-**Baseline:** `b0556a8`
+**Branch:** feature/issue-82-xai-usage
+**Current baseline:** `af31e83`
 
 ## Completed
 
-- [x] Confirmed PR #90 merged as `b0556a8` and contains exact reviewed head `fe0b95f`.
-- [x] Confirmed the issue-83 worktree and remote branch were clean at `e31303f`.
-- [x] Created `safety/issue-83-pre-pr90-rebase`.
-- [x] Started rebasing the original implementation/docs commits onto merged main.
-- [x] Preserved the original bounded media implementation, focused tests, and disabled-by-default tool lifecycle for semantic integration.
-- [x] Completed the rebase as `316884d` plus `f3e0fd8` on merged baseline `b0556a8`.
-- [x] Enforced one to three references and cheap validation of every supplied aspect ratio.
-- [x] Added shared protected direct-media headers and edit-route error classification without proxy metadata.
-- [x] Reapplied decoded output limits, redacted codec/compression failures, and hardened body/output cancellation.
-- [x] Added regressions for four-reference zero-I/O rejection, both credential provenance tags, stalled bodies, request-ID filtering, decoded dimensions, and text-only active models.
-- [x] Passed the primary and cumulative focused image-edit/media/provider/tool suites plus strict TypeScript.
-- [x] Passed the strict full suite, real loader smoke, and V8 coverage above every configured floor.
-- [x] Passed policy/registry, packed-manifest, unsupported-peer, and package dry-run checks.
-- [x] Passed clean packed test/loader/typecheck matrices with exact Pi 0.80.1 and 0.80.10.
-- [x] Applied security review feedback so disabled tools prove explicit opt-in before reading active-model context, with a throwing-getter regression.
-- [x] Replaced a false-positive cancellation test with deterministic cleanup checks after temporary write and final rename, and added POSIX FIFO rejection coverage.
-- [x] Completed the old-vs-rebased range diff and verified protected PR #90/OAuth/catalog/package-policy files were not replaced.
-- [x] Functional, security/privacy, and test/validation re-reviews returned CLEAN after their accepted fixes.
-- [x] Confirmed PR #91 has no review submissions or unresolved review threads; its only comments are review-bot usage-limit notices.
-
-## In progress
-
-- [x] Committed the final reviewed implementation as `b29c119` (`fix: finalize bounded image editing`).
-- [x] Replaced the known pre-rebase remote head with an exact force-with-lease and refreshed PR #91's description.
-- [x] Verified fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 checks are green.
-- [x] Kept PR #91 open and unmerged for maintainer approval.
+- [x] Confirmed the branch was clean and based on `origin/main`; installed locked dependencies with `npm ci`.
+- [x] Read issue #82 and the relevant provider, credential, command, event, fixture, test, documentation, and package-boundary code.
+- [x] Verified upstream billing and `/user` identity behavior at the exact issue revision.
+- [x] Added the pinned identity-first usage transport with OAuth-only provenance, required proxy metadata, fail-closed sequencing, redirect rejection, cancellation, safe errors, and no identity/raw-body retention.
+- [x] Added bounded new/legacy usage parsing and conservative command/footer renderers.
+- [x] Registered `/xai-usage` with one-shot display plus explicit `status on|off`; status is session-scoped, rate-bounded, event-driven, non-xAI suppressed, and reset on model/account/session changes.
+- [x] Added three JSON fixtures and focused parser, transport, timeout, cancellation, redaction, command, status, and provider-registration coverage.
+- [x] Updated README, CHANGELOG, AGENTS, and all issue scaffold files.
+- [x] Tightened usage credential resolution to pi's managed xAI model registry only and added a regression proving an unrelated active-model API key is never sent to xAI.
+- [x] Confirmed PR #89 has no reviews or review threads; its comments are bot usage-limit notices.
+- [x] Confirmed the old policy failure was obsolete Pi 0.80.7 registry drift already fixed by merged PR #94.
+- [x] Preserved the original reviewed implementation/docs commits (`d7ccd17`, `53b8013`) and open PR #89 on `safety/issue-82-pre-main-rebase`.
+- [x] Fetched `origin/main=af31e83`, verified the worktree was clean at remote head `53b8013`, and created `safety/issue-82-pre-main-rebase`.
+- [x] Started the semantic rebase onto current merged main while preserving #90/#91/#92/#94 behavior.
+- [x] Completed the rebase as `9792282` plus `4c0f098` with no unresolved markers or diff-check errors.
+- [x] Centralized the exact usage proxy-header contract in `wire.ts`.
+- [x] Bounded stalled response bodies with explicit abort races and deterministic cancellation/timeout coverage.
+- [x] Required the Pi-resolved bearer to match the current stored OAuth access token after refresh, rejecting stored and runtime API-key provenance.
+- [x] Detached cosmetic status refresh from Pi's awaited `turn_end` path, made calendar timestamp validation strict, and cancelled non-success bodies.
+- [x] Reserved `x-userid` across shared wire scrubbing and documented its single transient billing-only exception.
+- [x] Aborted/suppressed stale one-shot and footer completions on reset; stored OAuth removal now disables status before throttling.
+- [x] Added actual provider lifecycle, file-fallback rejection, parser node/key/timestamp, invalid UTF-8, loader-command, and pack-production regressions.
+- [x] Passed the post-finding focused usage/provider/wire suites (7 files / 74 tests), strict TypeScript, real loader, direct pack contract, and diff check.
+- [x] Passed the final cumulative gate: `npm test` (37 files / 398 tests), strict TypeScript, real loader, coverage, policy, 111-file pack contract, and exact Pi 0.80.1/0.80.10 boundaries.
+- [x] Measured final V8 coverage at 86.03% statements, 79.27% branches, 86.09% functions, and 89.88% lines.
+- [x] Passed independent security re-review of OAuth removal, stale one-shot suppression, billing-only identity handling, and caller `x-userid` scrubbing.
+- [x] Passed independent final test review after adding real exact-boundary registry coverage, version-adaptive strict OAuth provenance, non-blocking hostile-stream cancellation, and a due/stalled turn lifecycle regression.
+- [x] Replaced the known old PR head with exact force-with-lease and refreshed PR #89's description.
+- [x] Verified fresh GitHub policy, Socket, and exact Pi 0.80.1/0.80.10 compatibility checks are green.
 
 ## Delivery
 
-- Apply the one-to-three, shared-header, decoded-output-limit, redaction, and modality-independence changes from the final handoff.
-- Run the complete post-rebase validation and independent review contract.
-- Original implementation commit `4a61389` and delivery record `e31303f` were pushed to unmerged PR #91 before this rebase.
-- PR #91 remains open and must not be merged until the rebased branch passes the full gate: https://github.com/BlockedPath/pi-xai-oauth/pull/91
+- [x] Kept PR #89 open and unmerged for maintainer approval: https://github.com/BlockedPath/pi-xai-oauth/pull/89
 
 ## Residual
 
 - No live xAI request or interactive OAuth flow is part of this offline gate.
-- Parent-directory replacement remains a documented trusted-parent filesystem assumption.
+- The usage API is unofficial and revision-pinned; upstream drift requires deliberate review.

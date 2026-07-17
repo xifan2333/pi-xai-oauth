@@ -25,6 +25,7 @@ try {
   assert.ok(loaded.tools.has("xai_edit_image"), "bounded xAI image-edit tool should be registered");
   assert.ok(loaded.tools.has("Grep"), "representative Cursor shim should be registered");
   assert.ok(loaded.commands.has("xai-tools"), "/xai-tools should be registered");
+  assert.ok(loaded.commands.has("xai-usage"), "/xai-usage should be registered");
   assert.equal(runtime.pendingProviderRegistrations.length, 1, "one provider should be queued");
   const provider = runtime.pendingProviderRegistrations[0];
   assert.equal(provider.name, "xai-auth");

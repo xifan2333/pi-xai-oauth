@@ -14,6 +14,9 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
 - Added the disabled-by-default `xai_edit_image` tool with exact singular/plural Imagine edit payloads, a distinct pinned `/images/edits` route, timeout/cancellation, and redacted errors.
 - Added reusable bounded media primitives for byte-validated PNG/JPEG data URLs and workspace files, source-backed compression, explicit request/response/output budgets, and atomic 0700/0600 Pi-session storage.
+- Added the explicit `/xai-usage` command with pinned authenticated `/user` identity resolution followed by the unofficial revision-pinned `/billing?format=credits` lookup.
+- Added an optional session-only compact usage status that is off by default, refreshes no more than once per minute after completed xAI turns, and clears on model, provider, account, and session changes.
+- Added fixture-based usage parser, transport, cancellation, redaction, command, bounds, and status-lifecycle coverage.
 - Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.
 - Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
 - Added pinned, bounded, cancellable RFC 8628 polling with initial wait, server interval plus cumulative `slow_down`, denial/expiry handling, strict secret-safe schema validation, and deterministic timing tests.
@@ -27,6 +30,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Centralized xAI wire headers around pinned routes, truthful `pi-xai-oauth/<version>` attribution, package-controlled proxy versioning, and shared OAuth form metadata.
 - Migrated the normalized model cache to schema 2 while safely retaining schema-1 membership and rederiving legacy input as known/default rather than authenticated evidence.
+- Bounded the unofficial usage transport to pinned endpoints, rejected redirects, 15-second request timeouts, 64 KiB bodies, bounded JSON complexity/history, and conservative numeric/timestamp ranges.
 - Replaced the shared-state monolithic behavior verifiers with isolated per-domain suites and closure-local fixtures; production runtime behavior is unchanged.
 - Made the repository CI job run the full unit suite once under coverage and the loader smoke separately; packed compatibility jobs rerun unit, loader, and TypeScript checks at each exact Pi boundary.
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
@@ -50,6 +54,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Replaced raw direct-response error reflection with bounded status/route classification and actionable, non-impersonating proxy version-gate guidance.
 - Prevented authenticated text-only entitlements from sending image-bearing Responses payloads, including payload-hook mutations and image-input custom tools, without changing image generation.
 - Canonicalized final Responses payloads before model and modality enforcement, detected computer screenshots, disabled unsafe delegated retries, and hardened wide-payload traversal so custom serializers cannot bypass authenticated text-only policy.
+- Made usage credential and identity resolution fail closed before billing, rejected stored/runtime API-key provenance, and prevented account identity, authenticated headers, raw response bodies, and transport details from being cached, persisted, logged, or reflected in errors.
 - Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.
