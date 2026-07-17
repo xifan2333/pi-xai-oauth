@@ -1,29 +1,31 @@
-# Implementation Plan: Issue #93 Pi 0.80.10 compatibility
+# Implementation Plan: Issue #78 Grok wire protocol
 
-**Branch:** feature/issue-93-pi-0.80.10
-**Baseline:** 579f965
+**Branch:** feature/issue-78-grok-protocol
+**Original baseline:** 579f965
+**Rebased baseline:** 0d51d0a
 
 ## Goal
 
-Adopt Pi 0.80.10 as the latest exact compatibility boundary while preserving the 0.80.1 minimum and `>=0.80.1 <0.81.0` peer range.
+Pin and document the reviewed Grok Build wire contract without impersonating the official client, while preserving OAuth/privacy boundaries, Pi 0.80.10 compatibility, and the encrypted-reasoning handoff to #79.
 
 ## Phases
 
-1. [x] Confirm registry drift to 0.80.10 and review official 0.80.8–0.80.10 releases.
-2. [x] Run the clean packed 0.80.10 candidate matrix and record the API migration failures.
-3. [x] Replace startup `AuthStorage` use with a bounded current/legacy read compatibility path.
-4. [x] Migrate the Pi credential integration test to `ModelRuntime`/`InMemoryCredentialStore` while retaining the 0.80.1 path.
-5. [x] Align policy latest, exact dev dependencies, and lockfile to 0.80.10.
-6. [x] Update README, CHANGELOG, AGENTS, and scaffold state.
-7. [x] Run full latest and exact 0.80.1/0.80.10 validation.
-8. [x] Complete independent review and apply accepted fixes.
-9. [x] Commit, push, and open PR #94 for issue #93.
+1. [x] Read issue #78, upstream source, runtime callers, tests, package policy, and existing docs.
+2. [x] Centralize truthful identity, route-aware headers, reserved-header scrubbing, OAuth form headers, and safe bounded transport errors.
+3. [x] Apply the contract to streaming/direct Responses, catalog, OAuth/device/token, and direct media requests without changing pinned routes.
+4. [x] Add deterministic request-shape, client-mode, SSE/direct, privacy, and safe gate-error coverage.
+5. [x] Add the revision-pinned compatibility matrix/review procedure and update package documentation.
+6. [x] Complete rebase onto merged PR #94 without dropping protocol or Pi 0.80.10 behavior.
+7. [x] Run focused suites, strict full tests, coverage, typecheck, live compatibility checks, and exact 0.80.1/0.80.10 boundaries.
+8. [x] Complete independent review, fix redirect replay and generic delegate affinity headers, revalidate, and obtain a CLEAN focused re-review.
+9. [x] Commit and force-push the rebased branch, refresh PR #92, mark it ready, and receive fresh green policy plus exact Pi 0.80.1/0.80.10 checks.
 
 ## Validation contract
 
-- Focused credential/race regressions pass.
-- `npm test`, strict full test, coverage, loader smoke, and typecheck pass on the repository install.
-- `npm run compatibility:check` passes against the live registry.
-- Clean packed exact 0.80.1 and 0.80.10 matrices pass tests, loader smoke, and typecheck.
-- Pack metadata and unsupported-peer diagnostics remain correct.
-- Peer range and minimum remain unchanged.
+- Streaming OAuth Responses explicitly requests `text/event-stream`; direct Responses does not.
+- Caller/model reserved headers cannot override the internal route contract or inject unsupported IDs.
+- OAuth proxy, catalog, direct API-key Responses, media, and OAuth/token routes use distinct tested header sets.
+- HTTP status remains available while raw or oversized upstream error bodies remain undisclosed.
+- Package identity stays `pi-xai-oauth`; the reviewed Grok Build revision is documentation metadata, not an impersonated client version.
+- Pi peers remain `>=0.80.1 <0.81.0` with exact packed 0.80.1/0.80.10 proof.
+- Encrypted reasoning remains deferred to #79.

@@ -18,7 +18,7 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 - Verify Pi policy/package metadata: `npm run compatibility:check`
 - Verify exact packed Pi boundaries: `npm run compatibility:boundaries`
 - Evaluate an unadvertised Pi candidate: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`
-- Git: Always work on feature branches. Current branch for this work: `feature/issue-93-pi-0.80.10`
+- Git: Always work on feature branches. Current branch for this work: `feature/issue-78-grok-protocol`
 
 ## Architecture & Boundaries (MUST / MUST NOT)
 **MUST:**
@@ -68,9 +68,11 @@ pi-xai-oauth/
 │       ├── payload.ts    # Responses payload normalization
 │       ├── responses.ts  # xAI request/stream helpers
 │       ├── routing.ts    # Credential-aware Responses/Images endpoint routing
+│       ├── wire.ts       # Route-aware headers, scrubbing, identity, safe errors
 │       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
 ├── compatibility/
-│   └── pi-versions.json # Peer range plus exact minimum/latest matrix policy
+│   ├── pi-versions.json # Peer range plus exact minimum/latest matrix policy
+│   └── grok-build-wire-protocol.md # Pinned xAI route/header review procedure
 ├── tests/                    # Focused typed Vitest domain suites + isolated fixtures
 ├── vitest.config.ts          # Node isolation and measured V8 coverage floors
 ├── scripts/
@@ -105,6 +107,7 @@ Start any task by reading:
 - Keep raw browser authorization codes rejected; direct users to device login or a complete matching-state redirect URL
 - Never log OAuth codes, opaque device codes, tokens, device/token response bodies, verifiers, state, nonce, catalog request headers, or raw authenticated catalog bodies
 - Never retain a device-flow ID token without a device-specific validation policy; browser ID tokens keep nonce-bound OIDC validation
+- Keep caller/model reserved headers scrubbed before appending the route-specific contract; never reflect raw transport error bodies
 - Reject malformed, hidden, unsupported-backend, secret-bearing, and known API-key-only catalog entries
 - Keep startup catalog network behavior bounded and use pi's credential lock for expired stored-token refresh
 - Keep compatibility policy/registry/pack/resolver verification in plain Node; behavior tests use focused Vitest suites
@@ -144,6 +147,6 @@ This file should be updated whenever architecture, commands, or rules change.
 This repo is a **pi extension package (a library/CLI), not a standalone server**. There is nothing to "boot" — dependency install happens automatically via the startup update script (`npm ci`). Node engine note: the pi peer deps request Node `>=22.19.0` and the pod ships `22.14.0`, so `npm ci` prints `EBADENGINE` warnings; these are non-blocking — typecheck, tests, and extension load all pass.
 
 - Build / typecheck gate: `npm run typecheck` (`tsc --noEmit`). There is **no separate lint tool** configured; typecheck is the static gate.
-- Tests: `npm test` runs compatibility policy, 247 focused Vitest regressions, and the small real Pi loader smoke. Use `npm run test:coverage` for V8 output and `npm run test:unit -- <path> -t <name>` for focus.
+- Tests: `npm test` runs compatibility policy, 253 focused Vitest regressions, and the small real Pi loader smoke. Use `npm run test:coverage` for V8 output and `npm run test:unit -- <path> -t <name>` for focus.
 - Running the "app": full end-to-end use (`pi`, `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. Offline behavior lives in focused `tests/` suites with isolated fixtures; `npm run test:loader` exercises the real Pi loader without live xAI access. Catalog fixtures live under `tests/fixtures/models-v2/`.
 - Any temporary demo script that imports deps must live inside the repo root (so it resolves `node_modules`), not `/tmp`.

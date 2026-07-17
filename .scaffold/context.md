@@ -1,25 +1,31 @@
-# Shared Agent Context — Issue #93
+# Shared Agent Context — Issue #78
 
-**Branch:** feature/issue-93-pi-0.80.10
-**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/93
+**Branch:** feature/issue-78-grok-protocol
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/78
+**Original baseline:** 579f965
+**Rebased baseline:** 0d51d0a
+**Reviewed upstream:** `xai-org/grok-build@b189869b7755d2b482969acf6c92da3ecfeffd36`
 
-## Baseline and release evidence
+## Evidence
 
-Pi 0.80.10 is the latest published release inside the existing `>=0.80.1 <0.81.0` peer range. Pi 0.80.8 introduced the unified `ModelRuntime` and current `CredentialStore` APIs, removed top-level `AuthStorage` as a public SDK surface, and added `readStoredCredential()` for one-off reads. Pi 0.80.9 and 0.80.10 primarily changed Kimi/xAI built-in catalogs and did not require provider transport changes here.
-
-Official releases:
-
-- https://github.com/earendil-works/pi/releases/tag/v0.80.8
-- https://github.com/earendil-works/pi/releases/tag/v0.80.9
-- https://github.com/earendil-works/pi/releases/tag/v0.80.10
+- Scout `wP:p3` audited upstream/client behavior and current runtime/tests.
+- Architect `wP:p2` produced the implementation handoff followed by the sole writer.
+- `compatibility/grok-build-wire-protocol.md` records the pinned route/header matrix, ownership decisions, and repeatable review procedure.
+- Issue #93 and PR #94 adopted exact Pi 0.80.10 while preserving the 0.80.1 minimum and bounded peer range.
 
 ## Decisions
 
-- Keep peers and minimum unchanged.
-- Set policy latest and both exact Pi dev dependencies to 0.80.10.
-- Use the current synchronous `readStoredCredential()` API when available and a direct synchronous JSON-only fallback on older supported hosts so absent startup reads never create credential storage.
-- Exercise canonical `ModelRuntime` plus `InMemoryCredentialStore` in current integration tests, with a runtime-detected legacy test path for the 0.80.1 packed boundary.
+- Centralize the route-aware contract and reserved-header scrub rather than patching callers independently.
+- Use package name/version for truthful attribution; track the reviewed Grok Build revision separately.
+- Keep Pi `sessionId` as conversation/session affinity when available; mint a shared fallback UUID and a fresh request UUID.
+- Omit agent/turn/deployment/user headers because Pi does not expose equivalent authoritative values across all flows.
+- Treat streaming SSE Accept as route-specific; keep direct Responses/media JSON-only.
+- Bound and classify transport errors without reflecting raw upstream bodies.
+- Record encrypted reasoning as the #79 follow-up; do not implement replay here.
+- Preserve Pi 0.80.10's `readStoredCredential()`/JSON-only legacy startup path and exact 0.80.1/0.80.10 matrices during rebase.
 
-## Validation
+## Validation focus
 
-The first clean packed 0.80.10 candidate run failed five tests because startup no longer saw expired Pi credentials through the removed export and the old integration test called the removed OAuth registry. After migration, full strict tests, coverage, loader smoke, typecheck, live registry/pack/unsupported checks, the clean 0.80.10 candidate, and exact packed 0.80.1/0.80.10 boundaries pass.
+- Prove contract-header precedence through Pi's final OpenAI Responses transport assembly.
+- Preserve catalog and OAuth bounded-body behavior.
+- Re-run the complete policy, pack, loader, typecheck, coverage, and exact-boundary gates after rebase.

@@ -1,28 +1,39 @@
-# Execution Progress — Issue #93
+# Execution Progress — Issue #78
 
-**Branch:** feature/issue-93-pi-0.80.10
-**Baseline:** 579f965
+**Branch:** feature/issue-78-grok-protocol
+**Original baseline:** 579f965
+**Rebased baseline:** 0d51d0a
 
 ## Completed
 
-- [x] Confirmed both Pi peers publish 0.80.10 inside the existing allowed range.
-- [x] Reviewed official v0.80.8, v0.80.9, and v0.80.10 release notes.
-- [x] Ran the clean packed 0.80.10 candidate matrix; it exposed the 0.80.8 credential-runtime migration in startup reads and integration tests.
-- [x] Updated startup credential discovery to prefer `readStoredCredential()` with a JSON-only Pi 0.80.1 fallback that never creates credential storage.
-- [x] Updated the credential-persistence integration test to use `ModelRuntime` and `InMemoryCredentialStore` on current Pi while retaining its legacy path.
-- [x] Focused credential and catalog-race regressions pass on Pi 0.80.10.
-- [x] Updated policy latest, exact dev dependencies, lockfile, README, CHANGELOG, AGENTS, assertion parity, and scaffold state.
-- [x] Full strict tests, coverage, loader smoke, typecheck, live registry/pack/unsupported checks, clean 0.80.10 candidate, and exact packed 0.80.1/0.80.10 boundaries pass.
-- [x] Retargeted issue #93 from the superseded 0.80.9 release to current Pi 0.80.10.
+- [x] Audited the pinned Grok Build revision and current runtime/tests.
+- [x] Added `extensions/xai/wire.ts` for truthful package identity, route-specific headers, reserved-header scrubbing, OAuth form headers, and bounded status-only errors.
+- [x] Applied the shared contract to streaming/direct Responses, catalog, browser/refresh/device OAuth, and direct media without changing pinned routes.
+- [x] Added SSE/direct, catalog, client-mode, OAuth form, unsupported-ID, media-boundary, body-redaction, and version-gate coverage.
+- [x] Added the pinned compatibility matrix/review procedure and documented the encrypted-reasoning handoff to #79.
+- [x] Opened draft PR #92 with the original reviewed implementation.
+- [x] Merged issue #93 compatibility work is available on main at 0d51d0a with exact Pi 0.80.1/0.80.10 policy.
 
-- [x] Independent final review reported CLEAN after the no-write startup regression was added and verified on both exact boundaries.
-- [x] Reproduced the first CI-only minimum failure under npm 11.6.2 and removed the legacy test's global OAuth-registry identity assumption; the exact 0.80.1 packed matrix now passes under CI's resolver.
+- [x] Rebased PR #92 onto merged PR #94/current main and reconciled tracked docs/state without dropping Pi 0.80.10 compatibility.
+- [x] Focused protocol/OAuth validation passed: 10 files / 110 tests.
+- [x] Strict full tests passed after review fixes: 29 files / 253 tests plus loader smoke and typecheck.
+- [x] Coverage passed at 83.57% statements, 75.31% branches, 86.07% functions, and 87.11% lines.
+- [x] Live policy/registry/pack/unsupported checks passed with an 87-file package.
+- [x] Exact packed Pi 0.80.1 and 0.80.10 matrices passed under CI's npm 11.6.2 resolver.
 
-## Delivery
+- [x] Independent review found and the sole writer fixed redirect replay exposure plus generic delegate affinity-header injection.
+- [x] Added concurrent-stream guard coverage proving pinned xAI redirects are rejected, unrelated fetches remain unchanged, and the global fetch surface is restored before terminal results resolve.
 
-- [x] Committed the reviewed implementation as `a74b9e3` (`chore: validate Pi 0.80.10 compatibility`).
-- [x] Pushed `feature/issue-93-pi-0.80.10` and opened PR #94: https://github.com/BlockedPath/pi-xai-oauth/pull/94
+- [x] Focused final independent review returned CLEAN with no blocker.
+
+- [x] Committed and force-pushed the rebased branch, refreshed PR #92, and marked it ready for review.
+- [x] Fresh GitHub policy and exact Pi 0.80.1/0.80.10 compatibility checks passed.
+
+## In progress
+
+- [ ] Merge PR #92 after final maintainer approval.
 
 ## Residual
 
-- No live xAI authentication or model request is part of this offline compatibility gate.
+- Encrypted reasoning request/response replay remains deferred to #79 by design.
+- No live xAI request is part of the deterministic compatibility gate.

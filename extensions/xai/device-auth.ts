@@ -1,6 +1,5 @@
 import {
   XAI_CLIENT_IDENTIFIER,
-  XAI_CLIENT_VERSION,
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS,
   XAI_OAUTH_DEVICE_GRANT_TYPE,
@@ -14,6 +13,7 @@ import {
   XAI_OAUTH_SCOPE,
   XAI_OAUTH_TOKEN_URL,
 } from "./constants";
+import { xaiOAuthFormHeaders, type XaiOAuthClientSurface } from "./wire";
 
 const MAX_DEVICE_CODE_LENGTH = 4096;
 const MAX_USER_CODE_LENGTH = 128;
@@ -44,7 +44,7 @@ export interface XaiDeviceAuthDependencies {
   now?: () => number;
   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   requestTimeoutMs?: number;
-  clientSurface?: "ui" | "cli" | "headless";
+  clientSurface?: XaiOAuthClientSurface;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -231,12 +231,7 @@ async function withPostFormResponse<T>(
       response = await awaitAbortable(
         (dependencies.fetchImpl ?? fetch)(url, {
           method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-Grok-Client-Version": XAI_CLIENT_VERSION,
-            "X-Grok-Client-Surface": dependencies.clientSurface ?? "ui",
-          },
+          headers: xaiOAuthFormHeaders(dependencies.clientSurface ?? "ui"),
           body: new URLSearchParams(form).toString(),
           redirect: "error",
           signal: abort.signal,

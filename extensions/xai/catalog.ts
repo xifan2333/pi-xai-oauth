@@ -3,8 +3,6 @@ import { chmod, lstat, mkdir, open, readFile, rename, unlink } from "fs/promises
 import { dirname, join } from "path";
 import {
   XAI_CLI_MODELS_URL,
-  XAI_CLIENT_IDENTIFIER,
-  XAI_CLIENT_VERSION,
   XAI_MODEL_CATALOG_CACHE_SCHEMA,
   XAI_MODEL_CATALOG_FRESH_TTL_MS,
   XAI_MODEL_CATALOG_MAX_BYTES,
@@ -14,9 +12,9 @@ import {
 import {
   CURATED_FALLBACK_MODELS,
   knownXaiModelMetadata,
-  resolveXaiClientMode,
   type XaiCatalogModel,
 } from "./models";
+import { xaiCatalogHeaders } from "./wire";
 
 const MAX_CATALOG_ENTRIES = 256;
 const MAX_MODEL_ID_LENGTH = 128;
@@ -595,14 +593,7 @@ export async function fetchXaiModelCatalog(
     try {
       response = await fetchImpl(XAI_CLI_MODELS_URL, {
         method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${credential.access}`,
-          "X-XAI-Token-Auth": "xai-grok-cli",
-          "x-grok-client-identifier": XAI_CLIENT_IDENTIFIER,
-          "x-grok-client-version": XAI_CLIENT_VERSION,
-          "x-grok-client-mode": resolveXaiClientMode(),
-        },
+        headers: xaiCatalogHeaders(credential.access),
         redirect: "error",
         signal: abort.signal,
       });

@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import packageMetadata from "../../package.json";
 import {
   createXaiOAuth,
   XAI_BROWSER_LOGIN_METHOD,
 } from "../../extensions/xai/oauth";
 import { discovery, OIDC_PUBLIC_JWK, signIdToken } from "../fixtures/oauth";
 import { jsonResponse } from "../fixtures/http";
+import { XAI_USER_AGENT } from "../../extensions/xai/constants";
+import { resolveXaiOAuthClientSurface } from "../../extensions/xai/wire";
 
 const nativeFetch = globalThis.fetch;
 const EXPECTED_SCOPES = [
@@ -21,6 +24,7 @@ const EXPECTED_SCOPES = [
 interface BrowserFixture {
   authUrl?: URL;
   exchanges: Record<string, string>[];
+  exchangeHeaders: Headers[];
   fetchMock: ReturnType<typeof vi.fn>;
   lastIdToken?: string;
 }
@@ -29,7 +33,11 @@ function browserFixture(
   tokenStatus = 200,
   tokenBody: Record<string, unknown> = {},
 ) {
-  const fixture: BrowserFixture = { exchanges: [], fetchMock: vi.fn() };
+  const fixture: BrowserFixture = {
+    exchanges: [],
+    exchangeHeaders: [],
+    fetchMock: vi.fn(),
+  };
   fixture.fetchMock.mockImplementation(
     async (input: any, init: RequestInit = {}) => {
       const url = String(input);
@@ -44,6 +52,7 @@ function browserFixture(
       }
       if (url.endsWith("oauth2/token")) {
         expect(init).toMatchObject({ method: "POST", redirect: "error" });
+        fixture.exchangeHeaders.push(new Headers(init.headers));
         const body = Object.fromEntries(new URLSearchParams(String(init.body)));
         fixture.exchanges.push(body);
         if (tokenStatus !== 200) return jsonResponse(tokenBody, tokenStatus);
@@ -138,6 +147,18 @@ describe("browser OAuth state and manual callbacks", () => {
       EXPECTED_SCOPES,
     );
     expect(fixture.exchanges.map(({ code }) => code)).toEqual(["good"]);
+    expect(fixture.exchangeHeaders[0].get("Accept")).toBe("application/json");
+    expect(fixture.exchangeHeaders[0].get("Content-Type")).toBe(
+      "application/x-www-form-urlencoded",
+    );
+    expect(fixture.exchangeHeaders[0].get("User-Agent")).toBe(XAI_USER_AGENT);
+    expect(fixture.exchangeHeaders[0].get("X-Grok-Client-Version")).toBe(
+      packageMetadata.version,
+    );
+    expect(fixture.exchangeHeaders[0].get("X-Grok-Client-Surface")).toBe(
+      resolveXaiOAuthClientSurface(),
+    );
+    expect(fixture.exchangeHeaders[0].get("X-XAI-Token-Auth")).toBeNull();
   });
 
   it("accepts a complete matching-state callback URL pasted manually and retains its exact ID token", async () => {

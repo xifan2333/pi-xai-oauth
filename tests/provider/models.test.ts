@@ -9,6 +9,7 @@ import {
   setXaiRuntimeModels,
   xaiProxyRequestHeaders,
 } from "../../extensions/xai/models";
+import { xaiCatalogHeaders } from "../../extensions/xai/wire";
 
 afterEach(() => setXaiRuntimeModels(CURATED_FALLBACK_MODELS));
 describe("model compatibility metadata", () => {
@@ -73,4 +74,20 @@ describe("model compatibility metadata", () => {
       "x-grok-session-id": "s",
     });
   });
+  it.each(["interactive", "headless"] as const)(
+    "keeps %s mode consistent across Responses and catalog contracts",
+    (clientMode) => {
+      const responses = xaiProxyRequestHeaders(
+        "grok-4.5",
+        "oauth-session",
+        { conversationId: "c", requestId: "r", sessionId: "s" },
+        { clientMode, streaming: true },
+      );
+      const catalog = xaiCatalogHeaders("token", clientMode);
+      expect(responses["x-grok-client-mode"]).toBe(clientMode);
+      expect(catalog["x-grok-client-mode"]).toBe(clientMode);
+      expect(responses.Accept).toBe("text/event-stream");
+      expect(catalog.Accept).toBe("application/json");
+    },
+  );
 });
