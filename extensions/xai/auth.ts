@@ -1,5 +1,6 @@
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
-import { AuthStorage, getAgentDir } from "@earendil-works/pi-coding-agent";
+import * as PiCodingAgent from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -14,6 +15,18 @@ import {
 import { getXaiRuntimeModels } from "./models";
 import { ensureFreshXaiCredentials } from "./oauth";
 import type { XaiCredential } from "./routing";
+
+function readPiStoredCredential(providerId: string, authPath: string): any {
+  const codingAgent = PiCodingAgent as any;
+  if (typeof codingAgent.readStoredCredential === "function") {
+    return codingAgent.readStoredCredential(providerId, authPath);
+  }
+  try {
+    return JSON.parse(readFileSync(authPath, "utf8"))?.[providerId];
+  } catch {
+    return undefined;
+  }
+}
 
 function parseExpiry(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -82,7 +95,7 @@ export function getGrokAuthCredentials(): OAuthCredentials | null {
 
 export interface StartupXaiCatalogAuth {
   credential: { access: string } | null;
-  /** True when pi has an expired stored OAuth token that session_start should refresh under AuthStorage's lock. */
+  /** True when pi has an expired stored OAuth token that session_start should refresh under pi's credential lock. */
   needsRegistryRefresh: boolean;
   credentialChangedAt?: number;
 }
@@ -98,7 +111,7 @@ export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAut
   let credentialChangedAt: number | undefined;
   try {
     const authPath = join(getAgentDir(), "auth.json");
-    const stored = AuthStorage.create(authPath).get(XAI_PROVIDER_ID);
+    const stored = readPiStoredCredential(XAI_PROVIDER_ID, authPath);
     credentialChangedAt = existsSync(authPath) ? statSync(authPath).mtimeMs : undefined;
     if (stored?.type === "oauth" && typeof stored.access === "string" && stored.access) {
       if (typeof stored.expires === "number" && stored.expires > now) {

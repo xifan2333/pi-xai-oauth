@@ -1,33 +1,25 @@
-# Shared Agent Context — Issue #68
+# Shared Agent Context — Issue #93
 
-**Branch:** feature/issue-68-vitest-suites
-**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/68
+**Branch:** feature/issue-93-pi-0.80.10
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/93
 
-## Baseline
+## Baseline and release evidence
 
-Current `main` has a 2,622-line `scripts/verify-extension.js` plus device, catalog, setup, compatibility, and packed-matrix Node verifiers. Strict baseline tests and TypeScript pass. The direct `assert.*` inventory is 549 calls across all verifier/matrix scripts.
+Pi 0.80.10 is the latest published release inside the existing `>=0.80.1 <0.81.0` peer range. Pi 0.80.8 introduced the unified `ModelRuntime` and current `CredentialStore` APIs, removed top-level `AuthStorage` as a public SDK surface, and added `readStoredCredential()` for one-off reads. Pi 0.80.9 and 0.80.10 primarily changed Kimi/xAI built-in catalogs and did not require provider transport changes here.
 
-## Evidence
+Official releases:
 
-- Full destination map: `docs/testing/assertion-parity.md`
-- Delegated issue/Vitest research: `.pi-subagents/artifacts/outputs/8164762c-6f0c-4034-a868-6e3680f458d4/research/issue-vitest.md`
-- Assertion inventory: `.pi-subagents/artifacts/outputs/8164762c-6f0c-4034-a868-6e3680f458d4/research/assertion-inventory.md`
-- Implementation context: `.pi-subagents/artifacts/outputs/8164762c-6f0c-4034-a868-6e3680f458d4/research/implementation-context.md`
+- https://github.com/earendil-works/pi/releases/tag/v0.80.8
+- https://github.com/earendil-works/pi/releases/tag/v0.80.9
+- https://github.com/earendil-works/pi/releases/tag/v0.80.10
 
 ## Decisions
 
-- Use exact matching Vitest and `@vitest/coverage-v8` releases supported by Node 24.
-- Keep explicit Vitest imports and a Node environment.
-- Typecheck test/config/fixture TypeScript separately from runtime execution.
-- Keep package/policy/registry/resolver/matrix checks as Node scripts.
-- Use focused Vitest behavior suites plus `scripts/verify-extension-loader.mjs`, which resolves Pi's ESM main then imports its real `dist/core/extensions/loader.js` by file URL on both supported boundaries.
-- Final measured V8 baseline is 83.37 statements / 75.01 branches / 85.79 functions / 86.93 lines; configured floors are 82/74/84/85.
-- Vitest disables file parallelism for real callback reliability and globally masks inherited `PI_CODING_AGENT_DIR`; the loader smoke also owns/restores its agent directory.
+- Keep peers and minimum unchanged.
+- Set policy latest and both exact Pi dev dependencies to 0.80.10.
+- Use the current synchronous `readStoredCredential()` API when available and a direct synchronous JSON-only fallback on older supported hosts so absent startup reads never create credential storage.
+- Exercise canonical `ModelRuntime` plus `InMemoryCredentialStore` in current integration tests, with a runtime-detected legacy test path for the 0.80.1 packed boundary.
 
-## Main risks
+## Validation
 
-Global fetch/timers/HOME/cwd, loopback callback ports, mutable runtime models, tool WeakMap/WeakSet state, response transport captured at import time, cache write queues, and real image codec behavior are isolated by the suite. Pi 0.80.8 is newly published inside the allowed range; the intentionally unchanged 0.80.1/0.80.7 policy now triggers the external registry-drift gate pending a separate compatibility review.
-
-## Delivery
-
-Reviewed implementation commit `7adfb88` was pushed on `feature/issue-68-vitest-suites`; unmerged PR #87 targets `main` and closes issue #68: https://github.com/BlockedPath/pi-xai-oauth/pull/87
+The first clean packed 0.80.10 candidate run failed five tests because startup no longer saw expired Pi credentials through the removed export and the old integration test called the removed OAuth registry. After migration, full strict tests, coverage, loader smoke, typecheck, live registry/pack/unsupported checks, the clean 0.80.10 candidate, and exact packed 0.80.1/0.80.10 boundaries pass.

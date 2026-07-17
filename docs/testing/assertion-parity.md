@@ -53,7 +53,7 @@ replacement tests pass alongside the legacy verifier.
 | `verify-device-auth.js:353-562` | pre/in-flight/wait/fetch cancellation, late-token expiry, fetch/body timeout aborts, synchronous abort races, reader cancellation/listener removal, timeout disposal after success | `tests/oauth/device-cancellation.test.ts` | [x] |
 | `verify-device-auth.js:564-609` | desktop/WSL/SSH/container/headless detection, browser-first selector labels, unsupported method rejection | `tests/oauth/device-login.test.ts` | [x] |
 | `verify-device-auth.js:612-692` | device login avoids browser/manual input, safe UI/progress, initial wait, credentials without ID token, common post-login hook, cancellation during handoff | `tests/oauth/device-login.test.ts` | [x] |
-| `verify-device-auth.js:694-753` | real Pi `AuthStorage` preserves old credentials on cancellation and persists successful login | `tests/oauth/auth-storage.integration.test.ts` | [x] |
+| `verify-device-auth.js:694-753` | real Pi credential runtime preserves old credentials on cancellation and persists successful login (`ModelRuntime`/`InMemoryCredentialStore` on current Pi, legacy `AuthStorage` on the minimum boundary) | `tests/oauth/auth-storage.integration.test.ts` | [x] |
 | `verify-device-auth.js:755-783` | refresh rotation/preservation, pinned endpoint, no scope renegotiation | `tests/oauth/refresh.test.ts` | [x] |
 
 ### Provider registration, catalog lifecycle, and routing — current extension verifier
@@ -147,7 +147,7 @@ replacement tests pass alongside the legacy verifier.
 | `verify-compatibility.js:161-213` | one tarball, packed identity/peers/required/forbidden paths | retain `pack` mode; add Vitest config/tests/fixtures/loader smoke to required list | [x] |
 | `verify-compatibility.js:215-269` | unsupported strict failure and forced warning diagnostics | retain `unsupported` mode | [x] |
 | `verify-compatibility.js:271-291` | matrix output and command dispatch | retain plain-Node CLI | [x] |
-| `run-compatibility-matrix.js:34-114` | alias/exact parsing, checked endpoint restriction, one tarball, exact installed Pi pair, packed `npm test` and typecheck | retain clean packed matrix at 0.80.1/0.80.7 | [x] |
+| `run-compatibility-matrix.js:34-114` | alias/exact parsing, checked endpoint restriction, one tarball, exact installed Pi pair, packed `npm test` and typecheck | retain clean packed matrix at 0.80.1/0.80.10 | [x] |
 
 ## Isolation checklist
 

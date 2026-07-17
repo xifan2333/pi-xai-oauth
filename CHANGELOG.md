@@ -15,7 +15,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
 - Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
 - Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
-- Added packed-package compatibility validation at exact Pi 0.80.1 and 0.80.7 boundaries, with requested/resolved version reporting, range and registry-drift checks, packed-manifest inspection, and unsupported-peer install diagnostics.
+- Added packed-package compatibility validation at exact Pi 0.80.1 and 0.80.10 boundaries, with requested/resolved version reporting, range and registry-drift checks, packed-manifest inspection, and unsupported-peer install diagnostics.
 - Added PR/main CI that derives its exact compatibility matrix from the checked-in Pi version policy instead of reusing the development lockfile version.
 
 ### Changed
@@ -29,11 +29,14 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Made the authenticated account catalog authoritative for OAuth model additions and removals; known static metadata now enriches returned IDs without advertising unreturned models.
 - Made successful login force-refresh and immediately replace the model catalog, while `/reload` follows the documented cache TTL.
 - Kept browser authorization-code + PKCE as the desktop default while recommending device login in remote/headless selector copy without automatically changing the selected method.
-- Replaced wildcard Pi peers with the aligned, bounded `>=0.80.1 <0.81.0` range and pinned development metadata exactly to the latest tested boundary, 0.80.7.
+- Replaced wildcard Pi peers with the aligned, bounded `>=0.80.1 <0.81.0` range and pinned development metadata exactly to the latest tested boundary, 0.80.10.
+- Reviewed Pi 0.80.8 through 0.80.10 and adopted 0.80.10 after clean packed candidate validation, while preserving the 0.80.1 minimum and existing peer range.
 - Documented the deliberate candidate-test and review process required before widening support to another pre-1.0 Pi line.
 
 ### Fixed
 
+- Kept startup credential discovery compatible with Pi 0.80.1 and Pi 0.80.10 by using the new read-only `readStoredCredential()` API when available and a synchronous JSON-only fallback on older supported hosts, without creating credential storage.
+- Migrated the real Pi credential-persistence integration test to exercise `ModelRuntime` and `InMemoryCredentialStore` on current Pi while retaining the legacy boundary path.
 - Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.
