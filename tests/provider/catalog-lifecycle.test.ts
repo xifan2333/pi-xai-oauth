@@ -27,7 +27,7 @@ async function loadAndLogin(catalog: any) {
   let authUrl: URL | undefined;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: any, init: RequestInit = {}) => {
+    vi.fn(async (input: any) => {
       const url = String(input);
       if (url.endsWith("openid-configuration"))
         return jsonResponse(discovery());
@@ -43,7 +43,7 @@ async function loadAndLogin(catalog: any) {
           }),
         });
       if (url.endsWith("models-v2")) return jsonResponse(catalog);
-      throw new Error(`Unexpected request origin ${new URL(url).origin}`);
+      throw new Error(`Unexpected request origin ${URL.parse(url)?.origin ?? "invalid URL"}`);
     }),
   );
   await extension(h.api);
@@ -55,10 +55,14 @@ async function loadAndLogin(catalog: any) {
     onSelect: async () => "browser",
     onDeviceCode: () => {},
     onAuth(auth: any) {
-      authUrl = new URL(auth.url);
-      const callback = new URL(authUrl.searchParams.get("redirect_uri")!);
+      const parsedAuthUrl = URL.parse(auth.url);
+      const redirectUri = parsedAuthUrl?.searchParams.get("redirect_uri");
+      const callback = redirectUri ? URL.parse(redirectUri) : null;
+      const state = parsedAuthUrl?.searchParams.get("state");
+      if (!parsedAuthUrl || !callback || !state) throw new Error("Invalid test authorization URL");
+      authUrl = parsedAuthUrl;
       callback.searchParams.set("code", "login-code");
-      callback.searchParams.set("state", authUrl.searchParams.get("state")!);
+      callback.searchParams.set("state", state);
       manualCallback = callback.toString();
     },
     onManualCodeInput: async () => manualCallback,
@@ -86,7 +90,8 @@ describe.sequential("authenticated provider catalog lifecycle", () => {
     expect(h.providers.get("xai-auth").models.map(({ id }: any) => id)).toEqual([
       "grok-4.5",
       "new-entitled",
-      // Known aliases of entitled grok-4.5 only — not invented families.
+      // Known aliases and proven OAuth routes of entitled grok-4.5 only — not invented families.
+      "grok-4.3",
       "grok-4.5-latest",
       "grok-build-latest",
       "grok-composer-2.5-fast",

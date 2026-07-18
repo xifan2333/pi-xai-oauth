@@ -33,7 +33,7 @@ pi --model grok-4.5:high "Review this architecture for failure modes"
 pi --model grok-4.5:low "Quick status check"   # fast mode
 ```
 
-This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.). Models such as Grok Build, Composer, Grok 4.3, and Grok 4.20 appear only when xAI returns them for the authenticated account.
+This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom xAI tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.). The normalized cache remains exact; registration may additionally expose narrowly verified compatibility routes such as Grok 4.3 and Composer only while their required authenticated entitlement source is present.
 
 > **Latest release:** `pi-xai-oauth` **1.3.5** keeps the highlighted `/xai-tools` row in place after toggling, so multiple tools can be configured without repeatedly navigating from the top. Version 1.3.4 made every network-backed xAI helper an explicit, session-scoped opt-in through `/xai-tools`, including paid image generation, and made disabled tools fail before OAuth credential lookup or network access. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
@@ -76,10 +76,10 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Reuses existing credentials** — auto-detects `~/.grok/auth.json` from the official Grok CLI
 - **Grok 4.5 flagship (default)** — xAI's newest model for coding, agentic tasks, and knowledge work; 500K context, text+image input, high reasoning by default
 - **Grok 4.5 fast mode** — same model with `low` reasoning effort (`/think low` or `grok-4.5:low`); not a separate model ID
-- **Long-context metadata when entitled** — known Grok 4.3 behavior is preserved when xAI returns it, with authenticated limits taking precedence
+- **Grok 4.3 OAuth compatibility** — advertises the independently verified `grok-4.3` request route only when `grok-4.5` is entitled, retaining authenticated input evidence and conservative limits
 - **Authenticated model catalog** — fetches the OAuth-visible `/models-v2` list from the official CLI proxy, so additions and removals track the signed-in account
 - **Explicit subscription usage** — `/xai-usage` performs a bounded, identity-first lookup against the revision-pinned unofficial Grok billing surface without retaining account identity
-- **Coding models when entitled** — Grok Build, Composer, and other models appear only when xAI includes them in the account catalog
+- **Coding models when entitled** — directly advertised Grok Build variants track the account catalog; the Composer compatibility alias appears only while its verified `grok-4.5` entitlement source is present
 - **Reasoning support** — parses supplied reasoning capability and thinking levels while preserving known model compatibility
 - **Bounded last-known-good cache** — avoids routine startup delay and falls back safely when discovery is offline or unavailable
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
@@ -263,14 +263,14 @@ Enabling status performs one immediate lookup. Later refreshes are event-driven 
 
 ### Switching Models
 
-`/model` shows the current authenticated account's xAI catalog. A successful refresh is authoritative: newly returned models appear, removed models disappear, hidden entries are omitted, and known API-key-only models such as `grok-build-0.1` are never advertised through `xai-auth`.
+`/model` shows the current authenticated account's xAI catalog plus narrowly scoped compatibility routes whose entitlement source is present. A successful refresh remains authoritative: newly returned entitlement sources appear, removed sources and their compatibility routes disappear, hidden entries are omitted, and known API-key-only models such as `grok-build-0.1` are never advertised through `xai-auth`.
 
 Common catalog entries include:
 
 | Model ID | Description |
 |----------|-------------|
 | `grok-4.5` | **Default and curated offline fallback.** xAI flagship; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
-| `grok-4.3` | When entitled: full reasoning, with limits taken from the authenticated catalog. |
+| `grok-4.3` | OAuth-compatible request model when `grok-4.5` is entitled; keeps authenticated input evidence and conservative catalog-derived limits. |
 | `grok-build` | When entitled: Grok Build coding model (same Grok-native tools as other xai-auth models). |
 | `grok-composer-2.5-fast` | Compatibility alias of entitled `grok-4.5`; uses the same Grok-native pi tool adapters and no Cursor-named shims. |
 | `grok-4.20-0309-reasoning` | When entitled: Grok 4.20 with automatic reasoning. |
@@ -292,7 +292,7 @@ From the command line:
 
 ```bash
 pi --model grok-4.5 "Your prompt here"
-pi --model grok-4.3 "Use the 1M-context model"
+pi --model grok-4.3 "Use Grok 4.3"
 pi --model grok-build "Implement this feature"
 pi --model grok-composer-2.5-fast "Refactor this module"
 pi --model grok-4.20-0309-non-reasoning "Quick answer"
@@ -326,7 +326,7 @@ The cache stores only normalized model definitions, bounded input-capability pro
 
 ### Reasoning / Thinking Levels
 
-Grok 4.5, and Grok 4.3 when returned with reasoning support, expose configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
+Grok 4.5 and the entitlement-gated Grok 4.3 compatibility route expose configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
 
 ```
 /think high
@@ -348,7 +348,7 @@ pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 | **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
 | **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model actually returned and selected through the OAuth-only `xai-auth` catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. An entitled `grok-build` entry still receives its legacy Responses payload/header compatibility behavior, while every `xai-auth` model uses the same Grok-native local tool adapters. The Composer alias (`grok-composer-2.5-fast`) follows the Grok 4.5 payload path. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model selected through the OAuth-only `xai-auth` runtime catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. An entitled `grok-build` entry still receives its legacy Responses payload/header compatibility behavior, while every `xai-auth` model uses the same Grok-native local tool adapters. The Composer alias (`grok-composer-2.5-fast`) follows the Grok 4.5 payload path. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
 
 ### Grok 4.5 source notes
 
@@ -634,7 +634,7 @@ If you have the official Grok CLI installed and authenticated (`~/.grok/auth.jso
 
 ### "Why is a model missing or still cached?"
 
-The xAI model list is entitlement-aware. If a model is missing, the authenticated `/models-v2` response did not include a usable OAuth Responses entry, or discovery fell back to the curated offline catalog. Run `/login xai-auth` to force an account-bound refresh. `/reload` reloads the extension but intentionally reuses a cache younger than 15 minutes; after the TTL it performs a bounded refresh. Known renames such as `grok-composer-2.5-fast` and `grok-build-latest` are advertised only as aliases of an already-entitled canonical model (currently `grok-4.5`), so settings patterns keep matching without inventing unentitled catalog entries.
+The xAI model list is entitlement-aware. If a model is missing, the authenticated `/models-v2` response did not include a usable OAuth Responses entry or a required entitlement source, or discovery fell back to the curated offline catalog. Run `/login xai-auth` to force an account-bound refresh. `/reload` reloads the extension but intentionally reuses a cache younger than 15 minutes; after the TTL it performs a bounded refresh. Known renames such as `grok-composer-2.5-fast` and `grok-build-latest` are advertised only as aliases of an already-entitled canonical model. The distinct `grok-4.3` request route is likewise advertised only when its independently verified OAuth entitlement source (`grok-4.5`) is present; none of these compatibility entries are persisted into the exact catalog cache.
 
 A one-shot `pi --list-models` cannot refresh an already-expired pi-stored OAuth token before the model registry is bound. It can still use a fresh official Grok CLI bearer when available; otherwise it uses fresh cache or the curated fallback. Starting a normal session lets pi refresh its stored credential under the credential-store lock and then revalidate the catalog.
 

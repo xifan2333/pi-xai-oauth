@@ -48,7 +48,8 @@ try {
   assert.ok(modelIds.includes("grok-composer-2.5-fast"), "known aliases of entitled fallback models should be advertised");
   assert.ok(modelIds.includes("grok-build-latest"));
   assert.ok(modelIds.includes("grok-4.5-latest"));
-  assert.equal(modelIds.length, 4, "fallback should advertise grok-4.5 plus its known aliases only");
+  assert.ok(modelIds.includes("grok-4.3"), "proven OAuth routes of present entitlement sources should be advertised");
+  assert.equal(modelIds.length, 5, "fallback should advertise grok-4.5 plus bounded compatibility entries only");
   console.log("verify-extension-loader: ok");
 } finally {
   if (previousHome === undefined) delete process.env.HOME;
