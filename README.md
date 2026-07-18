@@ -314,6 +314,20 @@ The normalized cache stores only the final modalities and bounded provenance, ne
 
 See [Authenticated model input modalities](docs/model-input-modalities.md) for the redacted 2026-07-16 schema observation, pinned xAI source revision, exact precedence, malformed-field policy, and cache migration contract.
 
+#### Opt-in vision routing for explicit text-only entitlements
+
+If—and only if—the active model is an exact authenticated catalog member with validated text-only evidence, `/xai-tools enable vision-routing` can route current image input through a separate exact catalog model with validated text-and-image support. The vision model receives the images in one additional authenticated Responses request; the active model then receives a clearly labeled text description and no image data. Missing fields, curated metadata, aliases, compatibility slugs, and model names such as Composer never qualify either side.
+
+```text
+/xai-tools status
+/xai-tools enable vision-routing
+/xai-tools disable vision-routing
+```
+
+Eligible targets are ordered deterministically by normalized exact model ID. Routing is disabled by default, binds to the current source model, and resets on a new session, every model change, leaving xAI, login/account replacement, catalog replacement, or shutdown. Disabled or invalid routing retains the existing local text-only rejection and creates no additional request.
+
+Each routed turn may consume additional allowance, credits, and rate limits. Images are disclosed to the selected vision target, and its generated description becomes potentially sensitive session content supplied to the active model. The package creates no cross-request raw-image or description cache. Cancellation and catalog invalidation stop the remaining route; a failed description never falls back to sending or silently stripping the source image.
+
 ### Catalog refresh and cache policy
 
 The normalized, token-free last-known-good catalog is stored at:
@@ -426,9 +440,11 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 /xai-tools disable xai_web_search
 /xai-tools enable xai_generate_image
 /xai-tools enable xai_edit_image
+/xai-tools enable vision-routing
+/xai-tools disable vision-routing
 ```
 
-`web_search` appears in the picker for any active xAI model (still opt-in). `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
+`vision-routing` is transport policy rather than a callable model tool, so it never enters Pi's active-tool registry. It appears only when exact authenticated capability evidence supports a text-only source and a separate text-and-image target. `web_search` appears in the picker for any active xAI model (still opt-in). `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 

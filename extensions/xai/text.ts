@@ -1,3 +1,16 @@
+/** Extract only explicit text from an xAI/OpenAI Responses API response. */
+export function extractStrictResponsesText(data: any): string {
+  if (typeof data?.output_text === "string" && data.output_text) return data.output_text;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+  const chunks: string[] = [];
+  for (const item of data.output || []) {
+    for (const part of item?.content || []) {
+      if (typeof part?.text === "string" && (part.type === "output_text" || part.text)) chunks.push(part.text);
+    }
+  }
+  return chunks.join("");
+}
+
 /** Extract display text from an xAI/OpenAI Responses API response. */
 export function extractResponsesText(data: any): string {
   if (typeof data?.output_text === "string" && data.output_text) return data.output_text;

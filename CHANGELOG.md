@@ -6,6 +6,10 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+### Added
+
+- Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
+
 ## 1.3.6 - 2026-07-18
 
 ### Added

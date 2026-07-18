@@ -11,6 +11,11 @@ import {
   XAI_NETWORK_TOOL_NAMES,
 } from "../../extensions/xai/tools/model-scope";
 import {
+  KNOWN_XAI_MODEL_METADATA,
+  XaiModelInputProvenance,
+} from "../../extensions/xai/models";
+import { createXaiVisionRoutingController } from "../../extensions/xai/vision-routing";
+import {
   commandContext,
   createExtensionHarness,
 } from "../fixtures/extension-api";
@@ -28,6 +33,42 @@ function setup() {
 }
 
 describe("/xai-tools command", () => {
+  it("enables vision routing as transport policy without registering an active tool", async () => {
+    const h = createExtensionHarness();
+    const routing = createXaiVisionRoutingController();
+    const source = {
+      ...KNOWN_XAI_MODEL_METADATA[0],
+      id: "text-source",
+      input: ["text"] as ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    };
+    const target = {
+      ...KNOWN_XAI_MODEL_METADATA[0],
+      id: "vision-target",
+      input: ["text", "image"] as ["text", "image"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    };
+    routing.replaceCatalog([source, target]);
+    registerXaiToolsCommand(h.api, routing);
+    const notices: any[] = [];
+    const model = { ...TEST_MODEL, id: source.id, input: ["text"] };
+    const run = (args: string) =>
+      h.commands.get("xai-tools").handler(args, commandContext(model, notices));
+
+    await run("enable vision-routing");
+    expect(routing.status(model as any)).toMatchObject({
+      state: "enabled",
+      targetModelId: "vision-target",
+    });
+    expect(notices.at(-1).message).toMatch(/separate authenticated request.*usage or credits.*sensitive session content/s);
+    expect(h.getActiveTools()).not.toContain("vision-routing");
+    await run("status");
+    expect(notices.at(-1).message).toMatch(/vision-routing=enabled \(text-source -> vision-target\)/);
+    await run("disable vision-routing");
+    expect(routing.status(model as any).state).toBe("eligible");
+    expect(h.getActiveTools()).not.toContain("vision-routing");
+  });
+
   it("registers and enables/disables one eligible tool with cost warning", async () => {
     const { h, notices, run } = setup();
     expect(h.commands.has("xai-tools")).toBe(true);
