@@ -1,39 +1,32 @@
-# Execution Progress — PR #95
+# Execution Progress — Grok-native tool adapters
 
-**Branch:** `review/pr-95`
-**Current baseline:** `139ad7b`
-**Rebased head:** `3999b9b`
+**Branch:** `feature/grok-native-tools`
 
 ## Completed
 
-- [x] Confirmed PR #95 is open, draft, mergeable, and still at original remote head `a4e9746`.
-- [x] Completed a sealed Codex Security diff scan with four of four worklist receipts and all candidate phase receipts.
-- [x] Validated an intermediate-symlink/junction containment bypass with the exact helper and recursive `fs.rm` sink.
-- [x] Validated a Windows case-insensitive root-alias bypass with deterministic `path.win32` semantics and direct sink tracing.
-- [x] Confirmed the dedicated worktree was clean on `review/pr-95`.
-- [x] Created `safety/pr-95-pre-main-rebase` at `a4e9746`.
-- [x] Rebased the PR commit cleanly onto `origin/main=139ad7b` as `3999b9b`.
-- [x] Added failing helper and registered-tool regressions that reproduced root re-entry and outside-target deletion before the fix.
-- [x] Made destructive path validation asynchronous and canonicalized the workspace, target parent, and non-link target.
-- [x] Preserved final-symlink unlinking by validating its real parent without following the final link.
-- [x] Rechecked cancellation immediately before `fs.rm`.
-- [x] Added host-independent `path.win32` coverage for case-insensitive root identity after independent review found the Windows-only integration test was skipped on Ubuntu CI.
-- [x] Reran the bounded exploit harness: both malicious aliases were rejected and both workspace/outside sentinels survived.
-- [x] Passed focused tool/media tests, strict TypeScript, the full 404-test suite plus loader, V8 coverage, and exact Pi 0.80.1/0.80.10 packed boundaries.
-- [x] Passed the final reviewer-driven gate: 405 tests plus loader, strict TypeScript, 86.07% statement / 79.35% branch / 86.17% function / 89.88% line coverage, and clean packed Pi 0.80.1/0.80.10 matrices.
-- [x] Completed independent production and regression re-review with no remaining findings under the documented trusted-parent assumption.
-- [x] Committed the hardened implementation and regressions as `2892dc6`.
-- [x] Replaced the known original remote head `a4e9746` with an exact force-with-lease.
-- [x] Refreshed PR #95's title and description with the complete root cause, fix, regression, validation, and residual-assumption record.
-- [x] Verified there are no conversation comments, reviews, or unresolved review threads.
-- [x] Verified policy, Socket, and exact Pi 0.80.1/0.80.10 GitHub checks are green.
-- [x] Marked PR #95 ready for review without merging it.
+- [x] Added entitlement-aware known aliases without expanding the exact persisted catalog.
+- [x] Limited Grok CLI payload compatibility quirks to exact `grok-build`; tool activation is model-independent within `xai-auth`.
+- [x] Replaced Cursor-era adapter modules and tests with Grok-native equivalents.
+- [x] Implemented official model-facing names and argument normalization for local read, exact replace, list, grep, terminal, and opt-in xAI web search.
+- [x] Added integer validation, signed read offsets, PDF field validation with explicit unsupported execution, CRLF/BOM-preserving exact replacement, and exact `allowed_domains` preservation.
+- [x] Added physical workspace containment and bounded local grep behavior, including multiline and hidden output modes.
+- [x] Rejected unsupported managed background terminal calls; retained Grok millisecond timeout semantics while converting to pi seconds.
+- [x] Registered all adapters under private `xai_grok_*` names to avoid extension registry collisions.
+- [x] Added request-scoped public exposure and streamed-call internalization for all Grok-native tools.
+- [x] Removed external public-tool shadow/restoration state; unrelated extension activation now remains untouched.
+- [x] Updated focused tests, loader smoke expectations, README, and AGENTS architecture wording.
+- [x] Passed strict TypeScript, 412 unit tests, loader smoke, V8 coverage floors, `git diff --check`, and exact packed Pi 0.80.1/0.80.10 compatibility boundaries.
+- [x] Added worker-isolated grep matching, mixed-line-ending/BOM replacement regressions, official negative-offset edge coverage, and concurrent streamed route-isolation coverage.
+- [x] Completed fresh independent review with no blocker/high correctness or security findings.
+- [x] Verified live offline `/reload` with `xai-auth/grok-4.5` while `pi-web-access` and the local xAI extension were both loaded; pi reported a successful reload without registration collisions.
 
-## Delivery
+## In progress
 
-- [x] PR #95 is ready and unmerged: https://github.com/BlockedPath/pi-xai-oauth/pull/95
+- [ ] Commit the reviewed branch without `.claude/` and open/update the PR.
 
-## Residual
+## Residual / intentional adaptations
 
-- No live xAI request or interactive OAuth flow is relevant to this local filesystem boundary.
-- Portable Node offers no descriptor-relative recursive delete primitive, so hostile concurrent replacement of an already-validated parent remains a residual trusted-parent assumption.
+- Pi does not expose Grok's managed background task lifecycle, so `background: true` fails closed.
+- Pi's text reader cannot render PDF pages, so PDF `read_file` calls fail with guidance instead of pretending support.
+- Local grep uses a conservative workspace-only implementation and bounded file-type subset rather than spawning the full Grok ripgrep environment.
+- `.claude/` is unrelated untracked state and must not be committed.

@@ -322,11 +322,12 @@ export function normalizedXaiModelId(modelId: string): string {
 }
 
 /**
- * Return true for models that still need Cursor/Grok CLI tool-name shims.
+ * Return true when a model should use Grok CLI Responses payload quirks
+ * (strip mid-stream system/reasoning replay).
  *
- * Composer is treated as a Grok 4.5 alias and uses pi's normal tools. Only
- * an explicitly entitled `grok-build` catalog entry keeps the legacy Cursor
- * shim surface.
+ * Filesystem tools now use Grok-native names for every xai-auth model.
+ * This flag only gates payload rewriting for the legacy entitled `grok-build`
+ * catalog entry.
  */
 export function isGrokCliCompatibilityModel(modelId: string): boolean {
   return normalizedXaiModelId(modelId) === "grok-build";

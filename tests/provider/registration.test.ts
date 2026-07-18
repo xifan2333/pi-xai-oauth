@@ -41,7 +41,7 @@ describe("provider registration", () => {
       cost: { input: 2, cacheRead: 0.5, output: 6 },
       thinkingLevelMap: { off: null },
     });
-    expect(harness.tools.size).toBe(20);
+    expect(harness.tools.size).toBe(16);
     expect(harness.tools.has("xai_edit_image")).toBe(true);
     expect(harness.commands.has("xai-tools")).toBe(true);
     expect(harness.commands.has("xai-usage")).toBe(true);
@@ -161,18 +161,19 @@ describe("provider registration", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await harness.handlers.get("model_select")?.(
-      { model: { ...TEST_MODEL, id: "grok-build" } },
-      { model: { ...TEST_MODEL, id: "grok-build" } },
+      { model: { ...TEST_MODEL, id: "grok-4.5" } },
+      { model: { ...TEST_MODEL, id: "grok-4.5" } },
     );
-    expect(harness.getActiveTools()).toContain("Grep");
-    expect(harness.getActiveTools()).not.toContain("WebSearch");
+    expect(harness.getActiveTools()).toContain("xai_grok_grep");
+    expect(harness.getActiveTools()).not.toContain("web_search");
 
     harness.setActiveTools([
       ...harness.getActiveTools(),
       ...XAI_NETWORK_TOOL_NAMES,
     ]);
     await harness.handlers.get("session_start")?.({}, { model: TEST_MODEL });
-    expect(harness.getActiveTools()).not.toContain("Grep");
+    // Local Grok-native tools stay for xai-auth; network tools reset.
+    expect(harness.getActiveTools()).toContain("xai_grok_grep");
     expect(
       XAI_NETWORK_TOOL_NAMES.every(
         (name) => !harness.getActiveTools().includes(name),
@@ -180,15 +181,15 @@ describe("provider registration", () => {
     ).toBe(true);
 
     await harness.handlers.get("model_select")?.(
-      { model: { ...TEST_MODEL, id: "grok-build" } },
-      { model: { ...TEST_MODEL, id: "grok-build" } },
+      { model: { ...TEST_MODEL, id: "grok-4.5" } },
+      { model: { ...TEST_MODEL, id: "grok-4.5" } },
     );
     await harness.handlers.get("before_agent_start")?.(
       {},
-      { model: { ...TEST_MODEL, id: "grok-build" } },
+      { model: { ...TEST_MODEL, id: "grok-4.5" } },
     );
-    expect(harness.getActiveTools()).toContain("Grep");
-    expect(harness.getActiveTools()).not.toContain("WebSearch");
+    expect(harness.getActiveTools()).toContain("xai_grok_grep");
+    expect(harness.getActiveTools()).not.toContain("web_search");
 
     harness.setActiveTools([
       ...harness.getActiveTools(),
@@ -228,7 +229,7 @@ describe("provider registration", () => {
       { model: { provider: "anthropic", id: "claude" } },
       { model: { provider: "anthropic", id: "claude" } },
     );
-    expect(harness.getActiveTools()).not.toContain("Grep");
+    expect(harness.getActiveTools()).not.toContain("xai_grok_grep");
     expect(
       XAI_NETWORK_TOOL_NAMES.every(
         (name) => !harness.getActiveTools().includes(name),

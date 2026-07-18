@@ -76,7 +76,7 @@ pi-xai-oauth/
 │       ├── image-edit.ts # Bounded pinned image-edit orchestration
 │       ├── media/        # Reusable strict media/path/compression/storage primitives
 │       ├── usage.ts      # Explicit bounded identity-first subscription usage command/status
-│       └── tools/        # Custom xAI tools + Cursor/Grok CLI shims
+│       └── tools/        # Custom xAI tools + collision-free Grok-native adapters
 ├── compatibility/
 │   ├── pi-versions.json # Peer range plus exact minimum/latest matrix policy
 │   └── grok-build-wire-protocol.md # Pinned xAI route/header review procedure

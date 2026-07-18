@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+  XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+} from "../../extensions/xai/constants";
 import { registerXaiToolsCommand } from "../../extensions/xai/tools/commands";
 import { registerCustomXaiTools } from "../../extensions/xai/tools/custom-tools";
 import {
@@ -11,7 +15,6 @@ import {
   createExtensionHarness,
 } from "../fixtures/extension-api";
 import { TEST_MODEL } from "../fixtures/models";
-const build = { ...TEST_MODEL, id: "grok-build" } as any;
 
 function setup() {
   const h = createExtensionHarness();
@@ -57,23 +60,22 @@ describe("/xai-tools command", () => {
   it("reports every tool status and eligibility", async () => {
     const { notices, run } = setup();
     await run("status");
-    for (const name of XAI_NETWORK_TOOL_NAMES)
+    for (const name of XAI_NETWORK_TOOL_NAMES) {
+      const displayName = name === XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME
+        ? XAI_GROK_NATIVE_WEB_SEARCH_NAME
+        : name;
       expect(notices.at(-1).message).toMatch(
-        new RegExp(`${name}=(?:enabled|disabled|unavailable)`),
+        new RegExp(`${displayName}=(?:enabled|disabled)`),
       );
+    }
   });
-  it("rejects paid tools for non-xAI models and WebSearch for standard Grok", async () => {
+  it("rejects paid tools for non-xAI models and allows web_search for xAI models", async () => {
     const { h, notices, run } = setup();
     await run("enable xai_x_search", { provider: "anthropic", id: "claude" });
     expect(isXaiNetworkToolActive(h.api, "xai_x_search")).toBe(false);
     expect(notices.at(-1).message).toMatch(/Select an xAI\/Grok model/);
-    await run("enable WebSearch");
-    expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(false);
-    expect(notices.at(-1).message).toMatch(
-      /only with an entitled xAI Grok Build model/,
-    );
-    await run("enable WebSearch", build);
-    expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(true);
+    await run("enable web_search");
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
   });
   it("fails closed when registry reads or writes fail", async () => {
     const { h, notices, run } = setup();
@@ -205,18 +207,19 @@ describe("/xai-tools command", () => {
       },
     });
     await h.commands.get("xai-tools").handler("", ctx);
-    expect(selected[0]).toMatch(/xai_critique/);
+    // Full catalog includes web_search for every xAI model; page-up wraps to the last entry.
+    expect(selected[0]).toMatch(/web_search/);
     expect(selected[1]).toMatch(/\[ \] xai_generate_image/);
     expect(selected[2]).toMatch(/\[x\] xai_generate_image/);
     expect(closed).toBe(true);
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
   });
 
-  it("wraps Page Up and Page Down across the expanded Grok Build tool catalog", async () => {
+  it("wraps Page Up and Page Down across the full xAI tool catalog", async () => {
     const { h, notices } = setup();
     let afterPageUp = "";
     let afterPageDown = "";
-    const ctx = commandContext(build, notices, {
+    const ctx = commandContext(TEST_MODEL, notices, {
       ui: {
         notify(message: string, type?: string) {
           notices.push({ message, type });
