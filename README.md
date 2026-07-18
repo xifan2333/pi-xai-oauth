@@ -175,7 +175,15 @@ The exclusive `<0.81.0` upper bound is deliberate. Pi is pre-1.0, so a new minor
 
 Older `pi-xai-oauth` 1.2.4 builds supported Pi 0.79.8's then-current Responses guard. Current code uses the Pi 0.80 compat dispatcher after the 1.3.2 export migration and 1.3.3 loader-resolution fix, so that historical statement is not the current minimum.
 
-The xAI transport contract is tracked separately from Pi package compatibility. See [Grok Build wire-protocol compatibility](compatibility/grok-build-wire-protocol.md) for the pinned upstream revision, route/header matrix, identity and ID-ownership policy, safe gate errors, and repeatable review procedure. Encrypted reasoning replay is recorded there but remains deferred to issue #79.
+The xAI transport contract is tracked separately from Pi package compatibility. See [Grok Build wire-protocol compatibility](compatibility/grok-build-wire-protocol.md) for the pinned upstream revision, route/header matrix, identity and ID-ownership policy, encrypted-reasoning replay contract, safe errors, and repeatable review procedure.
+
+### Encrypted reasoning replay
+
+On the pinned OAuth Responses route, requests default an absent `store` to `false` and request `reasoning.encrypted_content`. Pi retains completed reasoning output items as opaque state and replays them inline only when the provider, API, and exact model still match. Switching targets drops that replay; compaction may intentionally replace older active context.
+
+`store: false` disables server-side response storage, but it does **not** mean no local sensitive state. Complete encrypted reasoning items are stored in ordinary Pi session JSONL under Pi's normal permissions and retention. This package does not separately encrypt that file, copy reasoning into another cache, or protect it from the user or trusted local extensions.
+
+If xAI reports that encrypted reasoning is incompatible with the selected model, the request is not retried automatically. Start a clean session or turn and keep the same xAI model for subsequent replay.
 
 ---
 

@@ -37,6 +37,9 @@ const APPROVED_PROXY_HEADER_NAMES = new Set([
 const VERSION_GATE_STATUSES = new Set([400, 401, 403, 426]);
 const VERSION_GATE_PATTERN =
   /\b(?:client[-_ ]?version|minimum[-_ ]?version|outdated[-_ ]?client|unsupported[-_ ]?client|update[-_ ]?required|version[-_ ]?gate)\b/i;
+const ENCRYPTED_CONTENT_MISMATCH_PATTERN = /encrypted_content/;
+const ENCRYPTED_CONTENT_MISMATCH_MESSAGE =
+  "xAI could not replay encrypted reasoning for this model. Start a clean session or turn using the same xAI model.";
 
 export type XaiClientMode = "interactive" | "headless";
 export type XaiOAuthClientSurface = "ui" | "cli" | "headless";
@@ -214,6 +217,16 @@ function isProxyVersionGate(status: number | undefined, detail: string): boolean
   );
 }
 
+function isEncryptedContentMismatch(
+  status: number | undefined,
+  detail: string,
+  routeKind: XaiHttpRouteKind,
+): boolean {
+  return routeKind === "responses-proxy" &&
+    status === 400 &&
+    ENCRYPTED_CONTENT_MISMATCH_PATTERN.test(detail);
+}
+
 function routeLabel(routeKind: XaiHttpRouteKind): string {
   if (routeKind === "responses-proxy" || routeKind === "responses-direct") return "Responses";
   if (routeKind === "image-generation") return "image generation";
@@ -228,6 +241,9 @@ export function safeXaiTransportErrorMessage(
   routeKind: XaiHttpRouteKind = "unknown",
 ): string {
   const resolvedStatus = status ?? statusFromTransportText(detail);
+  if (isEncryptedContentMismatch(resolvedStatus, detail, routeKind)) {
+    return ENCRYPTED_CONTENT_MISMATCH_MESSAGE;
+  }
   if (routeKind === "responses-proxy" && isProxyVersionGate(resolvedStatus, detail)) {
     const statusText = resolvedStatus ? ` (HTTP ${resolvedStatus})` : "";
     return `xAI proxy rejected ${XAI_CLIENT_IDENTIFIER}'s reviewed client/version contract${statusText}. Update ${XAI_CLIENT_IDENTIFIER}; if already current, open a compatibility issue with the HTTP status only. Last reviewed Grok Build revision: ${XAI_GROK_BUILD_REVIEWED_REVISION}.`;
@@ -271,16 +287,18 @@ async function readBoundedErrorBody(response: Response): Promise<string> {
 export class XaiHttpError extends Error {
   readonly status: number;
   readonly routeKind: XaiHttpRouteKind;
-  readonly code: "proxy-version-gate" | "http";
+  readonly code: "encrypted-content-mismatch" | "proxy-version-gate" | "http";
 
   constructor(status: number, routeKind: XaiHttpRouteKind, detail = "") {
     super(safeXaiTransportErrorMessage(detail, status, routeKind));
     this.name = "XaiHttpError";
     this.status = status;
     this.routeKind = routeKind;
-    this.code = routeKind === "responses-proxy" && isProxyVersionGate(status, detail)
-      ? "proxy-version-gate"
-      : "http";
+    this.code = isEncryptedContentMismatch(status, detail, routeKind)
+      ? "encrypted-content-mismatch"
+      : routeKind === "responses-proxy" && isProxyVersionGate(status, detail)
+        ? "proxy-version-gate"
+        : "http";
   }
 }
 

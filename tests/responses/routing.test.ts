@@ -149,6 +149,8 @@ describe("Responses routing and protected metadata", () => {
         "text/event-stream",
       );
       expect(streamRequest.body.prompt_cache_key).toBe(sessionId);
+      expect(streamRequest.body.store).toBe(false);
+      expect(streamRequest.body.include).toEqual(["reasoning.encrypted_content"]);
       if (modelId === "grok-composer-2.5-fast") {
         expect(streamRequest.body.reasoning).toBeUndefined();
       }
@@ -178,6 +180,8 @@ describe("Responses routing and protected metadata", () => {
         "application/json",
       );
       expect(directRequestId).not.toBe(streamRequestId);
+      expect(directRequest.body.store).toBe(false);
+      expect(directRequest.body.include).toEqual(["reasoning.encrypted_content"]);
     },
   );
 
@@ -318,6 +322,8 @@ describe("Responses routing and protected metadata", () => {
       XAI_USER_AGENT,
     );
     expect(proxyHeaders(request)).toEqual({});
+    expect(request.body.store).toBeUndefined();
+    expect(request.body.include).toBeUndefined();
     for (const name of unsupportedProxyHeaderNames) {
       expect(headerValue(request.init.headers, name)).toBeUndefined();
     }
@@ -408,6 +414,63 @@ describe("Responses routing and protected metadata", () => {
     expect(error.message).toMatch(/Update pi-xai-oauth/);
     expect(error.message).toContain(XAI_GROK_BUILD_REVIEWED_REVISION);
     expect(error.message).not.toMatch(/TOKEN_SECRET|unsupported_client_version/);
+  });
+
+  it("classifies encrypted reasoning mismatch without reflecting raw bodies", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error: "invalid_request",
+            message: "RAW_MISMATCH_SECRET encrypted_content belongs to another model",
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const error = await postXaiJson(
+      "OAUTH_TOKEN_SECRET",
+      XAI_CLI_RESPONSES_URL,
+      {},
+    ).catch((value) => value as any);
+    expect(error).toMatchObject({
+      status: 400,
+      routeKind: "responses-proxy",
+      code: "encrypted-content-mismatch",
+    });
+    expect(error.message).toMatch(/Start a clean session or turn using the same xAI model/);
+    expect(error.message).not.toMatch(/RAW_MISMATCH_SECRET|encrypted_content|invalid_request/);
+  });
+
+  it("keeps encrypted-content markers generic outside the narrow proxy 400 case", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("encrypted_content RAW_SECRET", { status: 400 })),
+    );
+    const direct = await postXaiJson("token", XAI_RESPONSES_URL, {}).catch((value) => value as any);
+    expect(direct).toMatchObject({ code: "http", routeKind: "responses-direct", status: 400 });
+    expect(direct.message).toBe("xAI API error: Responses failed with status 400");
+    expect(direct.message).not.toContain("RAW_SECRET");
+  });
+
+  it("surfaces encrypted reasoning mismatch guidance for streaming with one attempt", async () => {
+    const mismatchFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ message: "STREAM_SECRET encrypted_content is incompatible" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", mismatchFetch);
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: 1 }] } as any,
+      { apiKey: "oauth-token", sessionId: "session" } as any,
+    );
+    const result = await stream.result();
+    expect(mismatchFetch).toHaveBeenCalledTimes(1);
+    expect(result.errorMessage).toMatch(/Start a clean session or turn using the same xAI model/);
+    expect(result.errorMessage).not.toMatch(/STREAM_SECRET|encrypted_content/);
   });
 
   it("surfaces the same safe proxy gate guidance for streaming", async () => {

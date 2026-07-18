@@ -93,7 +93,7 @@ replacement tests pass alongside the legacy verifier.
 | `verify-extension.js:1058-1124` | direct and stream payloads compact before transport, including in-place `onPayload` mutation | `tests/responses/images.test.ts` | [x] |
 | `verify-extension.js:1126-1150` | delegated error prefix is xAI, never OpenAI; terminal result extraction | `tests/responses/streaming.test.ts` | [x] |
 | `verify-extension.js:1152-1217` | real Pi OpenAI Responses transport reaches configured endpoint; xAI transport bypasses conflicting compat registration and returns terminal result | real loader registration in `scripts/verify-extension-loader.mjs`; compat forwarding details in `tests/responses/streaming.test.ts` | [x] |
-| payload behavior currently exercised indirectly throughout verifier | developer/system instructions, CLI reasoning/include cleanup, response format, cache retention/key, image normalization | `tests/responses/payload.test.ts` | [x] |
+| payload behavior currently exercised indirectly throughout verifier | developer/system instructions, CLI reasoning retention and OAuth include policy, response format, cache retention/key, image normalization | `tests/responses/payload.test.ts`, `tests/responses/reasoning-replay.test.ts` | [x] |
 | `verify-extension.js:2519-2532` | provider error is one request, translated with status, and keeps active model | `tests/responses/streaming.test.ts`, `tests/tools/custom-tools.test.ts` | [x] |
 
 ### Images — codec, replay, transport, and Images API

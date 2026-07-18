@@ -28,6 +28,28 @@ export function canonicalizeXaiResponsesPayload(payload: unknown): Record<string
 
 export type GrokNativeToolRoutes = Readonly<Record<string, string>>;
 
+const XAI_ENCRYPTED_REASONING_INCLUDE = "reasoning.encrypted_content";
+
+/** Apply the final request policy for the pinned OAuth Responses route. */
+export function applyXaiOAuthResponsesPolicy(payload: Record<string, unknown>): Record<string, unknown> {
+  const include = Array.isArray(payload.include) ? payload.include : [];
+  const normalizedInclude: string[] = [];
+  const seen = new Set<string>();
+  for (const value of include) {
+    if (typeof value !== "string" || seen.has(value)) continue;
+    seen.add(value);
+    normalizedInclude.push(value);
+  }
+  if (!seen.has(XAI_ENCRYPTED_REASONING_INCLUDE)) {
+    normalizedInclude.push(XAI_ENCRYPTED_REASONING_INCLUDE);
+  }
+  return {
+    ...payload,
+    ...(payload.store === undefined ? { store: false } : {}),
+    include: normalizedInclude,
+  };
+}
+
 function rewriteGrokDispatchObject(value: unknown, expectedType: string): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const item = value as Record<string, unknown>;
@@ -301,7 +323,6 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
     if (usesGrokCliCompatibility) {
       input = input.filter((item) => {
         if (!item || typeof item !== "object") return true;
-        if (item.type === "reasoning") return false;
         if (typeof item.content === "string" && item.content.length === 0) return false;
         if (item.role !== "developer" && item.role !== "system") return true;
         const text = textFromResponsesContent(item.content).trim();
@@ -338,11 +359,6 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
     } else {
       delete body.reasoning;
     }
-  }
-
-  if (usesGrokCliCompatibility && Array.isArray(body.include)) {
-    body.include = body.include.filter((item: unknown) => item !== "reasoning.encrypted_content");
-    if (body.include.length === 0) delete body.include;
   }
 
   // xAI doesn't implement OpenAI's prompt_cache_retention knobs. Keep the

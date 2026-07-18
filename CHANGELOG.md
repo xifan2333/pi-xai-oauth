@@ -8,6 +8,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Added
 
+- Added encrypted reasoning replay on the pinned OAuth Responses route, including final `store:false` defaults, deduplicated encrypted-content requests, complete inline typed-item persistence/replay, exact provider/API/model isolation, and fixed redacted mismatch guidance.
 - Added a revision-pinned Grok Build wire-protocol matrix, ID-ownership policy, repeatable upstream review procedure, and an explicit encrypted-reasoning handoff to issue #79.
 - Added deterministic streaming/direct Responses, catalog, OAuth form, client-mode, media-boundary, reserved-header, bounded-error, and proxy version-gate request-shape coverage.
 - Added bounded authenticated `acceptsImages` / `inputModalities` normalization with explicit input-capability provenance and redacted schema fixtures.
