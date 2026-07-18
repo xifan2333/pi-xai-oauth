@@ -32,6 +32,7 @@ const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
   { name: "xai_code_execution", category: "execution", costRisk: "token + tool", summary: "xAI code interpreter" },
   { name: "xai_generate_image", category: "image", costRisk: "per image", summary: "generate 1-4 images" },
   { name: "xai_edit_image", category: "image", costRisk: "Imagine usage", summary: "edit 1-3 local image references" },
+  { name: "xai_image_to_video", category: "video", costRisk: "high; long-running", summary: "animate one local image; remote job survives local cancellation" },
   { name: "xai_analyze_image", category: "vision", costRisk: "token usage", summary: "analyze an image with Grok" },
   { name: "xai_critique", category: "reasoning", costRisk: "token usage", summary: "separate high-reasoning critique" },
   {
@@ -101,9 +102,12 @@ function notifyUpdate(
     return;
   }
   const displayName = networkToolDisplayName(toolName);
+  const enabledMessage = toolName === "xai_image_to_video"
+    ? `Enabled ${displayName} for this xAI session. Video generation can be high-cost and take up to five minutes; local cancellation does not cancel a submitted remote job.`
+    : `Enabled ${displayName} for this xAI session. Calls may use xAI credits.`;
   ctx.ui.notify(
     active
-      ? `Enabled ${displayName} for this xAI session. Calls may use xAI credits.`
+      ? enabledMessage
       : `Disabled ${displayName}.`,
     active ? "warning" : "info",
   );

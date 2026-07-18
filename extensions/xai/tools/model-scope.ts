@@ -15,6 +15,7 @@ export const XAI_NETWORK_TOOL_NAMES = [
   "xai_code_execution",
   "xai_generate_image",
   "xai_edit_image",
+  "xai_image_to_video",
   "xai_analyze_image",
   "xai_critique",
   XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,

@@ -6,7 +6,16 @@ import {
   ImageEditOperationError,
   validateXaiEditImageInput,
 } from "../image-edit";
-import { IMAGE_EDIT_MAX_PROMPT_CHARS, IMAGE_EDIT_MAX_REFERENCES } from "../media/constants";
+import {
+  executeXaiImageToVideo,
+  ImageToVideoOperationError,
+  validateXaiImageToVideoInput,
+} from "../image-to-video";
+import {
+  IMAGE_EDIT_MAX_PROMPT_CHARS,
+  IMAGE_EDIT_MAX_REFERENCES,
+  IMAGE_TO_VIDEO_MAX_PROMPT_CHARS,
+} from "../media/constants";
 import { normalizeXaiImageInput } from "../images";
 import { defaultXaiRuntimeModelId, grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
@@ -460,6 +469,94 @@ Be specific and cite examples where helpful.`;
           const operationError = error instanceof ImageEditOperationError ? error : undefined;
           return xaiToolError(
             `Error: ${operationError?.message ?? "xAI image edit failed safely."}`,
+            {
+              error: true,
+              code: operationError?.code ?? "output_failure",
+              ...(operationError?.status ? { status: operationError.status } : {}),
+            },
+          );
+        }
+      },
+    } as any);
+
+    pi.registerTool({
+      name: "xai_image_to_video",
+      label: "xAI Image to Video",
+      description:
+        "Opt-in high-cost image-to-video generation using one bounded PNG/JPEG workspace file or data URL. Enable via /xai-tools and call only when explicitly requested.",
+      promptGuidelines: [
+        "Call xai_image_to_video only when the user explicitly asks to animate or turn a supplied image into a video with xAI.",
+        "Use only a user-supplied workspace path or strict PNG/JPEG data URL; never invent paths or use remote source URLs.",
+        "Warn that generation may take up to five minutes and local cancellation does not cancel a submitted remote xAI job.",
+      ],
+      executionMode: "sequential",
+      parameters: {
+        type: "object",
+        properties: {
+          image: {
+            oneOf: [
+              {
+                type: "object",
+                properties: { path: { type: "string", description: "PNG/JPEG path inside the current workspace" } },
+                required: ["path"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: { data_url: { type: "string", description: "Strict bounded PNG/JPEG base64 data URL" } },
+                required: ["data_url"],
+                additionalProperties: false,
+              },
+            ],
+          },
+          prompt: {
+            type: "string",
+            minLength: 1,
+            maxLength: IMAGE_TO_VIDEO_MAX_PROMPT_CHARS,
+            description: "Optional motion or animation guidance",
+          },
+          duration: { type: "number", enum: [6, 10], default: 6 },
+          resolution: { type: "string", enum: ["480p", "720p"], default: "480p" },
+        },
+        required: ["image"],
+        additionalProperties: false,
+      },
+      execute: async (_toolCallId: string, params: unknown, signal: AbortSignal | undefined, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_image_to_video")) {
+          return xaiToolDisabledError("xai_image_to_video");
+        }
+        let input;
+        try {
+          input = validateXaiImageToVideoInput(params);
+        } catch (error) {
+          const message = error instanceof ImageToVideoOperationError
+            ? error.message
+            : "Image-to-video input is invalid.";
+          return xaiToolError(`Error: ${message}`, { error: true, code: "invalid_input" });
+        }
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { error: true });
+        }
+        try {
+          const output = await executeXaiImageToVideo({
+            credential,
+            input,
+            workspaceRoot: ctx?.cwd,
+            sessionManager: ctx?.sessionManager,
+            signal,
+          });
+          return {
+            content: [{
+              type: "text",
+              text: `Video saved to ${output.path} (${output.mimeType}, ${output.duration}s, ${output.resolution}, ${output.byteLength} bytes).`,
+            }],
+            details: output,
+          };
+        } catch (error) {
+          const operationError = error instanceof ImageToVideoOperationError ? error : undefined;
+          return xaiToolError(
+            `Error: ${operationError?.message ?? "xAI image-to-video generation failed safely."}`,
             {
               error: true,
               code: operationError?.code ?? "output_failure",

@@ -23,6 +23,20 @@ describe("credential-aware xAI routing", () => {
   );
 
   it.each(["oauth-session", "api-key"] as const)(
+    "keeps %s video creation and status on pinned public routes",
+    (kind) => {
+      expect(resolveXaiRoute(kind, "video-generation-create")).toEqual({
+        baseUrl: "https://api.x.ai/v1",
+        url: "https://api.x.ai/v1/videos/generations",
+      });
+      expect(resolveXaiRoute(kind, "video-generation-status")).toEqual({
+        baseUrl: "https://api.x.ai/v1",
+        url: "https://api.x.ai/v1/videos/",
+      });
+    },
+  );
+
+  it.each(["oauth-session", "api-key"] as const)(
     "keeps %s image editing on the distinct pinned public route",
     (kind) => {
       expect(resolveXaiRoute(kind, "image-edit")).toEqual({
