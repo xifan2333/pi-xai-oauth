@@ -6,7 +6,7 @@ import {
   createWriteToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, writeFile as writeFileUtf8 } from "node:fs/promises";
 import { Worker } from "node:worker_threads";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Type } from "typebox";
@@ -680,11 +680,23 @@ async function executeSearchReplace(
   chunks.push(body.slice(rawCursor));
   const replacementContent = `${hasBom ? "\ufeff" : ""}${chunks.join("")}`;
 
-  throwIfAborted(signal);
-  if (await readFile(absolutePath, "utf8") !== rawContent) {
-    throw new Error(`search_replace refused to overwrite a concurrently changed file: ${normalized.path}`);
-  }
-  const result = await createWriteToolDefinition(ctx.cwd).execute(
+  // Reuse pi's write definition so the stale-snapshot check and write share
+  // the same process-wide per-file mutation queue as pi's built-in writers.
+  const result = await createWriteToolDefinition(ctx.cwd, {
+    operations: {
+      mkdir: () => Promise.resolve(),
+      async writeFile(queuedPath, queuedContent) {
+        throwIfAborted(signal);
+        if (await readFile(queuedPath, "utf8") !== rawContent) {
+          throw new Error(
+            `search_replace refused to overwrite a concurrently changed file: ${normalized.path}`,
+          );
+        }
+        throwIfAborted(signal);
+        await writeFileUtf8(queuedPath, queuedContent, "utf8");
+      },
+    },
+  }).execute(
     toolCallId,
     { path: normalized.path, content: replacementContent },
     signal,
@@ -719,9 +731,13 @@ async function executeReadFile(
       : resolve(ctx.cwd, prepared.target_file);
     const content = await readFile(absolutePath, "utf8");
     throwIfAborted(signal);
-    const totalFields = content.split("\n").length
+    const readableFields = content.split("\n").length;
+    const totalFields = readableFields
       + (content.length > 0 && !content.endsWith("\n") ? 1 : 0);
     piArgs.offset = Math.max(1, totalFields + prepared.offset + 1);
+    if (piArgs.offset > readableFields) {
+      return { content: [{ type: "text" as const, text: "" }], details: undefined };
+    }
   }
   return createReadToolDefinition(ctx.cwd).execute(
     toolCallId,

@@ -19,6 +19,9 @@
 - [x] Added worker-isolated grep matching, mixed-line-ending/BOM replacement regressions, official negative-offset edge coverage, and concurrent streamed route-isolation coverage.
 - [x] Completed fresh independent review with no blocker/high correctness or security findings.
 - [x] Verified live offline `/reload` with `xai-auth/grok-4.5` while `pi-web-access` and the local xAI extension were both loaded; pi reported a successful reload without registration collisions.
+- [x] Addressed Grok PR review findings: phantom-only negative `read_file` offsets now return an empty window, and `search_replace` performs its stale-snapshot compare plus write inside pi's shared file mutation queue.
+- [x] Added deterministic phantom-offset and concurrent-mutation regressions; 413 tests, coverage floors, typecheck, loader smoke, and packed Pi 0.80.1/0.80.10 boundaries pass.
+- [x] Grok re-reviewed both fixes in the right-hand `grok-review` pane and reported no remaining blocker/high/medium issue.
 
 ## Delivered
 

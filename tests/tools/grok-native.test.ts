@@ -1,6 +1,7 @@
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
   XAI_GROK_NATIVE_AUTO_TOOL_NAMES,
   XAI_GROK_NATIVE_TOOL_NAME_MAP,
@@ -160,9 +161,10 @@ describe("Grok-native tools", () => {
       (await run("read_file", { target_file: "negative-offset.txt", offset: -2, limit: 1 }))
         .content[0].text,
     ).toMatch(/last/);
-    await expect(
-      run("read_file", { target_file: "negative-offset.txt", offset: -1, limit: 1 }),
-    ).rejects.toThrow(/Offset 3 is beyond end of file/);
+    expect(
+      (await run("read_file", { target_file: "negative-offset.txt", offset: -1, limit: 1 }))
+        .content[0].text,
+    ).toBe("");
 
     await writeFile(join(temp.path, "out.txt"), "old");
     expect(
@@ -241,6 +243,48 @@ describe("Grok-native tools", () => {
       old_string: "same",
       new_string: "changed",
     })).rejects.toThrow(/found 2 occurrences/);
+  });
+
+  it("checks concurrent changes inside pi's file mutation queue", async () => {
+    await writeFile(join(temp.path, "concurrent.txt"), "old");
+    let releaseWrite!: () => void;
+    const releaseWritePromise = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let markWriteEntered!: () => void;
+    const writeEntered = new Promise<void>((resolve) => {
+      markWriteEntered = resolve;
+    });
+    const blockingWrite = createWriteToolDefinition(temp.path, {
+      operations: {
+        mkdir: () => Promise.resolve(),
+        async writeFile(absolutePath, content) {
+          markWriteEntered();
+          await releaseWritePromise;
+          await writeFile(absolutePath, content, "utf8");
+        },
+      },
+    }).execute(
+      "blocking-write",
+      { path: "concurrent.txt", content: "external change" },
+      undefined,
+      () => {},
+      { cwd: temp.path } as any,
+    );
+    await writeEntered;
+
+    const replacement = run("search_replace", {
+      file_path: "concurrent.txt",
+      old_string: "old",
+      new_string: "replacement",
+    });
+    const replacementAssertion = expect(replacement).rejects.toThrow(/concurrently changed file/);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    releaseWrite();
+
+    await blockingWrite;
+    await replacementAssertion;
+    expect(await readFile(join(temp.path, "concurrent.txt"), "utf8")).toBe("external change");
   });
 
   it("rejects background terminal calls instead of silently foregrounding them", async () => {
