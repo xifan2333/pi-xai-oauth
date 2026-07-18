@@ -69,6 +69,14 @@ export const KNOWN_XAI_MODEL_METADATA: readonly XaiCatalogModel[] = [
     cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
     contextWindow: 1_000_000,
     maxTokens: 131_072,
+    thinkingLevelMap: {
+      off: "none",
+      minimal: "low",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: null,
+    },
   },
   {
     id: "grok-build",
@@ -169,13 +177,32 @@ export const XAI_MODEL_ALIASES: Readonly<Record<string, string>> = {
   "grok-4.20-multi-agent-latest": "grok-4.20-multi-agent-0309",
 };
 
-const XAI_ALIASES_BY_CANONICAL = (() => {
+/**
+ * Additional model slugs proven usable through the OAuth Responses proxy even
+ * when `/models-v2` advertises only the model that grants the route entitlement.
+ *
+ * Keep this separate from `XAI_MODEL_ALIASES`: these slugs remain distinct
+ * request models and must not canonicalize to their entitlement source.
+ *
+ * Evidence (2026-07-18): the same session catalog contained only `grok-4.5`,
+ * while a bounded `grok-4.3` Responses probe completed successfully and reported
+ * `grok-4.3` as the response model.
+ */
+export const XAI_MODEL_ENTITLEMENT_COMPATIBILITY: Readonly<Record<string, string>> = {
+  "grok-4.3": "grok-4.5",
+};
+
+const XAI_ADVERTISEMENTS_BY_ENTITLEMENT = (() => {
   const map = new Map<string, string[]>();
-  for (const [alias, canonical] of Object.entries(XAI_MODEL_ALIASES)) {
-    const key = canonical.toLowerCase();
+  const advertisements = [
+    ...Object.entries(XAI_MODEL_ALIASES),
+    ...Object.entries(XAI_MODEL_ENTITLEMENT_COMPATIBILITY),
+  ];
+  for (const [advertised, entitlementSource] of advertisements) {
+    const key = entitlementSource.toLowerCase();
     const list = map.get(key);
-    if (list) list.push(alias);
-    else map.set(key, [alias]);
+    if (list) list.push(advertised);
+    else map.set(key, [advertised]);
   }
   for (const list of map.values()) list.sort();
   return map;
@@ -246,9 +273,9 @@ export function resolveXaiCanonicalModelId(modelId: string): string {
 }
 
 /**
- * Expand an exact entitlement snapshot with known aliases of currently entitled
- * models. The remote/cache catalog stays exact; only the advertised runtime
- * provider list gains compatibility aliases.
+ * Expand an exact entitlement snapshot with known aliases and proven compatible
+ * OAuth request models. The remote/cache catalog stays exact; only the advertised
+ * runtime provider list gains compatibility entries.
  */
 export function expandXaiCatalogWithAliases(
   models: readonly XaiCatalogModel[],
@@ -266,7 +293,7 @@ export function expandXaiCatalogWithAliases(
   const expanded: XaiCatalogModel[] = [...entitled.values()];
   const aliasEntries: Array<[string, XaiCatalogModel]> = [];
   for (const [canonical, base] of entitled) {
-    const aliases = XAI_ALIASES_BY_CANONICAL.get(canonical) ?? [];
+    const aliases = XAI_ADVERTISEMENTS_BY_ENTITLEMENT.get(canonical) ?? [];
     for (const alias of aliases) {
       if (entitled.has(alias)) continue;
       aliasEntries.push([alias, materializeAliasModel(alias, base)]);

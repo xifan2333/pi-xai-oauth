@@ -29,6 +29,8 @@ describe("model compatibility metadata", () => {
   it("resolves known renamed model aliases to canonical catalog ids", () => {
     expect(resolveXaiCanonicalModelId("xai-auth/grok-composer-2.5-fast")).toBe("grok-4.5");
     expect(resolveXaiCanonicalModelId("grok-build-latest")).toBe("grok-4.5");
+    // Grok 4.3 is a distinct OAuth request model, not a canonical alias of 4.5.
+    expect(resolveXaiCanonicalModelId("grok-4.3")).toBe("grok-4.3");
     expect(resolveXaiCanonicalModelId("grok-4.20")).toBe("grok-4.20-0309-reasoning");
     expect(resolveXaiCanonicalModelId("grok-4.20-multi-agent")).toBe("grok-4.20-multi-agent-0309");
     expect(resolveXaiCanonicalModelId("grok-4.5")).toBe("grok-4.5");
@@ -46,10 +48,13 @@ describe("model compatibility metadata", () => {
     const ids = expanded.map((model) => model.id);
 
     expect(ids).toContain("grok-4.5");
+    expect(ids).toContain("grok-4.3");
     expect(ids).toContain("grok-composer-2.5-fast");
     expect(ids).toContain("grok-build-latest");
     expect(ids).toContain("grok-4.5-latest");
-    // Unentitled families stay hidden.
+    // Compatibility expansion is intentionally not recursive: unproven 4.3 aliases
+    // and unrelated model families stay hidden.
+    expect(ids).not.toContain("grok-latest");
     expect(ids).not.toContain("grok-4.20-0309-reasoning");
     expect(ids).not.toContain("grok-4.20");
     expect(ids).not.toContain("grok-build");
@@ -63,8 +68,20 @@ describe("model compatibility metadata", () => {
       contextWindow: entitled.contextWindow,
     });
 
+    const fourThree = expanded.find((model) => model.id === "grok-4.3");
+    expect(fourThree).toMatchObject({
+      name: "Grok 4.3",
+      reasoning: true,
+      input: ["text"],
+      inputProvenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+      // Keep the authenticated entitlement source's conservative context bound.
+      contextWindow: entitled.contextWindow,
+      thinkingLevelMap: { off: "none", minimal: "low", low: "low", medium: "medium", high: "high" },
+    });
+
     setXaiRuntimeModels(expanded);
     expect(isXaiRuntimeModelEntitled("grok-composer-2.5-fast")).toBe(true);
+    expect(isXaiRuntimeModelEntitled("grok-4.3")).toBe(true);
     expect(isXaiRuntimeModelEntitled("grok-4.20")).toBe(false);
   });
 

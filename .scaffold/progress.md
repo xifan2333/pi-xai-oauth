@@ -1,35 +1,34 @@
-# Execution Progress — Grok-native tool adapters
+# Execution Progress — Restore Grok 4.3 OAuth visibility
 
-**Branch:** `feature/grok-native-tools`
+**Branch:** `feature/restore-grok-4-3-oauth`
 
 ## Completed
 
-- [x] Added entitlement-aware known aliases without expanding the exact persisted catalog.
-- [x] Limited Grok CLI payload compatibility quirks to exact `grok-build`; tool activation is model-independent within `xai-auth`.
-- [x] Replaced Cursor-era adapter modules and tests with Grok-native equivalents.
-- [x] Implemented official model-facing names and argument normalization for local read, exact replace, list, grep, terminal, and opt-in xAI web search.
-- [x] Added integer validation, signed read offsets, PDF field validation with explicit unsupported execution, CRLF/BOM-preserving exact replacement, and exact `allowed_domains` preservation.
-- [x] Added physical workspace containment and bounded local grep behavior, including multiline and hidden output modes.
-- [x] Rejected unsupported managed background terminal calls; retained Grok millisecond timeout semantics while converting to pi seconds.
-- [x] Registered all adapters under private `xai_grok_*` names to avoid extension registry collisions.
-- [x] Added request-scoped public exposure and streamed-call internalization for all Grok-native tools.
-- [x] Removed external public-tool shadow/restoration state; unrelated extension activation now remains untouched.
-- [x] Updated focused tests, loader smoke expectations, README, and AGENTS architecture wording.
-- [x] Passed strict TypeScript, 412 unit tests, loader smoke, V8 coverage floors, `git diff --check`, and exact packed Pi 0.80.1/0.80.10 compatibility boundaries.
-- [x] Added worker-isolated grep matching, mixed-line-ending/BOM replacement regressions, official negative-offset edge coverage, and concurrent streamed route-isolation coverage.
-- [x] Completed fresh independent review with no blocker/high correctness or security findings.
-- [x] Verified live offline `/reload` with `xai-auth/grok-4.5` while `pi-web-access` and the local xAI extension were both loaded; pi reported a successful reload without registration collisions.
-- [x] Addressed Grok PR review findings: phantom-only negative `read_file` offsets now return an empty window, and `search_replace` performs its stale-snapshot compare plus write inside pi's shared file mutation queue.
-- [x] Added deterministic phantom-offset and concurrent-mutation regressions; 413 tests, coverage floors, typecheck, loader smoke, and packed Pi 0.80.1/0.80.10 boundaries pass.
-- [x] Grok re-reviewed both fixes in the right-hand `grok-review` pane and reported no remaining blocker/high/medium issue.
+- [x] Confirmed pi's fresh normalized OAuth cache contains only `grok-4.5`.
+- [x] Confirmed the official Grok CLI's newer authenticated `models_cache.json` also contains only `grok-4.5`.
+- [x] Verified no local normalization or hidden-entry filter dropped Grok 4.3.
+- [x] Reviewed current xAI model documentation: Grok 4.3 remains a distinct public request model.
+- [x] Ran one bounded authenticated OAuth Responses probe without logging credentials or raw bodies; HTTP 200 completed and reported response model `grok-4.3`.
+- [x] Added `XAI_MODEL_ENTITLEMENT_COMPATIBILITY` separately from canonical aliases, mapping the proven Grok 4.3 request route to the present Grok 4.5 entitlement source.
+- [x] Added Grok 4.3 none/low/medium/high reasoning metadata while retaining authenticated modality evidence and conservative source context limits.
+- [x] Added focused expansion, canonicalization, non-recursion, runtime entitlement, and metadata assertions.
+- [x] Confirmed `pi -e . --list-models xai-auth` now lists `grok-4.3` at a conservative 500K context.
+- [x] Updated README and AGENTS policy wording.
 
-## Delivered
+## Validation
 
-- [x] Committed the reviewed implementation without `.claude/`, opened PR #99, and closed superseded PR #98.
+- [x] Focused model suite: 20 tests passed.
+- [x] Primary TypeScript LSP diagnostics: zero findings.
+- [x] `git diff --check`.
+- [x] Full `npm test`: 413 tests plus real loader smoke passed.
+- [x] `npm run typecheck`.
+- [x] `npm run test:coverage`: all configured V8 floors passed.
+- [x] `npm run compatibility:check`: packed manifest and peer policy passed.
+- [x] `npm run compatibility:boundaries`: exact Pi 0.80.1 and 0.80.10 suites/typecheck passed.
 
-## Residual / intentional adaptations
+## Residual constraints
 
-- Pi does not expose Grok's managed background task lifecycle, so `background: true` fails closed.
-- Pi's text reader cannot render PDF pages, so PDF `read_file` calls fail with guidance instead of pretending support.
-- Local grep uses a conservative workspace-only implementation and bounded file-type subset rather than spawning the full Grok ripgrep environment.
+- The exact cache never stores Grok 4.3 unless xAI itself returns it.
+- Grok 4.3 remains distinct from Grok 4.5 for outbound requests and canonical resolution.
+- Unverified `grok-latest` / `grok-4.3-latest` compatibility is not inferred from the Grok 4.3 probe.
 - `.claude/` is unrelated untracked state and must not be committed.
