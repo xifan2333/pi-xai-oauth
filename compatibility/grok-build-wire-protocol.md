@@ -83,17 +83,19 @@ Catalog, OAuth, OIDC, and device paths retain their existing stricter endpoint, 
 
 ## Encrypted reasoning boundary (#79)
 
-Issue [#79](https://github.com/BlockedPath/pi-xai-oauth/issues/79) owns implementation of encrypted reasoning. The reviewed contract area is:
+Issue [#79](https://github.com/BlockedPath/pi-xai-oauth/issues/79) implements the reviewed contract on the pinned OAuth streaming and direct Responses routes:
 
-- default `store` to `false` when the verified Responses policy permits it;
-- request `reasoning.encrypted_content` exactly once;
-- retain the complete typed reasoning item, including its opaque encrypted content;
-- replay that item verbatim and inline at its original conversation position;
-- preserve stable serialized prefixes across later turns;
-- never render, inspect, transform, log, cache outside the Pi session, or send encrypted content across provider/endpoint/model-family boundaries;
-- treat encrypted-content/model-family mismatch as terminal and actionable.
+- absent `store` defaults to `false`, while an explicit value is preserved;
+- final `include` retains compatible string entries in first-occurrence order and contains `reasoning.encrypted_content` exactly once, even after caller payload hooks;
+- complete completed reasoning items, including encrypted-only and additive fields, use Pi's opaque `thinkingSignature` carrier and replay inline at their original conversation position;
+- active, uncompacted multi-turn input keeps a stable serialized prefix;
+- Pi permits replay only when provider, API, and exact model match, and omits failed or aborted assistant turns;
+- API-key direct Responses, media, catalog, usage, auth, and non-Responses routes do not receive this package policy;
+- a proxy HTTP 400 containing the narrow `encrypted_content` marker produces fixed clean-session/model guidance, is redacted, and is not automatically retried.
 
-Issue #78 does not change payload include handling, conversation persistence, typed reasoning retention, replay ordering, or mismatch retry behavior. Those changes and their persistence/provider-switching fixtures remain deferred to #79.
+Encrypted content is ordinary local Pi session state. `store:false` disables server-side response storage but does not prevent Pi from writing the complete item to its session JSONL under normal permissions and retention. This package does not separately encrypt, duplicate, inspect, render, or log it. Compaction may intentionally replace older active context, and trusted local extensions or users with file access can inspect session state.
+
+Pi's delegated SSE error shape does not preserve an HTTP status for failures that arrive after a successful stream connection. The narrow HTTP 400 classifier therefore applies to initial Responses HTTP failures; later in-stream failures remain generic and redacted rather than being guessed from message text.
 
 ## Repeatable upstream review procedure
 

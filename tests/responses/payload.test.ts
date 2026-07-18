@@ -5,6 +5,7 @@ import {
   XAI_GROK_NATIVE_WEB_SEARCH_NAME,
 } from "../../extensions/xai/constants";
 import {
+  applyXaiOAuthResponsesPolicy,
   canonicalizeXaiResponsesPayload,
   exposeGrokNativeToolNames,
   internalizeGrokNativeToolCalls,
@@ -213,16 +214,24 @@ describe("Responses payload normalization", () => {
     expect(result.instructions).toBe("base\n\nsystem\n\ndeveloper");
     expect(result.input).toEqual([{ role: "user", content: "hello" }]);
   });
-  it("removes all system and reasoning replay for CLI models", () => {
+  it("moves system text while preserving complete reasoning replay for CLI models", () => {
     setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
     const model = { ...TEST_MODEL, id: "grok-build" } as any;
+    const reasoning = {
+      id: "reasoning-1",
+      type: "reasoning",
+      summary: [],
+      encrypted_content: "opaque-reasoning",
+      status: "completed",
+      future_field: { preserved: true },
+    };
     const result: any = rewriteXaiResponsesPayload(
       {
         model: model.id,
         input: [
           { role: "user", content: "first" },
           { role: "system", content: "late" },
-          { type: "reasoning", summary: [] },
+          reasoning,
           { role: "user", content: "" },
         ],
         include: ["reasoning.encrypted_content", "other"],
@@ -230,9 +239,28 @@ describe("Responses payload normalization", () => {
       model,
     );
     expect(result.instructions).toBe("late");
-    expect(result.input).toEqual([{ role: "user", content: "first" }]);
-    expect(result.include).toEqual(["other"]);
+    expect(result.input).toEqual([{ role: "user", content: "first" }, reasoning]);
+    expect(result.include).toEqual(["reasoning.encrypted_content", "other"]);
   });
+  it("applies the OAuth Responses store and encrypted include policy immutably", () => {
+    const include = Object.freeze(["other", "reasoning.encrypted_content", "other"]);
+    const payload = Object.freeze({ input: "hello", include });
+    expect(applyXaiOAuthResponsesPolicy(payload)).toEqual({
+      input: "hello",
+      store: false,
+      include: ["other", "reasoning.encrypted_content"],
+    });
+    expect(payload).toEqual({ input: "hello", include });
+    expect(applyXaiOAuthResponsesPolicy({ store: true, include: ["other"] })).toEqual({
+      store: true,
+      include: ["other", "reasoning.encrypted_content"],
+    });
+    expect(applyXaiOAuthResponsesPolicy({ include: "malformed" as any })).toEqual({
+      include: ["reasoning.encrypted_content"],
+      store: false,
+    });
+  });
+
   it("normalizes response format, reasoning effort, and prompt cache fields", () => {
     setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
     const result: any = rewriteXaiResponsesPayload(

@@ -9,6 +9,7 @@ import {
   xaiModelForRequest,
 } from "./models";
 import {
+  applyXaiOAuthResponsesPolicy,
   canonicalizeXaiResponsesPayload,
   exposeGrokNativeToolNames,
   internalizeGrokNativeToolCalls,
@@ -47,13 +48,26 @@ function acquireRedirectGuard(url: string): () => void {
   if (!redirectGuardFetch) {
     unguardedFetch = globalThis.fetch;
     const baseFetch = unguardedFetch;
-    redirectGuardFetch = (input, init) =>
-      baseFetch(
+    redirectGuardFetch = async (input, init) => {
+      const url = fetchRequestUrl(input);
+      const guarded = guardedRedirectUrls.has(url);
+      const response = await baseFetch(
         input,
-        guardedRedirectUrls.has(fetchRequestUrl(input))
-          ? { ...init, redirect: "error" }
-          : init,
+        guarded ? { ...init, redirect: "error" } : init,
       );
+      if (!guarded || response.ok) return response;
+      const error = await xaiHttpErrorFromResponse(response, url);
+      const marker = error.code === "encrypted-content-mismatch"
+        ? "encrypted_content"
+        : error.code === "proxy-version-gate"
+          ? "update_required"
+          : "request failed";
+      return new Response(JSON.stringify({ error: { message: marker } }), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
     globalThis.fetch = redirectGuardFetch;
   }
   guardedRedirectUrls.set(url, (guardedRedirectUrls.get(url) ?? 0) + 1);
@@ -87,16 +101,37 @@ function normalizeXaiErrorText(value: string): string {
     : value;
 }
 
+function restoreXaiMessageIdentity(value: unknown, model: Model<Api>): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const message = value as Record<string, unknown>;
+  if (message.role !== "assistant") return value;
+  return {
+    ...message,
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+  };
+}
+
 function normalizeXaiStreamEvent(
   event: AssistantStreamEvent,
   grokNativeToolRoutes: GrokNativeToolRoutes,
+  model: Model<Api>,
 ): AssistantStreamEvent {
-  const partial = internalizeGrokNativeToolCalls(event.partial, grokNativeToolRoutes);
+  const partial = internalizeGrokNativeToolCalls(
+    restoreXaiMessageIdentity(event.partial, model),
+    grokNativeToolRoutes,
+  );
   const toolCall = internalizeGrokNativeToolCalls(event.toolCall, grokNativeToolRoutes);
-  const message = internalizeGrokNativeToolCalls(event.message, grokNativeToolRoutes);
+  const message = internalizeGrokNativeToolCalls(
+    restoreXaiMessageIdentity(event.message, model),
+    grokNativeToolRoutes,
+  );
+  const restoredError = restoreXaiMessageIdentity(event.error, model);
   const internalized =
-    partial !== event.partial || toolCall !== event.toolCall || message !== event.message
-      ? { ...event, partial, toolCall, message }
+    partial !== event.partial || toolCall !== event.toolCall ||
+      message !== event.message || restoredError !== event.error
+      ? { ...event, partial, toolCall, message, error: restoredError }
       : event;
   if (internalized.type !== "error" || !internalized.error || typeof internalized.error !== "object") {
     return internalized;
@@ -269,11 +304,14 @@ export async function createXaiResponse(
   const requestModel = selectedModelId === model.id ? model : { ...model, id: selectedModelId };
   const route = resolveXaiRoute(credential.kind, "responses");
   const rewritten = rewriteXaiResponsesPayload(canonicalBody, requestModel);
-  pinXaiPayloadModel(selectedModelId, rewritten);
+  const policyPayload = credential.kind === "oauth-session"
+    ? applyXaiOAuthResponsesPolicy(rewritten as Record<string, unknown>)
+    : rewritten;
+  pinXaiPayloadModel(selectedModelId, policyPayload);
   if (credential.kind === "oauth-session") {
-    assertXaiRuntimeModelAcceptsPayload(selectedModelId, rewritten);
+    assertXaiRuntimeModelAcceptsPayload(selectedModelId, policyPayload);
   }
-  const payload = (await compactXaiInlineImages(rewritten)) as Record<string, any>;
+  const payload = (await compactXaiInlineImages(policyPayload)) as Record<string, any>;
   if (credential.kind === "oauth-session") {
     assertXaiRuntimeModelAcceptsPayload(selectedModelId, payload);
   }
@@ -385,8 +423,9 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
             const canonicalPayload = canonicalizeXaiResponsesPayload(
               userRewritten === undefined ? rewritten : userRewritten,
             );
-            grokNativeToolRoutes = xaiPayloadGrokNativeToolRoutes(canonicalPayload);
-            const exposedPayload = exposeGrokNativeToolNames(canonicalPayload);
+            const policyPayload = applyXaiOAuthResponsesPolicy(canonicalPayload);
+            grokNativeToolRoutes = xaiPayloadGrokNativeToolRoutes(policyPayload);
+            const exposedPayload = exposeGrokNativeToolNames(policyPayload);
             pinXaiPayloadModel(selectedModelId, exposedPayload);
             assertXaiRuntimeModelAcceptsPayload(selectedModelId, exposedPayload);
             const finalPayload = await compactXaiInlineImages(
@@ -399,7 +438,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
       );
       for await (const event of inner as AsyncIterable<AssistantStreamEvent>) {
         if (event.type === "done" || event.type === "error") releaseRedirectGuard();
-        stream.push(normalizeXaiStreamEvent(event, grokNativeToolRoutes));
+        stream.push(normalizeXaiStreamEvent(event, grokNativeToolRoutes, model));
       }
       releaseRedirectGuard();
       stream.end();

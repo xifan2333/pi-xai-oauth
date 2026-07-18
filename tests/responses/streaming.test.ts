@@ -75,7 +75,38 @@ describe("xAI streaming adapter", () => {
     const result = await stream.result();
     expect(called).toBe(false);
     expect(result).toBeDefined();
+    expect(result).toMatchObject({
+      api: TEST_MODEL.api,
+      provider: TEST_MODEL.provider,
+      model: TEST_MODEL.id,
+    });
     expect(globalThis.fetch).toHaveBeenCalled();
+  });
+
+  it("enforces the OAuth Responses policy after caller payload hooks", async () => {
+    let sent: any;
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      sent = JSON.parse(String(init.body));
+      return jsonResponse({ id: "resp", output_text: "OK" });
+    }));
+    const stream = streamSimpleXaiResponses(
+      TEST_MODEL,
+      { messages: [{ role: "user", content: "hello", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        onPayload(payload: any) {
+          return {
+            ...payload,
+            store: true,
+            include: ["other", "reasoning.encrypted_content", "other", "reasoning.encrypted_content"],
+          };
+        },
+      } as any,
+    );
+    await stream.result();
+
+    expect(sent.store).toBe(true);
+    expect(sent.include).toEqual(["other", "reasoning.encrypted_content"]);
   });
 
   it("resolves Grok-native name collisions after caller payload hooks", async () => {
