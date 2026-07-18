@@ -62,6 +62,67 @@ describe("video download safety", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("pins public IPv4 when dual-stack DNS also returns non-public IPv6", async () => {
+    const request = vi.fn();
+    await expect(downloadXaiVideo({
+      url: "https://cdn.example.test/video.mp4",
+      outputRoot: process.cwd(),
+      sessionRoot: process.cwd(),
+      duration: 6,
+      resolution: "480p",
+    }, {
+      lookup: vi.fn(async () => [
+        { address: "2606:4700::6812:1350", family: 6 },
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.0.0.1", family: 4 },
+      ]) as any,
+      request: request as any,
+    })).rejects.toThrow(/failed safely/);
+    expect(request).not.toHaveBeenCalled();
+
+    // Mixed public IPv4 + IPv6 must not be rejected solely because IPv6 is non-public.
+    // Request is issued with the public IPv4 pin; the mocked request never completes HTTPS.
+    const dualStackRequest = vi.fn((_options: any, _callback: any) => {
+      const req = {
+        once(event: string, handler: (...args: any[]) => void) {
+          if (event === "error") queueMicrotask(() => handler(new Error("boom")));
+          return this;
+        },
+        end() {},
+        destroy() {},
+      };
+      return req;
+    });
+    await expect(downloadXaiVideo({
+      url: "https://cdn.example.test/video.mp4",
+      outputRoot: process.cwd(),
+      sessionRoot: process.cwd(),
+      duration: 6,
+      resolution: "480p",
+    }, {
+      lookup: vi.fn(async () => [
+        { address: "2606:4700::6812:1350", family: 6 },
+        { address: "93.184.216.34", family: 4 },
+      ]) as any,
+      request: dualStackRequest as any,
+    })).rejects.toThrow(/failed safely/);
+    expect(dualStackRequest).toHaveBeenCalled();
+    const pinned = dualStackRequest.mock.calls[0][0];
+    expect(pinned.lookup).toEqual(expect.any(Function));
+    await new Promise<void>((resolve, reject) => {
+      pinned.lookup("cdn.example.test", {}, (err: Error | null, address: string, family: number) => {
+        try {
+          expect(err).toBeNull();
+          expect(address).toBe("93.184.216.34");
+          expect(family).toBe(4);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+  });
+
   it("cancels a stalled DNS lookup without issuing HTTPS", async () => {
     const controller = new AbortController();
     const request = vi.fn();
