@@ -4,17 +4,18 @@ import { registerXaiToolsCommand } from "./commands";
 import { registerGrokNativeTools, syncGrokNativeToolsForModel } from "./grok-native";
 import { registerCustomXaiTools } from "./custom-tools";
 import { syncXaiNetworkToolsForModel } from "./model-scope";
+import type { XaiVisionRoutingController } from "../vision-routing";
 
 const xaiToolRegistrations = new WeakSet<object>();
 
 /** Register all xAI tools once per pi API object. */
-export function registerXaiTools(pi: ExtensionAPI) {
+export function registerXaiTools(pi: ExtensionAPI, visionRouting?: XaiVisionRoutingController) {
   if (xaiToolRegistrations.has(pi as object)) return;
   xaiToolRegistrations.add(pi as object);
 
   registerGrokNativeTools(pi);
   registerCustomXaiTools(pi);
-  registerXaiToolsCommand(pi);
+  registerXaiToolsCommand(pi, visionRouting);
 }
 
 /** Synchronize all model-scoped xAI tool availability without making network requests. */

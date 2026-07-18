@@ -5,6 +5,10 @@ import {
   XAI_GROK_NATIVE_WEB_SEARCH_NAME,
 } from "../constants";
 import {
+  XAI_VISION_ROUTING_NAME,
+  type XaiVisionRoutingController,
+} from "../vision-routing";
+import {
   activeXaiModel,
   isXaiNetworkToolActive,
   setXaiNetworkToolActive,
@@ -59,10 +63,31 @@ function eligibleToolOptions(): readonly NetworkToolOption[] {
   return NETWORK_TOOL_OPTIONS;
 }
 
-function activeToolStatus(pi: ExtensionAPI): string {
-  return NETWORK_TOOL_OPTIONS.map(({ name, displayName }) =>
-    `${displayName ?? name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`,
-  ).join(", ");
+function visionRoutingStatus(
+  visionRouting: XaiVisionRoutingController | undefined,
+  model?: Model<Api>,
+): string {
+  if (!visionRouting) return `${XAI_VISION_ROUTING_NAME}=unavailable`;
+  const status = visionRouting.status(model);
+  if (status.state === "enabled") {
+    return `${XAI_VISION_ROUTING_NAME}=enabled (${status.sourceModelId} -> ${status.targetModelId})`;
+  }
+  if (status.state === "eligible") return `${XAI_VISION_ROUTING_NAME}=disabled (eligible target ${status.targetModelId})`;
+  if (status.state === "unavailable") return `${XAI_VISION_ROUTING_NAME}=unavailable (${status.reason})`;
+  return `${XAI_VISION_ROUTING_NAME}=disabled`;
+}
+
+function activeToolStatus(
+  pi: ExtensionAPI,
+  visionRouting?: XaiVisionRoutingController,
+  model?: Model<Api>,
+): string {
+  return [
+    ...NETWORK_TOOL_OPTIONS.map(({ name, displayName }) =>
+      `${displayName ?? name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`
+    ),
+    visionRoutingStatus(visionRouting, model),
+  ].join(", ");
 }
 
 function notifyUpdate(
@@ -218,7 +243,10 @@ async function showXaiToolPicker(
 }
 
 /** Register the package-owned command for explicitly managing network-backed xAI tools. */
-export function registerXaiToolsCommand(pi: ExtensionAPI) {
+export function registerXaiToolsCommand(
+  pi: ExtensionAPI,
+  visionRouting?: XaiVisionRoutingController,
+) {
   pi.registerCommand("xai-tools", {
     description: "Enable or disable network-backed xAI tools for this session",
     handler: async (args, ctx) => {
@@ -236,13 +264,39 @@ export function registerXaiToolsCommand(pi: ExtensionAPI) {
 
       if (action.toLowerCase() === "status" && !rawToolName) {
         ctx.ui.notify(
-          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi)}`,
+          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, visionRouting, model)}`,
           "info",
         );
         return;
       }
 
       const normalizedAction = action.toLowerCase();
+      const requestedName = rawToolName?.toLowerCase();
+      if (
+        requestedName === XAI_VISION_ROUTING_NAME &&
+        (normalizedAction === "enable" || normalizedAction === "disable") &&
+        extra.length === 0
+      ) {
+        if (!visionRouting) {
+          ctx.ui.notify("xAI vision routing is unavailable.", "error");
+          return;
+        }
+        const result = normalizedAction === "enable"
+          ? visionRouting.enable(model)
+          : visionRouting.disable();
+        if (result.state === "enabled") {
+          ctx.ui.notify(
+            `Enabled vision routing for this xAI session: images are sent to ${result.targetModelId} in a separate authenticated request that may consume additional usage or credits; its generated description becomes sensitive session content. No cross-request image or description cache is created.`,
+            "warning",
+          );
+        } else if (normalizedAction === "disable") {
+          ctx.ui.notify("Disabled vision routing.", "info");
+        } else {
+          ctx.ui.notify(result.reason ?? "xAI vision routing is unavailable.", "error");
+        }
+        return;
+      }
+
       const toolName = commandToolName(rawToolName);
       if (
         (normalizedAction !== "enable" && normalizedAction !== "disable")

@@ -9,6 +9,7 @@ import { streamSimpleXaiResponses } from "./xai/responses";
 import { resolveXaiRoute } from "./xai/routing";
 import { registerXaiTools, syncXaiToolsForModel } from "./xai/tools";
 import { registerXaiUsage } from "./xai/usage";
+import { createXaiVisionRoutingController } from "./xai/vision-routing";
 
 /** Register the xAI OAuth provider and its authenticated model catalog. */
 export default async function (pi: ExtensionAPI) {
@@ -22,6 +23,7 @@ export default async function (pi: ExtensionAPI) {
   let refreshAbortController: AbortController | undefined;
   let oauth: ReturnType<typeof createXaiOAuth>;
   const xaiUsage = registerXaiUsage(pi);
+  const visionRouting = createXaiVisionRoutingController();
 
   const providerModels = (models: readonly XaiCatalogModel[]) =>
     models.map(({ apiBackend: _apiBackend, inputProvenance: _inputProvenance, ...model }) => model);
@@ -32,7 +34,8 @@ export default async function (pi: ExtensionAPI) {
     api: "xai-responses" as const,
     models: providerModels(currentModels),
     authHeader: true,
-    streamSimple: streamSimpleXaiResponses as any,
+    streamSimple: ((model: any, context: any, options: any) =>
+      streamSimpleXaiResponses(model, context, options, visionRouting)) as any,
     oauth: oauth as any,
   });
 
@@ -48,6 +51,7 @@ export default async function (pi: ExtensionAPI) {
   });
 
   const applyCatalog = (selection: XaiCatalogSelection, replaceExisting: boolean) => {
+    visionRouting.replaceCatalog(selection.models);
     // Cache/remote selection stays exact; advertise known aliases of entitled models
     // so renamed settings patterns (e.g. Composer → Grok 4.5) keep matching.
     currentModels = expandXaiCatalogWithAliases(selection.models);
@@ -90,9 +94,10 @@ export default async function (pi: ExtensionAPI) {
   oauth = createXaiOAuth({
     getExistingCredentials: getGrokAuthCredentials,
     onLoginCredentials: async (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => {
-      // A successful login can replace the account. Drop any prior session
-      // usage display before performing other authenticated work.
+      // A successful login can replace the account. Drop prior account-scoped
+      // session authorization before performing other authenticated work.
       xaiUsage.reset();
+      visionRouting.reset();
       const loginGeneration = ++loginCatalogGeneration;
       activeLoginRefreshes++;
       try {
@@ -172,13 +177,14 @@ export default async function (pi: ExtensionAPI) {
     }
   };
 
-  registerXaiTools(pi);
+  registerXaiTools(pi, visionRouting);
 
   if (typeof (pi as any).on === "function") {
     // Active-tool accessors belong to the ExtensionAPI (`pi`), while models
     // and pi-managed credentials are supplied by the event/context payload.
     (pi as any).on("session_start", async (_event: any, ctx: any) => {
       xaiUsage.reset(ctx);
+      visionRouting.reset();
       await refreshDeferredCatalog(ctx);
       syncXaiToolsForModel(pi, ctx?.model, { resetNetworkTools: true });
     });
@@ -208,15 +214,17 @@ export default async function (pi: ExtensionAPI) {
       return { action: "handled" };
     });
     (pi as any).on("model_select", (event: any, ctx: any) => {
-      // Model changes invalidate the account/model association of a compact
-      // usage display. Require an explicit opt-in again.
+      // Model changes invalidate account/model-scoped authorizations. Require
+      // explicit opt-in again even when switching between two xAI models.
       xaiUsage.reset(ctx);
+      visionRouting.reset();
       return syncXaiToolsForModel(pi, event?.model ?? ctx?.model);
     });
     (pi as any).on("before_agent_start", async (_event: any, ctx: any) => {
       xaiUsage.clearIfInactive(ctx);
       await refreshDeferredCatalog(ctx);
       let activeModel = ctx?.model;
+      if (activeModel?.provider !== XAI_PROVIDER_ID) visionRouting.reset();
       const entitled =
         typeof activeModel?.id === "string" &&
         currentModels.some((model) => model.id.toLowerCase() === activeModel.id.toLowerCase());
@@ -248,6 +256,7 @@ export default async function (pi: ExtensionAPI) {
     });
     (pi as any).on("session_shutdown", (_event: any, ctx: any) => {
       xaiUsage.reset(ctx);
+      visionRouting.reset();
     });
   }
 }

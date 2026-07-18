@@ -252,6 +252,20 @@ export function isAuthenticatedXaiInputProvenance(
     provenance === XaiModelInputProvenance.AuthenticatedInputModalities;
 }
 
+/** Return whether authenticated catalog evidence explicitly marks a model text-only. */
+export function isExplicitAuthenticatedTextOnlyXaiModel(model: XaiCatalogModel): boolean {
+  return isAuthenticatedXaiInputProvenance(model.inputProvenance)
+    && model.input.includes("text")
+    && !model.input.includes("image");
+}
+
+/** Return whether authenticated catalog evidence explicitly permits text and image input. */
+export function isExplicitAuthenticatedVisionXaiModel(model: XaiCatalogModel): boolean {
+  return isAuthenticatedXaiInputProvenance(model.inputProvenance)
+    && model.input.includes("text")
+    && model.input.includes("image");
+}
+
 /** Choose the default model from the active OAuth catalog, if one exists. */
 export function defaultXaiRuntimeModelId(): string | undefined {
   return runtimeModels.find((model) => model.id === DEFAULT_XAI_MODEL)?.id ?? runtimeModels[0]?.id;

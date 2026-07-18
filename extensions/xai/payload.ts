@@ -164,8 +164,8 @@ export function internalizeGrokNativeToolCalls(
   return changed ? { ...source, content } : value;
 }
 
-function normalizeResponsesImageParts(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalizeResponsesImageParts);
+export function normalizeXaiResponsesImageParts(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeXaiResponsesImageParts);
   if (!value || typeof value !== "object") return value;
 
   const obj: Record<string, any> = { ...(value as Record<string, any>) };
@@ -191,8 +191,8 @@ function normalizeResponsesImageParts(value: unknown): unknown {
     if (typeof detail === "string" && detail) obj.detail = detail;
     if (typeof obj.detail !== "string" || !obj.detail) obj.detail = "auto";
   }
-  if (Array.isArray(obj.content)) obj.content = normalizeResponsesImageParts(obj.content);
-  if (Array.isArray(obj.output)) obj.output = normalizeResponsesImageParts(obj.output);
+  if (Array.isArray(obj.content)) obj.content = normalizeXaiResponsesImageParts(obj.content);
+  if (Array.isArray(obj.output)) obj.output = normalizeXaiResponsesImageParts(obj.output);
   return obj;
 }
 
@@ -233,11 +233,15 @@ function isAssistantResponseItem(value: unknown): boolean {
   return item.type === "reasoning" || item.type === "function_call";
 }
 
-function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknown[] {
-  const normalizedInput = input.map(normalizeResponsesImageParts) as Record<string, any>[];
+function normalizeXaiResponsesInput(
+  input: unknown[],
+  model: Model<Api>,
+  preserveCurrentToolImages = false,
+): unknown[] {
+  const normalizedInput = input.map(normalizeXaiResponsesImageParts) as Record<string, any>[];
   const rewritten: unknown[] = [];
   const modelInputs = Array.isArray((model as any).input) ? ((model as any).input as unknown[]) : [];
-  const supportsImages = modelInputs.includes("image");
+  const supportsImages = preserveCurrentToolImages || modelInputs.includes("image");
   const hasLaterAssistantOutput = new Array<boolean>(normalizedInput.length).fill(false);
   let assistantOutputSeen = false;
 
@@ -275,6 +279,45 @@ function normalizeXaiResponsesInput(input: unknown[], model: Model<Api>): unknow
   return rewritten;
 }
 
+function imageReferenceValue(item: Record<string, unknown>): unknown {
+  if (item.type === "input_image" || item.type === "image_url") {
+    return item.image_url && typeof item.image_url === "object"
+      ? (item.image_url as Record<string, unknown>).url
+      : item.image_url;
+  }
+  if (item.type === "computer_screenshot") return item.image_url;
+  return undefined;
+}
+
+/** Return whether normalization would resolve or read a local image reference. */
+export function xaiResponsesPayloadContainsLocalImageReference(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const stack: unknown[] = [(payload as Record<string, unknown>).input];
+  const seen = new WeakSet<object>();
+  while (stack.length > 0) {
+    const value = stack.pop();
+    if (!value || typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const child of value) stack.push(child);
+      continue;
+    }
+    const item = value as Record<string, unknown>;
+    const reference = imageReferenceValue(item);
+    if (typeof reference === "string") {
+      const trimmed = reference.trim();
+      const cleaned = trimmed.length >= 2 &&
+          ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith("'") && trimmed.endsWith("'")))
+        ? trimmed.slice(1, -1)
+        : trimmed;
+      if (cleaned && !/^https?:\/\//i.test(cleaned) && !/^data:image\//i.test(cleaned)) return true;
+    }
+    for (const child of Object.values(item)) stack.push(child);
+  }
+  return false;
+}
+
 /** Return whether a final Responses request input structurally contains image content. */
 export function xaiResponsesPayloadContainsImage(payload: unknown): boolean {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
@@ -305,8 +348,16 @@ export function xaiResponsesPayloadContainsImage(payload: unknown): boolean {
   return false;
 }
 
+export interface XaiPayloadRewriteOptions extends SimpleStreamOptions {
+  preserveCurrentToolImages?: boolean;
+}
+
 /** Rewrite generic OpenAI Responses payloads into xAI-compatible payloads. */
-export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, options?: SimpleStreamOptions): unknown {
+export function rewriteXaiResponsesPayload(
+  payload: unknown,
+  model: Model<Api>,
+  options?: XaiPayloadRewriteOptions,
+): unknown {
   if (!payload || typeof payload !== "object") return payload;
   const body: Record<string, any> = { ...(payload as Record<string, any>) };
   const modelId = String(body.model || model.id);
@@ -317,7 +368,11 @@ export function rewriteXaiResponsesPayload(payload: unknown, model: Model<Api>, 
   // same Grok OAuth path with top-level instructions; xAI also rejects
   // image arrays in function_call_output.output, so normalize those here.
   if (Array.isArray(body.input)) {
-    let input = normalizeXaiResponsesInput([...body.input], model) as Record<string, any>[];
+    let input = normalizeXaiResponsesInput(
+      [...body.input],
+      model,
+      options?.preserveCurrentToolImages,
+    ) as Record<string, any>[];
     const instructionParts: string[] = [];
 
     if (usesGrokCliCompatibility) {
