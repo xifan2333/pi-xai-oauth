@@ -49,7 +49,7 @@ async function run(name: any, params: any, model: any = TEST_MODEL) {
 describe("custom xAI tools", () => {
   it("registers exactly the custom network-tool catalog", () => {
     expect([...h.tools.keys()].sort()).toEqual(
-      XAI_NETWORK_TOOL_NAMES.filter((name) => name.startsWith("xai_")).sort(),
+      XAI_NETWORK_TOOL_NAMES.filter((name) => !name.startsWith("xai_grok_")).sort(),
     );
   });
   it.each([

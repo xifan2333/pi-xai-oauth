@@ -271,8 +271,8 @@ Common catalog entries include:
 |----------|-------------|
 | `grok-4.5` | **Default and curated offline fallback.** xAI flagship; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
 | `grok-4.3` | When entitled: full reasoning, with limits taken from the authenticated catalog. |
-| `grok-build` | When entitled: Grok Build coding model with Cursor/Grok CLI tool compatibility. |
-| `grok-composer-2.5-fast` | When entitled: Composer coding model with Cursor/Grok CLI tool compatibility. |
+| `grok-build` | When entitled: Grok Build coding model (same Grok-native tools as other xai-auth models). |
+| `grok-composer-2.5-fast` | Compatibility alias of entitled `grok-4.5`; uses the same Grok-native pi tool adapters and no Cursor-named shims. |
 | `grok-4.20-0309-reasoning` | When entitled: Grok 4.20 with automatic reasoning. |
 | `grok-4.20-0309-non-reasoning` | When entitled: Grok 4.20 non-reasoning variant. |
 | `grok-4.20-multi-agent-0309` | When entitled: Grok 4.20 multi-agent research model. |
@@ -348,7 +348,7 @@ pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 | **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
 | **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model actually returned and selected through the OAuth-only `xai-auth` catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. When returned, Grok Build and Composer still receive their model-specific compatibility payloads, headers, and local tool shims. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model actually returned and selected through the OAuth-only `xai-auth` catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. An entitled `grok-build` entry still receives its legacy Responses payload/header compatibility behavior, while every `xai-auth` model uses the same Grok-native local tool adapters. The Composer alias (`grok-composer-2.5-fast`) follows the Grok 4.5 payload path. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
 
 ### Grok 4.5 source notes
 
@@ -361,23 +361,22 @@ Official xAI sources used for this catalog update:
 
 No Grok 4.5-specific model card, label card, system card, paper, or official max-output-token limit was found in the xAI docs/news/data sources during this update. The package keeps the existing Grok Responses max-token ceiling as a placeholder until xAI publishes official model metadata for that field.
 
-### Composer / Grok Build Tool Compatibility
+### Grok-native tools
 
-Composer 2.5 and Grok Build are trained against Cursor/Grok CLI-style tool names. When either `grok-composer-2.5-fast` or `grok-build` is selected, this package automatically enables compatibility shims that map those tool calls onto pi's built-in tools:
+For every active `xai-auth` model, this package advertises Grok-native client names—using the same name-override idea as Grok's `ToolConfig::with_name()`—and maps them onto pi capabilities:
 
-| Cursor/Grok CLI tool | pi tool used underneath |
-|----------------------|-------------------------|
-| `Read` | `read` |
-| `Write` | `write` |
-| `StrReplace` / `Edit` | `edit` |
-| `Delete` | workspace-safe file delete |
-| `LS` | `ls` |
-| `Grep` | `grep` |
-| `Glob` | `find` |
-| `Shell` | `bash` |
-| `WebSearch` | xAI native web search |
+| Grok-native tool | pi capability used underneath |
+|------------------|-------------------------------|
+| `read_file` | `read` |
+| `search_replace` | strict exact-string replacement; `write` when `old_string` is empty |
+| `list_dir` | `ls` |
+| `grep` | bounded local content search |
+| `run_terminal_command` | `bash` |
+| `web_search` | xAI native web search (opt-in via `/xai-tools`) |
 
-The local filesystem and shell shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are enabled automatically for eligible Grok CLI models and disabled again when you switch back to models such as `grok-4.5` or `grok-4.3`. `WebSearch` is the exception: it sends an additional xAI request, so it remains inactive until you enable it through `/xai-tools`.
+The model-facing fields follow Grok's contract: `target_file` plus signed `offset`, unsigned `limit`, `pages`, and `format` for `read_file`; `file_path`, `old_string`, `new_string`, and optional `replace_all` for `search_replace`; `target_directory` for `list_dir`; Grok's path/glob/context fields for `grep`; and millisecond `timeout` plus `description`/`background` for `run_terminal_command`. Pi has no managed background-task lifecycle, so `background: true` is rejected explicitly rather than being silently run in the foreground. PDF page rendering is not available through pi's text reader, so PDF `read_file` calls fail with an explicit guidance error. The local `grep` adapter preserves Grok's bounded output and timeout behavior while using a conservative workspace-only matcher and file-type subset. `web_search` preserves the optional `allowed_domains` list exactly.
+
+Legacy Cursor names (`Read`, `Shell`, `WebSearch`, and similar) are no longer registered by this package. Local Grok-native adapters enable automatically for `xai-auth` and clear when you leave xAI models without mutating same-named public tools owned by other extensions. Internally they use collision-free `xai_grok_*` dispatcher names, then expose the official public names only in the current xAI request, so unrelated extensions can keep their own public tools. `web_search` stays opt-in because it makes an additional authenticated xAI request.
 
 ---
 
@@ -399,11 +398,11 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-3 local references |
 | `xai_analyze_image` | Vision | Separate model-token and image-input usage |
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
-| `WebSearch` | Search | Grok Build/Composer model tokens plus native tool usage |
+| `web_search` | Search | Model tokens plus native tool usage |
 
 **How to use them:** Select an `xai-auth` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
 
-Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. The Grok CLI local filesystem and shell shims are automatic because they do not create a separate xAI API request.
+Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. Grok-native local filesystem and shell tools are automatic because they do not create a separate xAI API request.
 
 In the pi TUI, select an `xai-auth` model and run:
 
@@ -421,7 +420,7 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 /xai-tools enable xai_edit_image
 ```
 
-`WebSearch` appears in the picker only for Grok Build and Composer models. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
+`web_search` appears in the picker for any active xAI model (still opt-in). `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
@@ -835,7 +834,7 @@ pi-xai-oauth/
 │       ├── wire.ts           # Route-aware headers, scrubbing, identity, safe errors
 │       ├── image-edit.ts     # Bounded edit request/response orchestration
 │       ├── media/            # Reusable strict media parsing, compression, paths, and storage
-│       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
+│       └── tools/            # Custom xAI tools + Grok-native tool adapters
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
 ├── compatibility/
@@ -849,7 +848,7 @@ pi-xai-oauth/
 │   ├── responses/             # Payload, stream, error, routing, and image transport
 │   ├── images/                # Codec budgets and Images tool behavior
 │   ├── media/                 # Strict media/path/compression/storage primitives
-│   ├── tools/                 # Network lifecycle, command, custom, and Cursor shims
+│   ├── tools/                 # Network lifecycle, commands, custom tools, and Grok-native adapters
 │   └── setup/                 # Installer/settings behavior
 ├── scripts/
 │   ├── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner

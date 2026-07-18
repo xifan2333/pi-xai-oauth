@@ -59,8 +59,33 @@ export const XAI_PROVIDER_ID = "xai-auth";
 export const DEFAULT_XAI_MODEL = "grok-4.5";
 export const DEFAULT_XAI_IMAGE_MODEL = "grok-imagine-image-quality";
 
-export const XAI_CURSOR_TOOL_NAMES = ["Read", "Write", "StrReplace", "Edit", "Delete", "LS", "Grep", "Glob", "Shell", "WebSearch"];
-export const XAI_CURSOR_AUTO_TOOL_NAMES = ["Read", "Write", "StrReplace", "Edit", "Delete", "LS", "Grep", "Glob", "Shell"];
+/** Private pi dispatch names mapped to the official Grok model-facing surface. */
+export const XAI_GROK_NATIVE_TOOL_NAME_MAP = {
+  xai_grok_read_file: "read_file",
+  xai_grok_search_replace: "search_replace",
+  xai_grok_list_dir: "list_dir",
+  xai_grok_grep: "grep",
+  xai_grok_run_terminal_command: "run_terminal_command",
+  xai_grok_web_search: "web_search",
+} as const;
+
+/** Collision-free local Grok tools enabled automatically for xAI models. */
+export const XAI_GROK_NATIVE_AUTO_TOOL_NAMES = [
+  "xai_grok_read_file",
+  "xai_grok_search_replace",
+  "xai_grok_list_dir",
+  "xai_grok_grep",
+  "xai_grok_run_terminal_command",
+] as const;
+
+/** Public model-facing name for Grok-native xAI web search. */
+export const XAI_GROK_NATIVE_WEB_SEARCH_NAME = "web_search";
+
+/** Private pi dispatch name used to avoid collisions with other `web_search` extensions. */
+export const XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME = "xai_grok_web_search";
+
+/** All public Grok-native model-facing tool names, including opt-in web search. */
+export const XAI_GROK_NATIVE_TOOL_NAMES = Object.values(XAI_GROK_NATIVE_TOOL_NAME_MAP);
 
 export const XAI_GROK_CLI_AUTH_SCOPE_KEY = `${XAI_OAUTH_ISSUER}::${XAI_OAUTH_CLIENT_ID}`;
 export const XAI_GROK_CLI_LEGACY_AUTH_SCOPE_KEY = "https://accounts.x.ai/sign-in";

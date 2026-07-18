@@ -1,7 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { XAI_PROVIDER_ID } from "../constants";
-import { isGrokCliCompatibilityModel } from "../models";
+import {
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+  XAI_PROVIDER_ID,
+} from "../constants";
 
 /** Network-backed xAI tools that make an additional authenticated API request. */
 export const XAI_NETWORK_TOOL_NAMES = [
@@ -15,7 +17,7 @@ export const XAI_NETWORK_TOOL_NAMES = [
   "xai_edit_image",
   "xai_analyze_image",
   "xai_critique",
-  "WebSearch",
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
 ] as const;
 
 export type XaiNetworkToolName = (typeof XAI_NETWORK_TOOL_NAMES)[number];
@@ -73,13 +75,6 @@ export function setXaiNetworkToolActive(
       error: "Select an xAI/Grok model before enabling a network-backed xAI tool.",
     };
   }
-  if (active && toolName === "WebSearch" && !isGrokCliCompatibilityModel(xaiModel!.id)) {
-    return {
-      ok: false,
-      active: false,
-      error: "WebSearch is available only with xAI Grok Build or Composer models.",
-    };
-  }
   if (typeof api?.getActiveTools !== "function" || typeof api?.setActiveTools !== "function") {
     return {
       ok: false,
@@ -94,7 +89,6 @@ export function setXaiNetworkToolActive(
   // remove only the named tool — never replace the whole authorization set with
   // an empty set or delete every remaining opt-in.
   const nextSelection = new Set(previousSelection);
-  if (xaiModel && !isGrokCliCompatibilityModel(xaiModel.id)) nextSelection.delete("WebSearch");
   if (active) nextSelection.add(toolName);
   else nextSelection.delete(toolName);
 
@@ -146,7 +140,6 @@ export function syncXaiNetworkToolsForModel(api: any, model?: Model<Api>, option
     enabledNetworkTools = new Set();
   } else {
     enabledNetworkTools = new Set(explicitlyEnabledXaiNetworkTools.get(scope) ?? []);
-    if (!isGrokCliCompatibilityModel(xaiModel.id)) enabledNetworkTools.delete("WebSearch");
     explicitlyEnabledXaiNetworkTools.set(scope, enabledNetworkTools);
   }
 

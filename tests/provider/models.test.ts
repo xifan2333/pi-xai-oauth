@@ -21,7 +21,8 @@ describe("model compatibility metadata", () => {
   it("normalizes IDs and detects Grok CLI compatibility models", () => {
     expect(normalizedXaiModelId("xai-auth/GROK-BUILD")).toBe("grok-build");
     expect(isGrokCliCompatibilityModel("grok-build")).toBe(true);
-    expect(isGrokCliCompatibilityModel("grok-composer-2.5-fast")).toBe(true);
+    // Composer follows the 4.5 payload path; tool naming is now model-independent.
+    expect(isGrokCliCompatibilityModel("grok-composer-2.5-fast")).toBe(false);
     expect(isGrokCliCompatibilityModel("grok-4.5")).toBe(false);
   });
 

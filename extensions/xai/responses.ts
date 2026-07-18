@@ -10,8 +10,12 @@ import {
 } from "./models";
 import {
   canonicalizeXaiResponsesPayload,
+  exposeGrokNativeToolNames,
+  internalizeGrokNativeToolCalls,
   rewriteXaiResponsesPayload,
+  type GrokNativeToolRoutes,
   XAI_PAYLOAD_CANONICALIZATION_ERROR,
+  xaiPayloadGrokNativeToolRoutes,
   xaiResponsesPayloadContainsImage,
 } from "./payload";
 import { resolveXaiRoute, type XaiCredential } from "./routing";
@@ -83,12 +87,24 @@ function normalizeXaiErrorText(value: string): string {
     : value;
 }
 
-function normalizeXaiStreamEvent(event: AssistantStreamEvent): AssistantStreamEvent {
-  if (event.type !== "error" || !event.error || typeof event.error !== "object") return event;
-  const error = event.error as Record<string, any>;
-  if (typeof error.errorMessage !== "string") return event;
+function normalizeXaiStreamEvent(
+  event: AssistantStreamEvent,
+  grokNativeToolRoutes: GrokNativeToolRoutes,
+): AssistantStreamEvent {
+  const partial = internalizeGrokNativeToolCalls(event.partial, grokNativeToolRoutes);
+  const toolCall = internalizeGrokNativeToolCalls(event.toolCall, grokNativeToolRoutes);
+  const message = internalizeGrokNativeToolCalls(event.message, grokNativeToolRoutes);
+  const internalized =
+    partial !== event.partial || toolCall !== event.toolCall || message !== event.message
+      ? { ...event, partial, toolCall, message }
+      : event;
+  if (internalized.type !== "error" || !internalized.error || typeof internalized.error !== "object") {
+    return internalized;
+  }
+  const error = internalized.error as Record<string, any>;
+  if (typeof error.errorMessage !== "string") return internalized;
   return {
-    ...event,
+    ...internalized,
     error: {
       ...error,
       errorMessage:
@@ -338,6 +354,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
   const headers = { ...scrubXaiReservedHeaders(options?.headers), ...requestHeaders };
 
   const stream = createForwardingAssistantStream();
+  let grokNativeToolRoutes: GrokNativeToolRoutes = {};
   void (async () => {
     // Pi's generic OpenAI delegate does not expose fetch redirect controls.
     // Keep one URL-scoped guard installed only for the lifetime of active xAI
@@ -368,10 +385,12 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
             const canonicalPayload = canonicalizeXaiResponsesPayload(
               userRewritten === undefined ? rewritten : userRewritten,
             );
-            pinXaiPayloadModel(selectedModelId, canonicalPayload);
-            assertXaiRuntimeModelAcceptsPayload(selectedModelId, canonicalPayload);
+            grokNativeToolRoutes = xaiPayloadGrokNativeToolRoutes(canonicalPayload);
+            const exposedPayload = exposeGrokNativeToolNames(canonicalPayload);
+            pinXaiPayloadModel(selectedModelId, exposedPayload);
+            assertXaiRuntimeModelAcceptsPayload(selectedModelId, exposedPayload);
             const finalPayload = await compactXaiInlineImages(
-              canonicalPayload,
+              exposedPayload,
             );
             assertXaiRuntimeModelAcceptsPayload(selectedModelId, finalPayload);
             return finalPayload;
@@ -380,7 +399,7 @@ export function streamSimpleXaiResponses(model: Model<Api>, context: Context, op
       );
       for await (const event of inner as AsyncIterable<AssistantStreamEvent>) {
         if (event.type === "done" || event.type === "error") releaseRedirectGuard();
-        stream.push(normalizeXaiStreamEvent(event));
+        stream.push(normalizeXaiStreamEvent(event, grokNativeToolRoutes));
       }
       releaseRedirectGuard();
       stream.end();

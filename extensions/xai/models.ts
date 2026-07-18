@@ -321,10 +321,16 @@ export function normalizedXaiModelId(modelId: string): string {
   return (modelId || "").toLowerCase().split("/").pop() || "";
 }
 
-/** Return true for models that need Grok CLI compatibility behavior. */
+/**
+ * Return true when a model should use Grok CLI Responses payload quirks
+ * (strip mid-stream system/reasoning replay).
+ *
+ * Filesystem tools now use Grok-native names for every xai-auth model.
+ * This flag only gates payload rewriting for the legacy entitled `grok-build`
+ * catalog entry.
+ */
 export function isGrokCliCompatibilityModel(modelId: string): boolean {
-  const normalized = normalizedXaiModelId(modelId);
-  return normalized === "grok-build" || normalized === "grok-composer-2.5-fast";
+  return normalizedXaiModelId(modelId) === "grok-build";
 }
 
 /** Return true when xAI accepts an explicit Responses reasoning effort. */

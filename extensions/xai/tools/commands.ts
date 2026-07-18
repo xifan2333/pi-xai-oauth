@@ -1,16 +1,19 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { isGrokCliCompatibilityModel } from "../models";
+import {
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+  XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+} from "../constants";
 import {
   activeXaiModel,
   isXaiNetworkToolActive,
   setXaiNetworkToolActive,
-  XAI_NETWORK_TOOL_NAMES,
   type XaiNetworkToolName,
 } from "./model-scope";
 
 interface NetworkToolOption {
   name: XaiNetworkToolName;
+  displayName?: string;
   category: string;
   costRisk: string;
   summary: string;
@@ -27,7 +30,13 @@ const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
   { name: "xai_edit_image", category: "image", costRisk: "Imagine usage", summary: "edit 1-3 local image references" },
   { name: "xai_analyze_image", category: "vision", costRisk: "token usage", summary: "analyze an image with Grok" },
   { name: "xai_critique", category: "reasoning", costRisk: "token usage", summary: "separate high-reasoning critique" },
-  { name: "WebSearch", category: "search", costRisk: "token + tool", summary: "Grok Build/Composer native web search" },
+  {
+    name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+    displayName: XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+    category: "search",
+    costRisk: "token + tool",
+    summary: "Grok-native web_search",
+  },
 ];
 
 const XAI_TOOLS_USAGE =
@@ -36,21 +45,24 @@ const XAI_TOOLS_USAGE =
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
-  return XAI_NETWORK_TOOL_NAMES.find((name) => name.toLowerCase() === normalized);
+  return NETWORK_TOOL_OPTIONS.find(
+    ({ name, displayName }) =>
+      name.toLowerCase() === normalized || displayName?.toLowerCase() === normalized,
+  )?.name;
 }
 
-function eligibleToolOptions(model: Model<Api>): readonly NetworkToolOption[] {
-  return NETWORK_TOOL_OPTIONS.filter(
-    ({ name }) => name !== "WebSearch" || isGrokCliCompatibilityModel(model.id),
-  );
+function networkToolDisplayName(toolName: XaiNetworkToolName): string {
+  return NETWORK_TOOL_OPTIONS.find(({ name }) => name === toolName)?.displayName ?? toolName;
 }
 
-function activeToolStatus(pi: ExtensionAPI, model: Model<Api> | undefined): string {
-  return NETWORK_TOOL_OPTIONS.map(({ name }) => {
-    const unavailable = name === "WebSearch" && (!model || !isGrokCliCompatibilityModel(model.id));
-    if (unavailable) return `${name}=unavailable`;
-    return `${name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`;
-  }).join(", ");
+function eligibleToolOptions(): readonly NetworkToolOption[] {
+  return NETWORK_TOOL_OPTIONS;
+}
+
+function activeToolStatus(pi: ExtensionAPI): string {
+  return NETWORK_TOOL_OPTIONS.map(({ name, displayName }) =>
+    `${displayName ?? name}=${isXaiNetworkToolActive(pi, name) ? "enabled" : "disabled"}`,
+  ).join(", ");
 }
 
 function notifyUpdate(
@@ -63,10 +75,11 @@ function notifyUpdate(
     ctx.ui.notify(error, "error");
     return;
   }
+  const displayName = networkToolDisplayName(toolName);
   ctx.ui.notify(
     active
-      ? `Enabled ${toolName} for this xAI session. Calls may use xAI credits.`
-      : `Disabled ${toolName}.`,
+      ? `Enabled ${displayName} for this xAI session. Calls may use xAI credits.`
+      : `Disabled ${displayName}.`,
     active ? "warning" : "info",
   );
 }
@@ -78,10 +91,11 @@ async function showXaiToolSelectLoop(
 ) {
   while (true) {
     const labels = new Map<string, XaiNetworkToolName>();
-    for (const option of eligibleToolOptions(model)) {
+    for (const option of eligibleToolOptions()) {
       const active = isXaiNetworkToolActive(pi, option.name);
+      const displayName = option.displayName ?? option.name;
       labels.set(
-        `${active ? "[x]" : "[ ]"} ${option.name} — ${option.category}; ${option.costRisk}; ${option.summary}`,
+        `${active ? "[x]" : "[ ]"} ${displayName} — ${option.category}; ${option.costRisk}; ${option.summary}`,
         option.name,
       );
     }
@@ -106,7 +120,7 @@ async function showXaiToolTuiPicker(
   ctx: ExtensionCommandContext,
   model: Model<Api>,
 ) {
-  const options = eligibleToolOptions(model);
+  const options = eligibleToolOptions();
   await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
     let selectedIndex = 0;
     const maxVisible = 10;
@@ -151,7 +165,8 @@ async function showXaiToolTuiPicker(
           if (!option) continue;
           const active = isXaiNetworkToolActive(pi, option.name);
           const marker = index === selectedIndex ? "> " : "  ";
-          const text = `${marker}${active ? "[x]" : "[ ]"} ${option.name} — ${option.category}; ${option.costRisk}; ${option.summary}`
+          const displayName = option.displayName ?? option.name;
+          const text = `${marker}${active ? "[x]" : "[ ]"} ${displayName} — ${option.category}; ${option.costRisk}; ${option.summary}`
             .slice(0, maxRowWidth);
           lines.push(
             index === selectedIndex
@@ -221,7 +236,7 @@ export function registerXaiToolsCommand(pi: ExtensionAPI) {
 
       if (action.toLowerCase() === "status" && !rawToolName) {
         ctx.ui.notify(
-          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, model)}`,
+          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi)}`,
           "info",
         );
         return;

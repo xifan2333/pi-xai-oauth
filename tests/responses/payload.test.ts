@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  XAI_GROK_NATIVE_TOOL_NAME_MAP,
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+  XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+} from "../../extensions/xai/constants";
+import {
   canonicalizeXaiResponsesPayload,
+  exposeGrokNativeToolNames,
+  internalizeGrokNativeToolCalls,
   rewriteXaiResponsesPayload,
+  xaiPayloadGrokNativeToolRoutes,
   XAI_PAYLOAD_CANONICALIZATION_ERROR,
   xaiResponsesPayloadContainsImage,
 } from "../../extensions/xai/payload";
@@ -39,6 +47,78 @@ const inlineImages = (value: any): string[] => {
 };
 
 describe("Responses payload normalization", () => {
+  it("exposes and internalizes the collision-free Grok web-search dispatch name", () => {
+    const payload = {
+      tools: [{ type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME }],
+      input: [{
+        type: "function_call",
+        name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+        call_id: "call",
+        arguments: "{}",
+      }],
+      tool_choice: { type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME },
+    };
+    const exposed = exposeGrokNativeToolNames(payload) as any;
+    expect(exposed.tools[0].name).toBe(XAI_GROK_NATIVE_WEB_SEARCH_NAME);
+    expect(exposed.input[0].name).toBe(XAI_GROK_NATIVE_WEB_SEARCH_NAME);
+    expect(exposed.tool_choice.name).toBe(XAI_GROK_NATIVE_WEB_SEARCH_NAME);
+    expect(payload.tools[0].name).toBe(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME);
+    const routes = {
+      [XAI_GROK_NATIVE_WEB_SEARCH_NAME]: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+    };
+
+    expect(internalizeGrokNativeToolCalls({
+      type: "toolCall",
+      id: "call",
+      name: XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+      arguments: {},
+    }, routes)).toMatchObject({ name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME });
+    expect(internalizeGrokNativeToolCalls({
+      role: "assistant",
+      content: [{
+        type: "toolCall",
+        id: "call",
+        name: XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+        arguments: {},
+      }],
+    }, routes)).toMatchObject({
+      content: [{ name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME }],
+    });
+
+    const foreignCall = {
+      type: "toolCall",
+      id: "foreign",
+      name: XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+      arguments: {},
+    };
+    expect(internalizeGrokNativeToolCalls(foreignCall)).toBe(foreignCall);
+
+    const collision = exposeGrokNativeToolNames({
+      tools: [
+        { type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_NAME, description: "foreign" },
+        { type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, description: "xAI" },
+        { type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, description: "duplicate" },
+      ],
+    }) as any;
+    expect(collision.tools).toEqual([
+      { type: "function", name: XAI_GROK_NATIVE_WEB_SEARCH_NAME, description: "xAI" },
+    ]);
+
+    const generic = exposeGrokNativeToolNames({
+      tools: [{ type: "function", name: "xai_grok_read_file" }],
+    }) as any;
+    expect(generic.tools[0].name).toBe(XAI_GROK_NATIVE_TOOL_NAME_MAP.xai_grok_read_file);
+
+    const historyOnly = {
+      tools: [{ type: "function", name: "read_file", description: "foreign" }],
+      input: [{ type: "function_call", name: "xai_grok_read_file" }],
+    };
+    expect(xaiPayloadGrokNativeToolRoutes(historyOnly)).toEqual({});
+    expect(internalizeGrokNativeToolCalls({
+      type: "toolCall",
+      name: "read_file",
+    }, xaiPayloadGrokNativeToolRoutes(historyOnly))).toMatchObject({ name: "read_file" });
+  });
   it.each([
     { type: "reasoning", summary: [] },
     { type: "function_call", call_id: "next", name: "read", arguments: "{}" },
@@ -135,7 +215,7 @@ describe("Responses payload normalization", () => {
   });
   it("removes all system and reasoning replay for CLI models", () => {
     setXaiRuntimeModels(KNOWN_XAI_MODEL_METADATA);
-    const model = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
+    const model = { ...TEST_MODEL, id: "grok-build" } as any;
     const result: any = rewriteXaiResponsesPayload(
       {
         model: model.id,

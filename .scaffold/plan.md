@@ -1,27 +1,29 @@
-# Implementation Plan — PR #95 destructive Delete containment
+# Implementation Plan — Grok-native tool adapters
 
-**Branch:** `review/pr-95`
-**Rebase baseline:** `139ad7b`
-**Original PR head:** `a4e9746`
+**Branch:** `feature/grok-native-tools`
 
 ## Goal
 
-Keep `Delete` unable to remove the workspace root or traverse physical filesystem aliases outside it, while preserving normal child deletion and final-symlink unlink behavior.
+Replace Cursor-style compatibility shims with collision-free pi dispatchers that expose Grok's official model-facing tool names and argument contracts for every `xai-auth` model, while keeping network search opt-in and entitlement behavior exact.
 
 ## Phases
 
-1. [x] Confirm the dedicated PR worktree is clean and create `safety/pr-95-pre-main-rebase`.
-2. [x] Rebase the original PR commit onto current `origin/main`.
-3. [x] Encode intermediate-link, root-reentry, Windows case-alias, and final-symlink regressions.
-4. [x] Resolve the real workspace and target parent before destructive deletion.
-5. [x] Reject physical root/outside aliases and pass only the validated target to `fs.rm`.
-6. [x] Run focused tests, the original reproducer, strict TypeScript, full tests, coverage, loader, package checks, and exact Pi boundaries.
-7. [x] Commit, push with exact lease, refresh PR #95, verify checks/comments, and mark it ready after clean independent review.
+1. [x] Compare the existing shims with the official local Grok implementations under `/Users/justin/Projects/grok`.
+2. [x] Rename the adapter modules and implement official contracts for `read_file`, `search_replace`, `list_dir`, `grep`, `run_terminal_command`, and opt-in `web_search`.
+3. [x] Add strict local safety behavior: workspace containment, symlink checks, grep input/output/time bounds, exact replacement, and explicit unsupported background/PDF paths.
+4. [x] Register collision-free `xai_grok_*` dispatch names and translate only current xAI request definitions to public Grok names.
+5. [x] Make streamed tool-call internalization request-scoped and preserve unrelated extensions' public tool state across lifecycle transitions.
+6. [x] Update focused tests, loader expectations, README, and architecture notes.
+7. [x] Complete independent review and run the full test/typecheck/coverage/compatibility gates.
+8. [x] Perform live `/reload` coexistence verification with `pi-web-access`.
+9. [x] Commit the final branch without `.claude/`, open PR #99, and close superseded PR #98.
 
 ## Validation contract
 
-- Direct `.`, `./`, absolute-root, and Windows case-variant root spellings are rejected.
-- Intermediate symlinks or junctions cannot redirect `Delete` to the root or outside the workspace.
-- A final symlink is unlinked without deleting its target.
-- Ordinary files and directories physically inside the workspace remain deletable.
-- Portable Node cannot eliminate a hostile concurrent parent-replacement race; the patch must minimize that window by using canonical validated parents and document the residual assumption.
+- Successful `/models-v2` results remain exact entitlement state; aliases derive only from entitled canonicals.
+- No public Grok tool name is registered globally by this package.
+- Outbound xAI payloads contain official public names without duplicates; returned calls route privately only for tools exposed by that request.
+- Other extensions' public tool activation is never shadowed, snapshotted, or restored by this package.
+- Local grep remains physically inside the workspace and bounded by file, scan, time, line, and output limits.
+- `background: true` and unsupported PDF reads fail explicitly instead of silently changing semantics.
+- `.claude/` remains untracked and excluded from commits.

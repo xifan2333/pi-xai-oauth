@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+  XAI_GROK_NATIVE_WEB_SEARCH_NAME,
+} from "../../extensions/xai/constants";
+import {
   isXaiNetworkToolActive,
   setXaiNetworkToolActive,
   syncXaiNetworkToolsForModel,
@@ -7,21 +11,22 @@ import {
 } from "../../extensions/xai/tools/model-scope";
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { TEST_MODEL } from "../fixtures/models";
-const composer = { ...TEST_MODEL, id: "grok-composer-2.5-fast" } as any;
 
 describe("network-tool lifecycle", () => {
-  it("requires an active xAI model and Composer for WebSearch", () => {
+  it("requires an active xAI model for web_search", () => {
     const h = createExtensionHarness([...XAI_NETWORK_TOOL_NAMES]);
     expect(
       setXaiNetworkToolActive(h.api, undefined, "xai_web_search", true),
     ).toMatchObject({ ok: false, active: false });
     expect(
-      setXaiNetworkToolActive(h.api, TEST_MODEL, "WebSearch", true),
-    ).toMatchObject({ ok: false, active: false });
-    expect(setXaiNetworkToolActive(h.api, composer, "WebSearch", true)).toEqual(
-      { ok: true, active: true },
-    );
-    expect(isXaiNetworkToolActive(h.api, "WebSearch")).toBe(true);
+      setXaiNetworkToolActive(
+        h.api,
+        TEST_MODEL,
+        XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+        true,
+      ),
+    ).toEqual({ ok: true, active: true });
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
   });
   it("resets every network tool at session start", () => {
     const h = createExtensionHarness([...XAI_NETWORK_TOOL_NAMES, "read"]);
@@ -45,6 +50,17 @@ describe("network-tool lifecycle", () => {
     expect(h.getActiveTools()).not.toContain("xai_generate_image");
     syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
     expect(h.getActiveTools()).not.toContain("xai_generate_image");
+  });
+  it("does not mutate another extension's public web_search activation", () => {
+    const h = createExtensionHarness(["read", XAI_GROK_NATIVE_WEB_SEARCH_NAME]);
+    syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
+    expect(h.getActiveTools()).toContain(XAI_GROK_NATIVE_WEB_SEARCH_NAME);
+    syncXaiNetworkToolsForModel(h.api, {
+      provider: "anthropic",
+      id: "claude",
+    } as any);
+    expect(h.getActiveTools()).toContain(XAI_GROK_NATIVE_WEB_SEARCH_NAME);
+    expect(h.getActiveTools()).not.toContain(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME);
   });
   it("fails closed on registry read or write errors without partial authorization", () => {
     const read = createExtensionHarness();
