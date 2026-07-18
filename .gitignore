@@ -12,4 +12,5 @@ coverage/
 *.pem
 *.key
 auth.json
+CLAUDE.md
 *.local
