@@ -20,9 +20,9 @@
 - [x] Completed fresh independent review with no blocker/high correctness or security findings.
 - [x] Verified live offline `/reload` with `xai-auth/grok-4.5` while `pi-web-access` and the local xAI extension were both loaded; pi reported a successful reload without registration collisions.
 
-## In progress
+## Delivered
 
-- [ ] Commit the reviewed branch without `.claude/` and open/update the PR.
+- [x] Committed the reviewed implementation without `.claude/`, opened PR #99, and closed superseded PR #98.
 
 ## Residual / intentional adaptations
 

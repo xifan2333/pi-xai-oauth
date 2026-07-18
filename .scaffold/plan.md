@@ -16,7 +16,7 @@ Replace Cursor-style compatibility shims with collision-free pi dispatchers that
 6. [x] Update focused tests, loader expectations, README, and architecture notes.
 7. [x] Complete independent review and run the full test/typecheck/coverage/compatibility gates.
 8. [x] Perform live `/reload` coexistence verification with `pi-web-access`.
-9. [ ] Commit the final branch without `.claude/` and open/update the PR.
+9. [x] Commit the final branch without `.claude/`, open PR #99, and close superseded PR #98.
 
 ## Validation contract
 
