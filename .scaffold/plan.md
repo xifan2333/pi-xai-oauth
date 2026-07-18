@@ -1,35 +1,33 @@
-# Implementation Plan — Refresh PR #96: Bound Legacy Local Image Inputs
+# Implementation Plan — Refresh PR #101: Contain Grok-Native Direct File Adapters
 
-**Branch:** `cursor/critical-bug-management-2bee`
-**Base:** current `origin/main`
-**Stale PR safety ref:** `safety/pr-96-stale` (`d1c0b11b5f81707831a13bbd2ca0f63f171129a7`)
+**Branch:** `cursor/critical-bug-management-92fc`
+**Base:** `origin/main` at `fe8250575403fa7929ae4e6508a5f09ef45b3d91`
+**Stale PR safety ref:** `safety/pr-101-stale` (`0f9ca07b71699a933b094a968539fe5739b23d6b`)
 
 ## Goal
 
-Keep legacy PNG/JPEG path support, but materialize local images only from byte-bounded,
-validated regular files physically contained in the active workspace. Cover the custom
-tools and every current synchronous payload/vision normalization caller.
+Apply deterministic post-`realpath` workspace containment to Grok-native `read_file`,
+`search_replace`, and `list_dir`, retain bounded full-file reads and pi's mutation
+semantics, and document the deliberate exclusion of unrestricted terminal commands.
 
 ## Phases
 
-1. [x] Confirm clean scope, current main, stale PR head, and exact-lease delivery target.
-2. [x] Audit the current shared media reader and all `normalizeXaiImageInput` callers.
-3. [x] Add a synchronous counterpart to the hardened bounded workspace reader.
-4. [x] Route legacy path normalization through verified bytes and canonical data URLs.
-5. [x] Make both custom tools pass `ctx.cwd` and fail closed for local input without it.
-6. [x] Add direct, tool, payload, and vision-routing regressions plus documentation.
-7. [x] Run focused, full, coverage, typecheck, policy, and exact-boundary gates.
-8. [x] Obtain independent review, commit, exact-lease force-push, refresh PR #96, and mark ready.
+1. [x] Confirm clean scope, current main, stale PR head, reviews, checks, and lease target.
+2. [x] Preserve the stale head and rebuild the PR branch directly from current main.
+3. [x] Reapply and audit the stale containment implementation.
+4. [x] Harden missing-leaf and bounded-read behavior while preserving cancellation and queues.
+5. [x] Add direct-adapter, oversized-read, safe-path, and unrestricted-terminal regressions.
+6. [x] Clarify schemas, README, changelog, and persistent state.
+7. [x] Run focused, full, coverage, typecheck, policy, boundary, and hygiene gates.
+8. [ ] Obtain independent review, amend, exact-lease force-push, refresh PR #101, and merge.
 
 ## Validation Contract
 
-- HTTP(S) and existing `data:image/...` strings remain pass-through inputs.
-- Local `.png`, `.jpg`, and `.jpeg` inputs must resolve inside the selected workspace.
-- Local files must be regular, non-empty, at most 8 MiB, byte-valid PNG/JPEG, and at
-  most 12 million decoded pixels.
-- Local extensions must be supported and must agree with inspected image bytes.
-- Leaf/intermediate outward symlinks, traversal, special files, malformed paths, MIME
-  spoofing, oversized files, and pixel bombs fail locally without reflecting paths.
-- Tool-local paths require a valid `ctx.cwd`; provider payload and vision callers keep
-  `process.cwd()` as their synchronous session default.
+- Relative and absolute in-workspace paths work for read, replace, create, and list.
+- Outside absolute paths, escaping traversal, and outward file/directory symlinks fail.
+- Missing leaves are creatable only through a physically contained existing parent.
+- Package-owned full-file reads for negative offsets and exact replacement stop at
+  5,000,000 bytes.
+- Cancellation, pi's per-file mutation queue, stale-snapshot detection, and normal behavior remain.
+- `run_terminal_command` still delegates to pi `bash` without workspace containment.
 - `.claude/`, `anime-characters.jpg`, and `anime-characters.mp4` remain untracked.
