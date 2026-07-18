@@ -12,6 +12,7 @@ coverage/
 .pi-subagents/
 .scaffold/
 .claude/
+CLAUDE.md
 *.pem
 *.key
 auth.json

@@ -6,6 +6,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+## 1.3.6 - 2026-07-18
+
 ### Added
 
 - Added encrypted reasoning replay on the pinned OAuth Responses route, including final `store:false` defaults, deduplicated encrypted-content requests, complete inline typed-item persistence/replay, exact provider/API/model isolation, and fixed redacted mismatch guidance.
