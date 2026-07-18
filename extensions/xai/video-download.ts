@@ -52,6 +52,13 @@ function blockedIpv4(address: string): boolean {
     a >= 224;
 }
 
+function isBlockedVideoDownloadIpv4(address: string): boolean {
+  const normalized = normalizedIp(address);
+  const compatibleIpv4 = /^::(\d{1,3}(?:\.\d{1,3}){3})$/.exec(normalized)?.[1];
+  if (compatibleIpv4) return blockedIpv4(compatibleIpv4);
+  return isIP(normalized) === 4 && blockedIpv4(normalized);
+}
+
 export function isPublicVideoDownloadAddress(address: string): boolean {
   const normalized = normalizedIp(address);
   const compatibleIpv4 = /^::(\d{1,3}(?:\.\d{1,3}){3})$/.exec(normalized)?.[1];
@@ -114,12 +121,20 @@ export async function downloadXaiVideo(options: {
         { once: true },
       )),
     ]);
-    if (addresses.length === 0 || addresses.some(({ address }) => !isPublicVideoDownloadAddress(address))) {
+    // IPv6 answers are intentionally non-public, but dual-stack CDNs almost always
+    // return mixed A/AAAA records. Select only public IPv4 pins and still fail closed
+    // when any private/special-use IPv4 answer is present (DNS rebinding defense).
+    const publicAddresses = addresses.filter(({ address }) => isPublicVideoDownloadAddress(address));
+    const hasBlockedIpv4 = addresses.some(({ address }) => isBlockedVideoDownloadIpv4(address));
+    if (publicAddresses.length === 0 || hasBlockedIpv4) {
       throw new VideoDownloadError();
     }
-    const selected = addresses[0];
+    const selected = publicAddresses[0];
     const response = await new Promise<import("node:http").IncomingMessage>((resolve, reject) => {
-      const requestOptions: RequestOptions = {
+      // Node 24 enables Happy Eyeballs by default; pin family 4 and supply both
+      // single-address and { all: true } lookup callback shapes so the custom pin
+      // is honored without re-resolving dual-stack DNS.
+      const requestOptions = {
         protocol: "https:",
         hostname: url.hostname,
         port: 443,
@@ -130,11 +145,18 @@ export async function downloadXaiVideo(options: {
           "User-Agent": XAI_USER_AGENT,
         },
         servername: url.hostname,
+        family: 4,
+        autoSelectFamily: false,
         signal: controller.signal,
-        lookup(_hostname, _options, callback) {
+        lookup(_hostname: string, options: unknown, callback: (...args: any[]) => void) {
+          const opts = typeof options === "object" && options ? options as { all?: boolean } : {};
+          if (opts.all) {
+            callback(null, [{ address: selected.address, family: selected.family }]);
+            return;
+          }
           callback(null, selected.address, selected.family);
         },
-      };
+      } as RequestOptions & { autoSelectFamily?: boolean };
       const req = request(requestOptions, (res) => resolve(res));
       req.once("socket", (socket) => {
         socket.once("secureConnect", () => {
