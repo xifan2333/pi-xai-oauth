@@ -5,6 +5,8 @@ import {
   XAI_IMAGES_EDITS_URL,
   XAI_IMAGES_GENERATIONS_URL,
   XAI_RESPONSES_URL,
+  XAI_VIDEOS_GENERATIONS_URL,
+  XAI_VIDEOS_STATUS_PREFIX,
 } from "./constants";
 
 export type XaiCredentialKind = "oauth-session" | "api-key";
@@ -14,7 +16,12 @@ export interface XaiCredential {
   token: string;
 }
 
-export type XaiRequestKind = "responses" | "image-generation" | "image-edit";
+export type XaiRequestKind =
+  | "responses"
+  | "image-generation"
+  | "image-edit"
+  | "video-generation-create"
+  | "video-generation-status";
 
 export interface XaiRoute {
   baseUrl: string;
@@ -28,11 +35,15 @@ const XAI_ROUTES: Record<XaiCredentialKind, Record<XaiRequestKind, XaiRoute>> = 
     // both OAuth sessions and BYOK credentials rather than via the chat proxy.
     "image-generation": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_GENERATIONS_URL },
     "image-edit": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_EDITS_URL },
+    "video-generation-create": { baseUrl: XAI_API_BASE_URL, url: XAI_VIDEOS_GENERATIONS_URL },
+    "video-generation-status": { baseUrl: XAI_API_BASE_URL, url: XAI_VIDEOS_STATUS_PREFIX },
   },
   "api-key": {
     responses: { baseUrl: XAI_API_BASE_URL, url: XAI_RESPONSES_URL },
     "image-generation": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_GENERATIONS_URL },
     "image-edit": { baseUrl: XAI_API_BASE_URL, url: XAI_IMAGES_EDITS_URL },
+    "video-generation-create": { baseUrl: XAI_API_BASE_URL, url: XAI_VIDEOS_GENERATIONS_URL },
+    "video-generation-status": { baseUrl: XAI_API_BASE_URL, url: XAI_VIDEOS_STATUS_PREFIX },
   },
 };
 

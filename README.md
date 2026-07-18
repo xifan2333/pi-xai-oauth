@@ -418,6 +418,7 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_code_execution` | Execution | Model tokens plus code-interpreter usage |
 | `xai_generate_image` | Image generation | Charged per generated image; supports 1-4 images |
 | `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-3 local references |
+| `xai_image_to_video` | Video generation | High-cost, long-running 6- or 10-second video generation |
 | `xai_analyze_image` | Vision | Separate model-token and image-input usage |
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
 | `web_search` | Search | Model tokens plus native tool usage |
@@ -440,6 +441,7 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 /xai-tools disable xai_web_search
 /xai-tools enable xai_generate_image
 /xai-tools enable xai_edit_image
+/xai-tools enable xai_image_to_video
 /xai-tools enable vision-routing
 /xai-tools disable vision-routing
 ```
@@ -535,6 +537,23 @@ Reference handling uses the pinned Grok Build policy as its starting point: sour
 Exactly one verified PNG/JPEG output is saved atomically with a collision-resistant name under Pi's session directory at `pi-xai-oauth/<session-hash>/image-edits/`. Directories use mode `0700`, files use `0600`, and the tool returns path/dimension/size metadata instead of raw base64. Prompts, source paths, data URLs, image bytes, credentials, headers, and raw authenticated error bodies are never included in image-edit errors.
 
 Image editing can consume xAI Imagine allowances, credits, or rate limits. Exact pricing and quota behavior are controlled by xAI; see [xAI pricing](https://docs.x.ai/developers/pricing) before enabling the tool.
+
+### `xai_image_to_video`
+
+Opt-in high-cost image-to-video generation through `grok-imagine-video-1.5-preview`. Enable it explicitly, then provide exactly one bounded workspace PNG/JPEG or strict PNG/JPEG data URL. Remote source URLs and multi-reference video generation are intentionally unsupported.
+
+```json
+{
+  "image": { "path": "assets/reference.png" },
+  "prompt": "Slow camera push-in with subtle ambient motion",
+  "duration": 6,
+  "resolution": "480p"
+}
+```
+
+Duration is `6` or `10` seconds (default `6`); resolution is `480p` or `720p` (default `480p`). The client waits five seconds before its first status request, polls every five seconds, and stops local tracking after five minutes. Video generation can be expensive and rate-limited. Cancelling Pi stops local waiting, requests, download, and partial-file writes, but the submitted remote xAI job is **not cancelled** and may continue consuming usage or credits.
+
+Completed MP4s are downloaded without OAuth headers through an HTTPS-only, no-redirect, resolve-once public-IPv4 DNS/IP-pinned transport; IPv6-only download hosts fail closed. Downloads accept only MP4 MIME, are streamed under a 256 MiB limit, require bounded `ftyp` evidence, and are atomically saved under `pi-xai-oauth/<session-hash>/videos/` with private `0700` directories and `0600` files. Signed URLs, request IDs, source data, prompts, credentials, and raw authenticated bodies are not returned or logged.
 
 ### `xai_critique`
 Opt-in structured critique for code, designs, writing, or ideas. Enable it through `/xai-tools` first.

@@ -7,6 +7,8 @@ import {
   XAI_PROXY_CLIENT_VERSION,
   XAI_RESPONSES_URL,
   XAI_USER_AGENT,
+  XAI_VIDEOS_GENERATIONS_URL,
+  XAI_VIDEOS_STATUS_PREFIX,
 } from "./constants";
 import type { XaiCredentialKind } from "./routing";
 
@@ -48,6 +50,8 @@ export type XaiHttpRouteKind =
   | "responses-direct"
   | "image-generation"
   | "image-edit"
+  | "video-generation-create"
+  | "video-generation-status"
   | "unknown";
 
 export interface XaiProxyRequestMetadata {
@@ -197,11 +201,22 @@ export function xaiDirectMediaJsonHeaders(authToken: string): Record<string, str
   return xaiJsonPostHeaders(authToken);
 }
 
+/** Build protected JSON GET headers for direct public media status requests. */
+export function xaiDirectMediaJsonGetHeaders(authToken: string): Record<string, string> {
+  return {
+    Accept: "application/json",
+    Authorization: `Bearer ${authToken}`,
+    "User-Agent": XAI_USER_AGENT,
+  };
+}
+
 function routeKindForUrl(url: string): XaiHttpRouteKind {
   if (url === XAI_CLI_RESPONSES_URL) return "responses-proxy";
   if (url === XAI_RESPONSES_URL) return "responses-direct";
   if (url === XAI_IMAGES_GENERATIONS_URL) return "image-generation";
   if (url === XAI_IMAGES_EDITS_URL) return "image-edit";
+  if (url === XAI_VIDEOS_GENERATIONS_URL) return "video-generation-create";
+  if (url.startsWith(XAI_VIDEOS_STATUS_PREFIX)) return "video-generation-status";
   return "unknown";
 }
 
@@ -231,6 +246,8 @@ function routeLabel(routeKind: XaiHttpRouteKind): string {
   if (routeKind === "responses-proxy" || routeKind === "responses-direct") return "Responses";
   if (routeKind === "image-generation") return "image generation";
   if (routeKind === "image-edit") return "image editing";
+  if (routeKind === "video-generation-create") return "video generation";
+  if (routeKind === "video-generation-status") return "video status";
   return "request";
 }
 

@@ -23,6 +23,7 @@ try {
   const loaded = result.extensions[0];
   assert.ok(loaded.tools.has("xai_generate_text"), "representative xAI tool should be registered");
   assert.ok(loaded.tools.has("xai_edit_image"), "bounded xAI image-edit tool should be registered");
+  assert.ok(loaded.tools.has("xai_image_to_video"), "bounded xAI image-to-video tool should be registered");
   assert.ok(
     loaded.tools.has("xai_grok_grep"),
     "collision-free Grok grep dispatcher should be registered",

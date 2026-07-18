@@ -26,3 +26,11 @@ export interface SavedImageOutput {
   height: number;
   byteLength: number;
 }
+
+export interface SavedVideoOutput {
+  path: string;
+  mimeType: "video/mp4" | "application/mp4";
+  byteLength: number;
+  duration: 6 | 10;
+  resolution: "480p" | "720p";
+}

@@ -248,8 +248,8 @@ describe("/xai-tools command", () => {
       },
     });
     await h.commands.get("xai-tools").handler("", ctx);
-    // Full catalog includes web_search for every xAI model; page-up wraps to the last entry.
-    expect(selected[0]).toMatch(/web_search/);
+    // Page movement uses the ten-row viewport across the full tool catalog.
+    expect(selected[0]).toMatch(/xai_x_search/);
     expect(selected[1]).toMatch(/\[ \] xai_generate_image/);
     expect(selected[2]).toMatch(/\[x\] xai_generate_image/);
     expect(closed).toBe(true);
@@ -298,7 +298,7 @@ describe("/xai-tools command", () => {
     });
 
     await h.commands.get("xai-tools").handler("", ctx);
-    expect(afterPageUp).toMatch(/xai_web_search/);
+    expect(afterPageUp).toMatch(/xai_x_search/);
     expect(afterPageDown).toMatch(/xai_generate_text/);
   });
 });

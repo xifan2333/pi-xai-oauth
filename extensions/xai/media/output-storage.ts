@@ -65,14 +65,83 @@ async function ensurePrivateOutputDirectory(outputRoot: string, sessionRoot: str
 }
 
 /** Derive a package-owned, session-specific image-edit output directory. */
-export function imageEditOutputRoot(sessionManager: ReadonlySessionLocation): string {
+function sessionOutputRoot(sessionManager: ReadonlySessionLocation, category: string): string {
   const sessionDir = sessionManager?.getSessionDir?.();
   const sessionId = sessionManager?.getSessionId?.();
   if (typeof sessionDir !== "string" || !isAbsolute(sessionDir) || typeof sessionId !== "string" || !sessionId) {
     throw new Error("A safe Pi session output directory is unavailable.");
   }
   const sessionKey = createHash("sha256").update(sessionId).digest("hex").slice(0, 32);
-  return join(sessionDir, "pi-xai-oauth", sessionKey, "image-edits");
+  return join(sessionDir, "pi-xai-oauth", sessionKey, category);
+}
+
+/** Derive a package-owned, session-specific image-edit output directory. */
+export function imageEditOutputRoot(sessionManager: ReadonlySessionLocation): string {
+  return sessionOutputRoot(sessionManager, "image-edits");
+}
+
+/** Derive a package-owned, session-specific video output directory. */
+export function videoOutputRoot(sessionManager: ReadonlySessionLocation): string {
+  return sessionOutputRoot(sessionManager, "videos");
+}
+
+/** Atomically save a verified image to controlled session storage with 0700/0600 modes. */
+export interface PrivateOutputWriter {
+  write(chunk: Uint8Array): Promise<void>;
+}
+
+/** Stream one verified output into a private temporary file and atomically publish it. */
+export async function savePrivateStreamedOutput<T>(options: {
+  outputRoot: string;
+  sessionRoot: string;
+  extension: string;
+  stemPrefix: string;
+  signal?: AbortSignal;
+  write: (writer: PrivateOutputWriter) => Promise<T>;
+}): Promise<{ path: string; value: T }> {
+  throwIfAborted(options.signal);
+  if (!isAbsolute(options.outputRoot) || !isAbsolute(options.sessionRoot)) {
+    throw new Error("Output path is invalid.");
+  }
+  const realOutputRoot = await ensurePrivateOutputDirectory(options.outputRoot, options.sessionRoot);
+  const stem = `${options.stemPrefix}-${Date.now()}-${randomUUID()}`;
+  const finalPath = join(realOutputRoot, `${stem}.${options.extension}`);
+  const temporaryPath = join(realOutputRoot, `.${stem}.${options.extension}.tmp`);
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let finalCreated = false;
+  try {
+    handle = await open(temporaryPath, "wx", IMAGE_EDIT_OUTPUT_FILE_MODE);
+    const currentHandle = handle;
+    const value = await options.write({
+      async write(chunk) {
+        throwIfAborted(options.signal);
+        let offset = 0;
+        while (offset < chunk.byteLength) {
+          const { bytesWritten } = await currentHandle.write(
+            chunk,
+            offset,
+            chunk.byteLength - offset,
+          );
+          if (bytesWritten <= 0) throw new Error("Private output write made no progress.");
+          offset += bytesWritten;
+        }
+      },
+    });
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    throwIfAborted(options.signal);
+    await rename(temporaryPath, finalPath);
+    finalCreated = true;
+    await chmod(finalPath, IMAGE_EDIT_OUTPUT_FILE_MODE);
+    throwIfAborted(options.signal);
+    return { path: finalPath, value };
+  } catch (error) {
+    await handle?.close().catch(() => undefined);
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    if (finalCreated) await rm(finalPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Atomically save a verified image to controlled session storage with 0700/0600 modes. */

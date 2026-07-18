@@ -49,6 +49,9 @@ All listed headers are internally owned. Caller/model headers are scrubbed case-
 | OAuth direct Responses | `https://cli-chat-proxy.grok.com/v1/responses` | Same proxy metadata with `Accept: application/json` and redirect rejection | No SSE accept, unsupported identity IDs, or generic SDK affinity IDs |
 | API-key direct Responses | `https://api.x.ai/v1/responses` | Bearer, JSON accept/content, truthful User-Agent, redirect rejection | No CLI-proxy metadata or generic SDK affinity IDs |
 | OAuth or API-key image generation | `https://api.x.ai/v1/images/generations` | Bearer, JSON accept/content, truthful User-Agent, redirect rejection | No CLI-proxy metadata |
+| OAuth or API-key video create | `https://api.x.ai/v1/videos/generations` | Bearer, JSON accept/content, truthful User-Agent, 60-second timeout, bounded response, redirect rejection | No CLI-proxy metadata or retries |
+| OAuth or API-key video status | `https://api.x.ai/v1/videos/<validated-request-id>` | Bearer, JSON accept, truthful User-Agent, fixed 5-second polling, per-request/cumulative bounds | No content type, CLI-proxy metadata, caller URL, or unvalidated path input |
+| Temporary video download | Authenticated status response's validated HTTPS URL | No-auth GET, resolve-once public DNS/IP pinning, TLS hostname verification, redirect rejection, MP4 MIME/evidence, 256 MiB streamed bound | No bearer, cookie, proxy, caller, or xAI affinity headers; URL/query never reflected |
 
 ### Header classification
 
