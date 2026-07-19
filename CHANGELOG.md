@@ -11,6 +11,10 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
 
+### Changed
+
+- Recorded the package-scope decision to keep provider-neutral goal/plan workflows, autonomous continuation, runtime plan management, and write-restriction policy out of `pi-xai-oauth`; see [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md).
+
 ### Fixed
 
 - Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
