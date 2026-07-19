@@ -6,9 +6,17 @@ import {
   createWriteToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { lstat, readdir, readFile, realpath, writeFile as writeFileUtf8 } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  lstat,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  writeFile as writeFileUtf8,
+} from "node:fs/promises";
 import { Worker } from "node:worker_threads";
-import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { Type } from "typebox";
 import { resolveXaiCredential } from "../auth";
 import {
@@ -48,6 +56,8 @@ const MAX_GROK_GREP_TOTAL_BYTES = 100_000_000;
 const MAX_GROK_GREP_OUTPUT_BYTES = 40 * 1024;
 const MAX_GROK_GREP_LINE_CHARS = 1_000;
 const GROK_GREP_TIMEOUT_MS = 20_000;
+/** Shared ceiling for package-owned text file reads (grep + negative-offset read/replace). */
+const MAX_GROK_NATIVE_TEXT_FILE_BYTES = MAX_GROK_GREP_FILE_BYTES;
 const SKIPPED_SEARCH_DIRS = new Set([".git", ".omp", "node_modules"]);
 
 const GROK_GREP_FILE_TYPES: Readonly<Record<string, readonly string[]>> = {
@@ -74,7 +84,8 @@ const GROK_GREP_FILE_TYPES: Readonly<Record<string, readonly string[]>> = {
 const readFileSchema = Type.Object({
   target_file: Type.String({
     minLength: 1,
-    description: "Path to the file, relative to the workspace or absolute.",
+    description:
+      "Workspace-relative path or absolute path inside the workspace. Traversal and symlinks resolving outside are rejected.",
   }),
   offset: Type.Optional(Type.Integer({ description: "The line number to start reading from." })),
   limit: Type.Optional(Type.Integer({ description: "The number of lines to read." })),
@@ -87,9 +98,14 @@ const readFileSchema = Type.Object({
 });
 
 const searchReplaceSchema = Type.Object({
-  file_path: Type.String({ minLength: 1, description: "Path to the file to modify." }),
+  file_path: Type.String({
+    minLength: 1,
+    description:
+      "Workspace-relative path or absolute path inside the workspace. Traversal and symlinks resolving outside are rejected.",
+  }),
   old_string: Type.String({
-    description: "Exact text to replace. Use an empty string to create or overwrite a file.",
+    description:
+      "Exact text to replace. An empty string overwrites an existing file or creates a missing leaf under a workspace-contained physical parent.",
   }),
   new_string: Type.String({ description: "Replacement text." }),
   replace_all: Type.Optional(Type.Boolean({
@@ -100,7 +116,8 @@ const searchReplaceSchema = Type.Object({
 const listDirSchema = Type.Object({
   target_directory: Type.String({
     minLength: 1,
-    description: "Directory to list, relative to the workspace or absolute.",
+    description:
+      "Workspace-relative directory or absolute directory inside the workspace. Traversal and symlinks resolving outside are rejected.",
   }),
 });
 
@@ -128,7 +145,11 @@ const grepSchema = Type.Object({
 });
 
 const terminalCommandSchema = Type.Object({
-  command: Type.String({ minLength: 1, description: "Shell command to execute." }),
+  command: Type.String({
+    minLength: 1,
+    description:
+      "Shell command passed to pi bash. Unlike direct file adapters, command filesystem access is not workspace-contained.",
+  }),
   timeout: Type.Optional(Type.Integer({
     minimum: 0,
     maximum: 300_000,
@@ -290,6 +311,101 @@ async function physicalWorkspaceSearchPath(cwd: string, requestedPath: string): 
     throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
   }
   return physicalPath;
+}
+
+/**
+ * Resolve a read/write/list path that remains inside the workspace after symlink resolution.
+ * Missing leaf files are allowed when their physical parent stays inside the workspace.
+ * This is pathname-based defense in depth, not a race-resistant filesystem sandbox.
+ */
+async function containedWorkspacePath(cwd: string, requestedPath: string): Promise<string> {
+  const lexicalPath = safeWorkspacePath(cwd, requestedPath);
+  const workspacePath = await realpath(cwd);
+  try {
+    const physicalPath = await realpath(lexicalPath);
+    if (!pathIsWithin(workspacePath, physicalPath)) {
+      throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
+    }
+    return physicalPath;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+  }
+
+  const unresolvedLeafExists = await lstat(lexicalPath).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    },
+  );
+  if (unresolvedLeafExists) {
+    throw new Error(`Refusing to operate through an unresolved existing path: ${requestedPath}`);
+  }
+
+  let physicalParent: string;
+  try {
+    physicalParent = await realpath(dirname(lexicalPath));
+  } catch {
+    throw new Error(`Path not found: ${requestedPath}`);
+  }
+  if (!pathIsWithin(workspacePath, physicalParent)) {
+    throw new Error(`Refusing to operate outside the workspace: ${requestedPath}`);
+  }
+  return join(physicalParent, basename(lexicalPath));
+}
+
+/** Convert a contained absolute path into a cwd-relative tool path for pi builtins. */
+async function toWorkspaceToolPath(cwd: string, absolutePath: string): Promise<string> {
+  const workspacePath = await realpath(cwd);
+  const relativePath = relative(workspacePath, absolutePath);
+  if (relativePath === "") return ".";
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    throw new Error("Refusing to pass a path outside the workspace to a direct file adapter");
+  }
+  return relativePath;
+}
+
+async function readContainedTextFile(
+  absolutePath: string,
+  requestedPath: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  throwIfAborted(signal);
+  const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
+  const nonBlock = typeof constants.O_NONBLOCK === "number" ? constants.O_NONBLOCK : 0;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(absolutePath, constants.O_RDONLY | noFollow | nonBlock);
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error(`Not a file: ${requestedPath}`);
+    if (info.size > MAX_GROK_NATIVE_TEXT_FILE_BYTES) {
+      throw new Error(
+        `Refusing to read more than ${MAX_GROK_NATIVE_TEXT_FILE_BYTES} bytes from ${requestedPath}`,
+      );
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    while (totalBytes <= MAX_GROK_NATIVE_TEXT_FILE_BYTES) {
+      throwIfAborted(signal);
+      const chunk = Buffer.allocUnsafe(
+        Math.min(64 * 1024, MAX_GROK_NATIVE_TEXT_FILE_BYTES + 1 - totalBytes),
+      );
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      chunks.push(chunk.subarray(0, bytesRead));
+      totalBytes += bytesRead;
+    }
+    if (totalBytes > MAX_GROK_NATIVE_TEXT_FILE_BYTES) {
+      throw new Error(
+        `Refusing to read more than ${MAX_GROK_NATIVE_TEXT_FILE_BYTES} bytes from ${requestedPath}`,
+      );
+    }
+    throwIfAborted(signal);
+    return Buffer.concat(chunks, totalBytes).toString("utf8");
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 function checkGrepBudget(signal: AbortSignal | undefined, deadline: number): void {
@@ -627,10 +743,13 @@ async function executeSearchReplace(
     throw new Error("search_replace requires different old_string and new_string values");
   }
 
+  const absolutePath = await containedWorkspacePath(ctx.cwd, normalized.path);
+  const toolPath = await toWorkspaceToolPath(ctx.cwd, absolutePath);
+
   if (normalized.oldText === "") {
     return createWriteToolDefinition(ctx.cwd).execute(
       toolCallId,
-      { path: normalized.path, content: normalized.newText },
+      { path: toolPath, content: normalized.newText },
       signal,
       onUpdate,
       ctx,
@@ -638,10 +757,7 @@ async function executeSearchReplace(
   }
 
   throwIfAborted(signal);
-  const absolutePath = isAbsolute(normalized.path)
-    ? resolve(normalized.path)
-    : resolve(ctx.cwd, normalized.path);
-  const rawContent = await readFile(absolutePath, "utf8");
+  const rawContent = await readContainedTextFile(absolutePath, normalized.path, signal);
   throwIfAborted(signal);
   const hasBom = rawContent.charCodeAt(0) === 0xfeff;
   const body = hasBom ? rawContent.slice(1) : rawContent;
@@ -687,7 +803,7 @@ async function executeSearchReplace(
       mkdir: () => Promise.resolve(),
       async writeFile(queuedPath, queuedContent) {
         throwIfAborted(signal);
-        if (await readFile(queuedPath, "utf8") !== rawContent) {
+        if (await readContainedTextFile(queuedPath, normalized.path, signal) !== rawContent) {
           throw new Error(
             `search_replace refused to overwrite a concurrently changed file: ${normalized.path}`,
           );
@@ -698,7 +814,7 @@ async function executeSearchReplace(
     },
   }).execute(
     toolCallId,
-    { path: normalized.path, content: replacementContent },
+    { path: toolPath, content: replacementContent },
     signal,
     onUpdate,
     ctx,
@@ -723,13 +839,15 @@ async function executeReadFile(
       "read_file PDF pages/format are unavailable in this pi adapter; use a workspace text export",
     );
   }
-  const piArgs = readFileArgsForPi(prepared);
+  const absolutePath = await containedWorkspacePath(ctx.cwd, prepared.target_file);
+  const toolPath = await toWorkspaceToolPath(ctx.cwd, absolutePath);
+  const piArgs = {
+    ...readFileArgsForPi(prepared),
+    path: toolPath,
+  };
   if (prepared.offset !== undefined && prepared.offset < 0) {
     throwIfAborted(signal);
-    const absolutePath = isAbsolute(prepared.target_file)
-      ? resolve(prepared.target_file)
-      : resolve(ctx.cwd, prepared.target_file);
-    const content = await readFile(absolutePath, "utf8");
+    const content = await readContainedTextFile(absolutePath, prepared.target_file, signal);
     throwIfAborted(signal);
     const readableFields = content.split("\n").length;
     const totalFields = readableFields
@@ -786,7 +904,8 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
   pi.registerTool({
     name: "xai_grok_read_file",
     label: XAI_GROK_NATIVE_TOOL_NAME_MAP.xai_grok_read_file,
-    description: "Read a file using Grok's native target_file/offset/limit contract.",
+    description:
+      "Read a workspace-contained file using Grok's native target_file/offset/limit contract. Relative and in-workspace absolute paths are supported.",
     promptSnippet: "Read a file with target_file and optional offset/limit",
     parameters: readFileSchema,
     prepareArguments: prepareReadFileArgs,
@@ -797,7 +916,7 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
     name: "xai_grok_search_replace",
     label: XAI_GROK_NATIVE_TOOL_NAME_MAP.xai_grok_search_replace,
     description:
-      "Replace exact text in a file. old_string must be unique unless replace_all=true; an empty old_string creates or overwrites the file.",
+      "Replace exact text in a workspace-contained file. old_string must be unique unless replace_all=true; an empty old_string overwrites an existing file or creates a safe contained leaf.",
     promptSnippet: "Replace exact text with file_path, old_string, and new_string",
     parameters: searchReplaceSchema,
     prepareArguments: prepareSearchReplaceArgs,
@@ -807,18 +926,23 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
   pi.registerTool({
     name: "xai_grok_list_dir",
     label: XAI_GROK_NATIVE_TOOL_NAME_MAP.xai_grok_list_dir,
-    description: "List a directory using Grok's native target_directory contract.",
+    description:
+      "List a workspace-contained directory using Grok's native target_directory contract. Relative and in-workspace absolute paths are supported.",
     promptSnippet: "List a directory with target_directory",
     parameters: listDirSchema,
     prepareArguments: prepareListDirArgs,
-    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) =>
-      createLsToolDefinition(ctx.cwd).execute(
+    execute: async (toolCallId: string, params: any, signal: any, onUpdate: any, ctx: any) => {
+      const prepared = prepareListDirArgs(params);
+      const absolutePath = await containedWorkspacePath(ctx.cwd, prepared.target_directory);
+      const toolPath = await toWorkspaceToolPath(ctx.cwd, absolutePath);
+      return createLsToolDefinition(ctx.cwd).execute(
         toolCallId,
-        listDirArgsForPi(params) as any,
+        { ...listDirArgsForPi(params), path: toolPath } as any,
         signal,
         onUpdate,
         ctx,
-      ),
+      );
+    },
   } as any);
 
   pi.registerTool({
@@ -837,7 +961,7 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
     name: "xai_grok_run_terminal_command",
     label: XAI_GROK_NATIVE_TOOL_NAME_MAP.xai_grok_run_terminal_command,
     description:
-      "Run a foreground shell command. timeout is in milliseconds; background=true is rejected because pi has no managed background-task lifecycle.",
+      "Run a foreground shell command through pi bash. Filesystem access is not workspace-contained; timeout is in milliseconds and background=true is rejected.",
     promptSnippet: "Run a foreground shell command with command, description, and optional timeout",
     promptGuidelines: [
       "Use run_terminal_command with background=false; this adapter cannot manage Grok background tasks.",

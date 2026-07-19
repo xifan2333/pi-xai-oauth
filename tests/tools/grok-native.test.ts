@@ -1,5 +1,5 @@
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
@@ -84,6 +84,18 @@ describe("Grok-native tools", () => {
     expect(tool("grep").parameters.properties).toHaveProperty("-C");
     expect(tool("grep").parameters.properties).not.toHaveProperty("output_mode");
     expect(tool("run_terminal_command").parameters.properties).toHaveProperty("background");
+    expect(tool("read_file").parameters.properties.target_file.description).toMatch(
+      /absolute path inside the workspace/,
+    );
+    expect(tool("search_replace").parameters.properties.file_path.description).toMatch(
+      /symlinks resolving outside are rejected/,
+    );
+    expect(tool("list_dir").parameters.properties.target_directory.description).toMatch(
+      /absolute directory inside the workspace/,
+    );
+    expect(tool("run_terminal_command").parameters.properties.command.description).toMatch(
+      /not workspace-contained/,
+    );
     expect(h.tools.get(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME).label).toBe(
       XAI_GROK_NATIVE_WEB_SEARCH_NAME,
     );
@@ -245,6 +257,61 @@ describe("Grok-native tools", () => {
     })).rejects.toThrow(/found 2 occurrences/);
   });
 
+  it("accepts relative and absolute paths contained in the workspace", async () => {
+    const physicalDirectory = join(temp.path, "contained");
+    const relativeFile = "contained/value.txt";
+    const absoluteFile = join(temp.path, relativeFile);
+    await mkdir(physicalDirectory);
+    await writeFile(absoluteFile, "old");
+    await symlink(physicalDirectory, join(temp.path, "contained-link"), "dir");
+
+    expect((await run("read_file", { target_file: relativeFile })).content[0].text).toMatch(/old/);
+    expect((await run("read_file", { target_file: absoluteFile })).content[0].text).toMatch(/old/);
+
+    await run("search_replace", {
+      file_path: relativeFile,
+      old_string: "old",
+      new_string: "relative",
+    });
+    await run("search_replace", {
+      file_path: absoluteFile,
+      old_string: "relative",
+      new_string: "absolute",
+    });
+    await run("search_replace", {
+      file_path: "relative-created.txt",
+      old_string: "",
+      new_string: "relative creation",
+    });
+    await run("search_replace", {
+      file_path: join(temp.path, "absolute-created.txt"),
+      old_string: "",
+      new_string: "absolute creation",
+    });
+    await run("search_replace", {
+      file_path: "contained-link/linked-created.txt",
+      old_string: "",
+      new_string: "contained symlink parent",
+    });
+
+    expect(await readFile(absoluteFile, "utf8")).toBe("absolute");
+    expect(await readFile(join(temp.path, "relative-created.txt"), "utf8")).toBe(
+      "relative creation",
+    );
+    expect(await readFile(join(temp.path, "absolute-created.txt"), "utf8")).toBe(
+      "absolute creation",
+    );
+    expect(await readFile(join(physicalDirectory, "linked-created.txt"), "utf8")).toBe(
+      "contained symlink parent",
+    );
+    expect((await run("list_dir", { target_directory: "contained" })).content[0].text).toMatch(
+      /value\.txt/,
+    );
+    expect(
+      (await run("list_dir", { target_directory: physicalDirectory })).content[0].text,
+    ).toMatch(/linked-created\.txt/);
+  });
+
   it("checks concurrent changes inside pi's file mutation queue", async () => {
     await writeFile(join(temp.path, "concurrent.txt"), "old");
     let releaseWrite!: () => void;
@@ -299,6 +366,23 @@ describe("Grok-native tools", () => {
     await expect(readFile(marker, "utf8")).rejects.toThrow();
   });
 
+  it("keeps terminal filesystem access outside the direct-adapter containment policy", async () => {
+    const outside = await createTempDir("pi-xai-grok-terminal-outside-");
+    try {
+      const outsideFile = join(outside.path, "terminal-readable.txt");
+      await writeFile(outsideFile, "TERMINAL_OUTSIDE_OK\n");
+      const result = await run("run_terminal_command", {
+        command: `cat ${JSON.stringify(outsideFile)}`,
+        description: "verify that pi bash remains intentionally unrestricted",
+        background: false,
+        timeout: 1_000,
+      });
+      expect(result.content[0].text).toMatch(/TERMINAL_OUTSIDE_OK/);
+    } finally {
+      await outside.cleanup();
+    }
+  });
+
   it("refuses an explicit grep symlink that escapes the workspace", async () => {
     const outside = await createTempDir("pi-xai-grok-outside-");
     try {
@@ -310,6 +394,121 @@ describe("Grok-native tools", () => {
     } finally {
       await outside.cleanup();
     }
+  });
+
+  it("refuses read_file, search_replace, and list_dir paths outside the workspace", async () => {
+    const outside = await createTempDir("pi-xai-grok-outside-rw-");
+    try {
+      const outsideSecret = join(outside.path, "secret.txt");
+      const outsideCreated = join(outside.path, "created.txt");
+      const traversalSecret = relative(temp.path, outsideSecret);
+      const traversalCreated = relative(temp.path, outsideCreated);
+      await writeFile(outsideSecret, "SECRET\n");
+      await symlink(outsideSecret, join(temp.path, "escape-file"));
+      await symlink(outside.path, join(temp.path, "escape-dir"), "dir");
+      await symlink(join(outside.path, "missing.txt"), join(temp.path, "escape-missing"));
+
+      await expect(
+        run("read_file", { target_file: outsideSecret }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("read_file", { target_file: outsideSecret, offset: -1, limit: 1 }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(run("read_file", { target_file: traversalSecret })).rejects.toThrow(
+        /outside the workspace/,
+      );
+      await expect(run("read_file", { target_file: "escape-file" })).rejects.toThrow(
+        /outside the workspace/,
+      );
+      await expect(
+        run("list_dir", { target_directory: outside.path }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(run("list_dir", { target_directory: relative(temp.path, outside.path) }))
+        .rejects.toThrow(/outside the workspace/);
+      await expect(run("list_dir", { target_directory: "escape-dir" })).rejects.toThrow(
+        /outside the workspace/,
+      );
+
+      await expect(
+        run("search_replace", {
+          file_path: outsideSecret,
+          old_string: "SECRET",
+          new_string: "HACKED",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: outsideCreated,
+          old_string: "",
+          new_string: "PWNED",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: traversalSecret,
+          old_string: "SECRET",
+          new_string: "TRAVERSED",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: traversalCreated,
+          old_string: "",
+          new_string: "TRAVERSAL_CREATE",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: "escape-file",
+          old_string: "SECRET",
+          new_string: "LINKED",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: "escape-dir/created-through-link.txt",
+          old_string: "",
+          new_string: "SYMLINK_CREATE",
+        }),
+      ).rejects.toThrow(/outside the workspace/);
+      await expect(
+        run("search_replace", {
+          file_path: "escape-missing",
+          old_string: "",
+          new_string: "DANGLING_CREATE",
+        }),
+      ).rejects.toThrow(/unresolved existing path/);
+
+      expect(await readFile(outsideSecret, "utf8")).toBe("SECRET\n");
+      await expect(readFile(outsideCreated, "utf8")).rejects.toThrow();
+      await expect(readFile(join(outside.path, "created-through-link.txt"), "utf8"))
+        .rejects.toThrow();
+      await expect(readFile(join(outside.path, "missing.txt"), "utf8")).rejects.toThrow();
+    } finally {
+      await outside.cleanup();
+    }
+  });
+
+  it("rejects oversized package-owned full-file reads without modifying the file", async () => {
+    const oversizedPath = join(temp.path, "oversized.txt");
+    const oversized = Buffer.alloc(5_000_001, "x");
+    oversized.write("needle", 0, "utf8");
+    await writeFile(oversizedPath, oversized);
+
+    await expect(
+      run("read_file", { target_file: "oversized.txt", offset: -1, limit: 1 }),
+    ).rejects.toThrow(/5000000 bytes/);
+    await expect(
+      run("search_replace", {
+        file_path: "oversized.txt",
+        old_string: "needle",
+        new_string: "changed",
+      }),
+    ).rejects.toThrow(/5000000 bytes/);
+
+    const after = await readFile(oversizedPath);
+    expect(after.length).toBe(5_000_001);
+    expect(after.subarray(0, "needle".length).toString("utf8")).toBe("needle");
   });
 
   it("keeps web_search opt-in, forwards domain filters, and blocks stale contexts", async () => {

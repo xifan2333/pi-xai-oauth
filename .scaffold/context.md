@@ -1,34 +1,32 @@
-# Shared Agent Context — PR #96
+# Shared Agent Context — PR #101
 
-**PR:** https://github.com/BlockedPath/pi-xai-oauth/pull/96
-**Branch:** `cursor/critical-bug-management-2bee`
-**Base:** `origin/main` at `d6de44f`
-**Stale head / exact lease:** `d1c0b11b5f81707831a13bbd2ca0f63f171129a7`
-**Safety ref:** `safety/pr-96-stale`
+**PR:** https://github.com/BlockedPath/pi-xai-oauth/pull/101
+**Branch:** `cursor/critical-bug-management-92fc`
+**Base:** `origin/main` at `fe8250575403fa7929ae4e6508a5f09ef45b3d91`
+**Stale head / exact lease:** `0f9ca07b71699a933b094a968539fe5739b23d6b`
+**Safety ref:** `safety/pr-101-stale`
 
 ## Current Architecture
 
-- `extensions/xai/media/paths.ts` owns the existing async bounded workspace image reader.
-- `extensions/xai/images.ts` owns synchronous legacy URL/path normalization.
-- `extensions/xai/tools/custom-tools.ts` has the two context-aware tool callers.
-- `extensions/xai/payload.ts` and `extensions/xai/vision-routing.ts` are newer synchronous
-  callers that use the provider-session working directory.
-- `extensions/xai/media/data-url.ts` owns canonical verified-byte serialization.
+- `extensions/xai/tools/grok-native.ts` registers the direct file, grep, terminal, and web adapters.
+- `safeWorkspacePath` rejects lexical escapes before filesystem resolution.
+- `physicalWorkspaceSearchPath` already gives `grep` post-`realpath` containment.
+- The refreshed shared path resolver applies equivalent containment to read/replace/list,
+  including a safe missing-leaf path through a contained physical parent.
+- Package-owned negative-offset and exact-replacement reads use a 5,000,000-byte bounded loop.
+- Pi's built-in read/list/write definitions still provide normal behavior and write serialization.
 
-## Approved Approach
+## Security Scope
 
-Add `readBoundedWorkspaceImageFileSync(inputPath, workspaceRoot)` beside the async reader,
-sharing containment, limits, image inspection, and `VerifiedImageBytes`. Keep the same
-realpath, regular-file, no-follow/nonblocking open, bounded-read, pixel, and sanitized-error
-policy. Make `normalizeXaiImageInput(value, workspaceRoot = process.cwd())` retain remote/data
-pass-through, decode compatible local path syntax, enforce extension/MIME agreement, and
-serialize only verified bytes.
+This is defense-in-depth for direct file adapters. It is not a complete sandbox.
+`run_terminal_command` remains intentionally unrestricted and delegates to pi `bash`.
+The pathname-based pi adapters also do not claim resistance to concurrent same-user
+filesystem namespace swaps; descriptor-relative traversal is outside this PR's scope.
 
 ## Delivery State
 
-The old PR implementation is deliberately not present on the working branch. It relied on a
-separate `statSync` plus unbounded `readFileSync`, lacked descriptor-level defenses, reflected
-paths in some errors, and did not cover current payload/vision callers. The refreshed
-implementation replaced it using the exact stale-head lease after all local gates and
-independent review passed. GitHub policy, Socket, and both exact Pi compatibility jobs are
-green, and PR #96 is ready for review.
+The stale two-file patch was preserved, rebuilt on current main, and expanded with missing
+regressions, honest schemas, documentation, stricter missing-leaf handling, and bounded
+descriptor reads. All requested local gates and both clean packed Pi matrices pass, and
+independent review is clean within the stated scope. Exact-lease publication, fresh GitHub
+checks, and merge remain.

@@ -1,47 +1,45 @@
-# Execution Progress — PR #96
+# Execution Progress — PR #101
 
-**Branch:** `cursor/critical-bug-management-2bee`
+**Branch:** `cursor/critical-bug-management-92fc`
 **Started:** 2026-07-19
 
 ## Completed
 
-- [x] Confirmed `main` and `origin/main` at `d6de44f`.
+- [x] Confirmed `main` and `origin/main` at `fe82505`.
 - [x] Confirmed the only pre-existing worktree items are untracked `.claude/`,
   `anime-characters.jpg`, and `anime-characters.mp4`.
-- [x] Confirmed PR #96 is draft and its stale remote head is `d1c0b11`.
-- [x] Preserved the stale head as `safety/pr-96-stale`.
-- [x] Recreated the local PR branch directly from current `origin/main`.
-- [x] Audited the stale three-file patch and current media/image call graph.
-- [x] Started parallel read-only callsite/test and synchronous-reader security reviews.
-- [x] Added a descriptor-based synchronous workspace reader with realpath containment,
-  regular-file checks, no-follow/nonblocking open, a bounded read loop, and byte/pixel validation.
-- [x] Routed legacy normalization through verified bytes and enforced extension/MIME agreement.
-- [x] Made both custom tools use a validated `ctx.cwd` or fail closed for local input.
-- [x] Added direct normalizer, shared reader, tool, payload, and vision-routing regressions.
-- [x] Documented workspace-only limits in README and the Unreleased changelog.
-- [x] Bound the checked candidate identity to the opened descriptor using bigint
-  device/inode fields, closing both pre-stat and pre-open intermediate-directory races.
-- [x] Moved local tool normalization ahead of credential resolution so invalid workspace
-  inputs cannot trigger OAuth refresh or any other authenticated network work.
-- [x] Added deterministic sync/async stat/open race regressions.
-- [x] Final focused image/media/tool/payload/vision run: 6 files, 82 tests passed.
-- [x] Final `npm test`: 43 files / 470 tests plus the real loader passed.
-- [x] Final `npm run typecheck` and `git diff --check` passed.
-- [x] Final `npm run test:coverage`: 84.69% statements, 78.13% branches,
-  86.47% functions, and 88.90% lines; every configured floor passed.
-- [x] Final `npm run compatibility:check`: 124 packed files and peer-policy checks passed.
-- [x] Final exact Pi 0.80.1 and 0.80.10 packed test/loader/typecheck matrices passed.
-- [x] Independent final security review is clean after verifying both race windows and
-  the pre-credential local-input failure path.
+- [x] Confirmed PR #101 is open and its stale remote head is exactly `0f9ca07`.
+- [x] Confirmed there are no reviews or review threads; the Bugbot usage-limit comment is inert.
+- [x] Preserved the stale head as `safety/pr-101-stale`.
+- [x] Recreated the local PR branch directly from current `origin/main` and cherry-picked the fix.
+- [x] Completed parallel read-only PR-state and code/test/documentation gap audits.
+- [x] Applied post-`realpath` containment before all direct file-adapter operations.
+- [x] Hardened missing-leaf handling against outward parents and unresolved existing leaves.
+- [x] Added no-follow, nonblocking, byte-bounded full text reads with cancellation checks.
+- [x] Preserved pi's mutation queue and made the concurrent-change snapshot read bounded.
+- [x] Added relative/absolute success, traversal, symlink, safe creation, oversized read,
+  unchanged outside file, concurrent-write, and unrestricted terminal regressions.
+- [x] Clarified model-facing schemas and documented the terminal limitation in README/changelog.
+- [x] Retargeted `.scaffold/` state from completed PR #96 to PR #101.
+- [x] Focused Grok-native suite passed: 16 tests.
+- [x] Full `npm test` passed: 43 files / 474 tests plus the real loader.
+- [x] Coverage passed at 84.74% statements, 78.24% branches, 86.44% functions,
+  and 88.95% lines.
+- [x] TypeScript, compatibility policy, 124-file packed-manifest, and diff hygiene passed.
+- [x] Exact clean packed Pi 0.80.1 and 0.80.10 test/loader/typecheck matrices passed.
+- [x] Independent review is clean within the stable-namespace defense-in-depth scope.
+- [x] Recorded concurrent same-user path swaps as an explicit non-goal because pi's
+  pathname adapters lack descriptor-relative traversal and terminal access is unrestricted.
 
 ## In Progress
 
-- None.
+- [ ] Amend and publish the refreshed commit with the exact stale-head lease.
+- [ ] Refresh PR metadata, verify GitHub checks, and merge.
 
 ## Delivery
 
-- [x] Committed the refreshed implementation as `44ad5f4`.
-- [x] Replaced stale remote head `d1c0b11` using an exact force-with-lease.
-- [x] Updated PR #96's title and description with the expanded caller and race coverage.
-- [x] Verified GitHub policy, Socket, and exact Pi 0.80.1 / 0.80.10 checks passed.
-- [x] Marked PR #96 ready for review with a clean merge state.
+- [ ] Amend the refreshed implementation into one focused commit.
+- [ ] Replace stale remote head `0f9ca07` using the exact force-with-lease.
+- [ ] Update PR #101's description with factual scope and fresh results.
+- [ ] Verify GitHub policy, Socket, and Pi 0.80.1 / 0.80.10 checks.
+- [ ] Merge with the repository's merge-commit strategy and verify `origin/main`.

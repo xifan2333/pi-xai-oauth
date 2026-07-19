@@ -1,26 +1,28 @@
-# Constraints & Safety Rules — PR #96
+# Constraints & Safety Rules — PR #101
 
-## Local image policy
+## Direct file-adapter policy
 
-- Preserve legacy local PNG/JPEG compatibility only for verified workspace-contained files.
-- Reuse shared media limits, inspection, containment policy, and result types.
-- Keep `normalizeXaiImageInput` synchronous.
-- Keep remote URL and existing data-URL pass-through behavior unchanged.
-- Never reflect supplied paths in normalization, filesystem, tool, payload, or routing errors.
-- Do not broaden support to unrecognized extensions or unrelated media routes.
+- Apply lexical and post-`realpath` containment to `read_file`, `search_replace`, and `list_dir`.
+- Accept relative paths and absolute paths only when their resolved target stays in the workspace.
+- Reject outside absolute paths, escaping traversal, outward symlinks, and unsafe missing leaves.
+- Permit creation only when the missing leaf's physical parent already resolves inside the workspace.
+- Bound every package-owned full text read used by negative offsets or exact replacement.
+- Preserve cancellation, pi's mutation queue, stale-snapshot detection, and in-workspace behavior.
 
-## Tool and caller policy
+## Explicit non-goals
 
-- `xai_generate_text(image_url)` and `xai_analyze_image` must use the active tool `ctx.cwd`.
-- Local tool input without a valid workspace context must fail before any outbound request.
-- Payload normalization and vision routing remain synchronous and default to `process.cwd()`.
-- Do not change tool opt-in, credentials, model entitlement, or transport policy.
+- Do not constrain or otherwise modify `run_terminal_command`; it delegates to pi `bash`.
+- Do not describe this change as a complete filesystem sandbox.
+- Do not claim resistance to a concurrent same-user filesystem namespace swap; pi's
+  direct adapters remain pathname-based and do not expose descriptor-relative traversal.
+- Do not change tool opt-in, credentials, model entitlement, transport, or package version.
 
 ## Delivery
 
-- Rebuild PR #96 from current main; do not merge its stale synchronous implementation verbatim.
-- Preserve `safety/pr-96-stale` and force-push only with an exact lease against
-  `d1c0b11b5f81707831a13bbd2ca0f63f171129a7`.
-- Do not change the package version.
+- Preserve `safety/pr-101-stale` and force-push only with an exact lease against
+  `0f9ca07b71699a933b094a968539fe5739b23d6b`.
+- Update PR #101 with factual defense-in-depth wording and fresh validation results.
+- Merge only after policy, Socket, and both exact Pi compatibility checks are green.
 - Preserve and exclude `.claude/`, `anime-characters.jpg`, and `anime-characters.mp4`.
+- Leave PR #88 and issues #85/#86 untouched.
 - Use UV instead of pip if Python becomes necessary.
