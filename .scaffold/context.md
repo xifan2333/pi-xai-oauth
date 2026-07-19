@@ -18,8 +18,10 @@ send them to the vision target.
 - Post-hook pruning is gated by the grant captured when streaming began.
 - Current images remain available for routing; disabled routing still fails closed.
 - Screenshot output remains `{ type: "computer_screenshot" }` with call identity retained.
+- Consumed items are recursively scrubbed using the same image-shape taxonomy as route planning.
 
 ## Validation State
 
-Focused and full tests, TypeScript, compatibility policy/pack checks, and exact Pi
-0.80.1 / 0.80.10 boundary matrices pass. Final independent review is clean.
+The recursive fix passes focused and full tests, TypeScript, compatibility policy/pack
+checks, and exact Pi 0.80.1 / 0.80.10 boundary matrices. Final fresh-context review
+is clean.

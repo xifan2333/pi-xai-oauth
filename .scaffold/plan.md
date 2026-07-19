@@ -17,6 +17,7 @@ screenshot schema, and the original captured grant.
 4. [x] Add streaming regressions for hook-returned user images and screenshots.
 5. [x] Document post-hook pruning and update the changelog.
 6. [x] Run full tests, typecheck, compatibility checks, and independent review.
+7. [x] Close adversarial review's recursive historical-image bypass and revalidate PR #120.
 
 ## Validation Contract
 

@@ -324,6 +324,71 @@ describe("opt-in vision routing", () => {
     expect(JSON.stringify(requests[0]).match(/historical computer screenshot omitted/g)).toHaveLength(1);
   });
 
+  it("recursively strips hook-returned historical image and screenshot shapes", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    controller.enable(sourceModel);
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return streamResponse();
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      { messages: [{ role: "user", content: "continue", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        onPayload(payload: any) {
+          payload.input = [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: "old user text",
+                  metadata: {
+                    image: {
+                      type: "input_image",
+                      image_url: "/definitely/not/read/historical-private.png",
+                    },
+                  },
+                },
+                { type: "computer_screenshot", file_id: "historical-user-file" },
+              ],
+            },
+            {
+              type: "function_call_output",
+              call_id: "tool_old",
+              output: [
+                { type: "input_text", text: "old tool text" },
+                {
+                  type: "container",
+                  screenshot: { type: "computer_screenshot", file_id: "historical-tool-file" },
+                },
+              ],
+            },
+            { role: "assistant", content: [{ type: "output_text", text: "already inspected" }] },
+            { role: "user", content: [{ type: "input_text", text: "continue" }] },
+          ];
+        },
+      } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].model).toBe(source.id);
+    expect(containsImage(requests[0])).toBe(false);
+    expect(JSON.stringify(requests[0])).not.toMatch(
+      /historical-private|historical-user-file|historical-tool-file/,
+    );
+    expect(JSON.stringify(requests[0])).toMatch(/historical user image omitted/);
+    expect(JSON.stringify(requests[0])).toMatch(/historical tool image omitted/);
+  });
+
   it("routes a valid provider-workspace image as verified bytes", async () => {
     const insideDir = mkdtempSync(join(process.cwd(), ".xai-vision-inside-"));
     const inside = join(insideDir, "inside.png");
