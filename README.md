@@ -47,6 +47,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 
 - [✨ New: Grok 4.5](#-new-grok-45)
 - [Features](#features)
+- [Package Scope](#package-scope)
 - [Changelog](CHANGELOG.md)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
@@ -87,6 +88,16 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Revision-pinned wire contract** — route-specific headers, truthful package identity, protected request metadata, redirect rejection, and the upstream Grok Build review procedure are documented without impersonating the official client
 
 > **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `xai_web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
+
+---
+
+## Package Scope
+
+`pi-xai-oauth` owns the xAI-specific integration needed to use entitled Grok models through pi: authentication and credentials, account-specific catalogs, transport and payload behavior, Grok-native compatibility adapters, opt-in network tools, and media integrations. It intentionally does not provide generic `/goal` or `/plan` commands, autonomous continuation, a runtime plan-file protocol, generic task/subagent orchestration, or plan-mode write restriction. See [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md) for the decision and alternatives.
+
+Tool hiding, active-tool filtering, and shell-command filtering are workflow controls, not an enforced read-only boundary. Pi and its extensions run with the user's permissions; strong isolation requires an external sandbox, container, or VM that constrains every tool and extension involved.
+
+The optional [`--scaffold`](#agent-scaffolding) command is separate: it performs one-time generation of `AGENTS.md` and `.scaffold/*` guidance files in the current directory. It is not a runtime workflow controller, an authoritative plan-state protocol, or a security mechanism.
 
 ---
 
