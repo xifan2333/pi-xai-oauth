@@ -19,7 +19,7 @@ tools and every current synchronous payload/vision normalization caller.
 5. [x] Make both custom tools pass `ctx.cwd` and fail closed for local input without it.
 6. [x] Add direct, tool, payload, and vision-routing regressions plus documentation.
 7. [x] Run focused, full, coverage, typecheck, policy, and exact-boundary gates.
-8. [ ] Obtain independent review, commit, exact-lease force-push, refresh PR #96, and mark ready.
+8. [x] Obtain independent review, commit, exact-lease force-push, refresh PR #96, and mark ready.
 
 ## Validation Contract
 

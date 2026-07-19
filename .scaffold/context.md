@@ -28,5 +28,7 @@ serialize only verified bytes.
 
 The old PR implementation is deliberately not present on the working branch. It relied on a
 separate `statSync` plus unbounded `readFileSync`, lacked descriptor-level defenses, reflected
-paths in some errors, and did not cover current payload/vision callers. The refreshed branch
-will replace it wholesale after all gates and independent review pass.
+paths in some errors, and did not cover current payload/vision callers. The refreshed
+implementation replaced it using the exact stale-head lease after all local gates and
+independent review passed. GitHub policy, Socket, and both exact Pi compatibility jobs are
+green, and PR #96 is ready for review.

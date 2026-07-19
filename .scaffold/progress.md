@@ -36,8 +36,12 @@
 
 ## In Progress
 
-- [ ] Commit and refresh PR #96 with an exact lease, wait for remote checks, then mark ready.
+- None.
 
-## Remaining Validation
+## Delivery
 
-- [ ] Exact-lease push, PR body refresh, ready-for-review transition, and remote check verification.
+- [x] Committed the refreshed implementation as `44ad5f4`.
+- [x] Replaced stale remote head `d1c0b11` using an exact force-with-lease.
+- [x] Updated PR #96's title and description with the expanded caller and race coverage.
+- [x] Verified GitHub policy, Socket, and exact Pi 0.80.1 / 0.80.10 checks passed.
+- [x] Marked PR #96 ready for review with a clean merge state.
