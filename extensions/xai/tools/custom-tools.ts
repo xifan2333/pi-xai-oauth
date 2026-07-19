@@ -198,41 +198,6 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
 
     // Agentic tools that leverage xAI's native server-side tools.
     pi.registerTool({
-      name: "xai_web_search",
-      label: "xAI Web Search",
-      description: "Opt-in paid search using Grok's native web search. Enable via /xai-tools and call only when the user explicitly requests xAI web search.",
-      promptGuidelines: ["Call xai_web_search only when the user explicitly requests xAI web search."],
-      parameters: {
-        type: "object",
-        properties: { query: { type: "string", description: "Search query" } },
-        required: ["query"],
-      },
-      execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const activeModel = activeModelForXaiTool(pi, ctx, "xai_web_search");
-        if (!activeModel) return xaiToolDisabledError("xai_web_search", { query: params?.query });
-        const credential = await resolveXaiCredential(ctx);
-        if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
-        }
-        const prompt = `Search the web for: ${params.query}. Summarize the top results with sources, key facts, dates, and recent developments. Prioritize authoritative sources.`;
-        let data: any;
-        try {
-          data = await createXaiResponse(credential, {
-            model: activeModel.id,
-            input: xaiTextInput(prompt),
-            reasoning: { effort: "medium" },
-            tools: [{ type: "web_search", enable_image_understanding: true }],
-          }, _signal);
-        } catch (error) {
-          const status = statusFromError(error);
-          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, query: params.query });
-        }
-        const text = extractResponsesText(data) || `No results for: ${params.query}`;
-        return { content: [{ type: "text", text }], details: { query: params.query } };
-      },
-    } as any);
-
-    pi.registerTool({
       name: "xai_x_search",
       label: "xAI X Search",
       description: "Opt-in paid X search using Grok's native real-time search. Enable via /xai-tools and call only when the user explicitly requests xAI X search.",

@@ -41,9 +41,12 @@ describe("provider registration", () => {
       cost: { input: 2, cacheRead: 0.5, output: 6 },
       thinkingLevelMap: { off: null },
     });
-    expect(harness.tools.size).toBe(17);
+    expect(harness.tools.size).toBe(16);
     expect(harness.tools.has("xai_edit_image")).toBe(true);
     expect(harness.tools.has("xai_image_to_video")).toBe(true);
+    expect(harness.tools.has("xai_grok_web_search")).toBe(true);
+    expect(harness.tools.has("xai_web_search")).toBe(false);
+    expect(harness.tools.has("web_search")).toBe(false);
     expect(harness.commands.has("xai-tools")).toBe(true);
     expect(harness.commands.has("xai-usage")).toBe(true);
     expect([...harness.handlers.keys()]).toEqual(

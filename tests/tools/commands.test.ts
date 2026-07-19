@@ -98,17 +98,18 @@ describe("/xai-tools command", () => {
     );
   });
 
-  it("reports every tool status and eligibility", async () => {
+  it("reports every tool status with one web_search entry", async () => {
     const { notices, run } = setup();
     await run("status");
+    const message = notices.at(-1).message;
     for (const name of XAI_NETWORK_TOOL_NAMES) {
       const displayName = name === XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME
         ? XAI_GROK_NATIVE_WEB_SEARCH_NAME
         : name;
-      expect(notices.at(-1).message).toMatch(
-        new RegExp(`${displayName}=(?:enabled|disabled)`),
-      );
+      expect(message).toMatch(new RegExp(`${displayName}=(?:enabled|disabled)`));
     }
+    expect(message.match(/web_search=(?:enabled|disabled)/g)).toHaveLength(1);
+    expect(message).not.toMatch(/xai_web_search=/);
   });
   it("rejects paid tools for non-xAI models and allows web_search for xAI models", async () => {
     const { h, notices, run } = setup();
@@ -117,18 +118,23 @@ describe("/xai-tools command", () => {
     expect(notices.at(-1).message).toMatch(/Select an xAI\/Grok model/);
     await run("enable web_search");
     expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
+    await run("disable xai_web_search");
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
+    await run("enable xai_web_search");
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
+    expect(notices.at(-1).message).toMatch(/Enabled web_search/);
   });
   it("fails closed when registry reads or writes fail", async () => {
     const { h, notices, run } = setup();
     h.failRegistry({ get: true });
     await run("enable xai_web_search");
     h.failRegistry();
-    expect(isXaiNetworkToolActive(h.api, "xai_web_search")).toBe(false);
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
     expect(notices.at(-1).message).toMatch(/could not be read/);
     h.failRegistry({ set: true });
     await run("enable xai_web_search");
     h.failRegistry();
-    expect(isXaiNetworkToolActive(h.api, "xai_web_search")).toBe(false);
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
     expect(notices.at(-1).message).toMatch(/could not be updated/);
   });
   it("uses the RPC picker to toggle a selection", async () => {
@@ -146,14 +152,16 @@ describe("/xai-tools command", () => {
           title = value;
           options = choices;
           return ++pass === 1
-            ? choices.find((choice) => choice.includes("xai_web_search"))
+            ? choices.find((choice) => choice.includes("web_search"))
             : "Done";
         },
       },
     });
     await h.commands.get("xai-tools").handler("", ctx);
-    expect(isXaiNetworkToolActive(h.api, "xai_web_search")).toBe(true);
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
     expect(title).toMatch(/explicit opt-in/);
+    expect(options.filter((value) => value.includes("web_search"))).toHaveLength(1);
+    expect(options.every((value) => !value.includes("xai_web_search"))).toBe(true);
     expect(
       options.some(
         (value) =>
@@ -170,7 +178,7 @@ describe("/xai-tools command", () => {
       id: "claude",
     });
 
-    expect(isXaiNetworkToolActive(h.api, "xai_web_search")).toBe(false);
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
     syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
@@ -191,13 +199,13 @@ describe("/xai-tools command", () => {
       XAI_NETWORK_TOOL_NAMES.filter((name) =>
         h.getActiveTools().includes(name),
       ),
-    ).toEqual(["xai_web_search"]);
+    ).toEqual([XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME]);
     syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
     expect(
       XAI_NETWORK_TOOL_NAMES.filter((name) =>
         h.getActiveTools().includes(name),
       ),
-    ).toEqual(["xai_web_search"]);
+    ).toEqual([XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME]);
   });
 
   it("keeps TUI selection in place, wraps pages, toggles, and closes", async () => {
@@ -250,10 +258,10 @@ describe("/xai-tools command", () => {
     await h.commands.get("xai-tools").handler("", ctx);
     // Page movement uses the ten-row viewport across the full tool catalog.
     expect(selected[0]).toMatch(/xai_x_search/);
-    expect(selected[1]).toMatch(/\[ \] xai_generate_image/);
-    expect(selected[2]).toMatch(/\[x\] xai_generate_image/);
+    expect(selected[1]).toMatch(/\[ \] xai_edit_image/);
+    expect(selected[2]).toMatch(/\[x\] xai_edit_image/);
     expect(closed).toBe(true);
-    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
+    expect(isXaiNetworkToolActive(h.api, "xai_edit_image")).toBe(true);
   });
 
   it("wraps Page Up and Page Down across the full xAI tool catalog", async () => {

@@ -8,7 +8,6 @@ import {
 /** Network-backed xAI tools that make an additional authenticated API request. */
 export const XAI_NETWORK_TOOL_NAMES = [
   "xai_generate_text",
-  "xai_web_search",
   "xai_x_search",
   "xai_multi_agent",
   "xai_deep_research",
