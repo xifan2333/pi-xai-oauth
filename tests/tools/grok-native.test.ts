@@ -511,6 +511,48 @@ describe("Grok-native tools", () => {
     expect(after.subarray(0, "needle".length).toString("utf8")).toBe("needle");
   });
 
+  it.each([
+    ["empty", { ...TEST_MODEL, id: "" }],
+    ["missing", { provider: TEST_MODEL.provider }],
+    ["whitespace-only", { ...TEST_MODEL, id: "   " }],
+    ["non-string", { ...TEST_MODEL, id: 123 }],
+  ] as const)(
+    "rejects a %s web_search model ID before credential or network access",
+    async (_caseName, model) => {
+      expect(
+        setXaiNetworkToolActive(
+          h.api,
+          TEST_MODEL,
+          XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+          true,
+        ),
+      ).toEqual({ ok: true, active: true });
+
+      let credentialTouches = 0;
+      const ctx: any = { cwd: temp.path, model };
+      Object.defineProperty(ctx, "modelRegistry", {
+        get() {
+          credentialTouches++;
+          throw new Error("credential resolution must not be reached");
+        },
+      });
+
+      const result = await h.tools
+        .get(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)
+        .execute(
+          "call",
+          { query: "must stay local" },
+          new AbortController().signal,
+          () => {},
+          ctx,
+        );
+
+      expect(result.content[0].text).toMatch(/requires an active xAI\/Grok model/);
+      expect(credentialTouches).toBe(0);
+      expect(requests).toHaveLength(0);
+    },
+  );
+
   it("keeps web_search opt-in, forwards domain filters, and blocks stale contexts", async () => {
     const model = { ...TEST_MODEL, id: "grok-4.5" } as any;
     const controller = new AbortController();

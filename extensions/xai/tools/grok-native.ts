@@ -43,7 +43,7 @@ import {
   searchReplaceArgsForPi,
   terminalCommandArgsForPi,
 } from "./grok-native-args";
-import { isXaiNetworkToolActive } from "./model-scope";
+import { activeXaiModel, isXaiNetworkToolActive } from "./model-scope";
 
 const DEFAULT_GROK_GREP_LIMIT = 200;
 const MAX_GROK_GREP_LIMIT = 2_000;
@@ -998,7 +998,8 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
     execute: async (_toolCallId: string, params: any, signal: any, _onUpdate: any, ctx: any) => {
       const { query, allowed_domains: allowedDomains } = prepareWebSearchArgs(params);
       if (!query) return xaiToolError("Error: web_search requires a query.");
-      if (ctx?.model?.provider !== XAI_PROVIDER_ID) {
+      const activeModel = activeXaiModel(ctx);
+      if (!activeModel) {
         return xaiToolError(
           "Error: web_search requires an active xAI/Grok model. No xAI request was sent.",
         );
@@ -1022,7 +1023,7 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
         const data = await createXaiResponse(
           credential,
           {
-            model: ctx.model.id,
+            model: activeModel.id,
             input: `Search the web for: ${query}\n\nSummarize the key results with sources where available.`,
             tools: [webSearchTool],
           },
