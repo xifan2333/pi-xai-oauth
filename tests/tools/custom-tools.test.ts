@@ -1,3 +1,6 @@
+import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerCustomXaiTools } from "../../extensions/xai/tools/custom-tools";
 import {
@@ -13,6 +16,8 @@ import {
 import { createExtensionHarness } from "../fixtures/extension-api";
 import { authContext, TEST_MODEL } from "../fixtures/models";
 import { jsonResponse, requestBody } from "../fixtures/http";
+import { tinyPngBytes } from "../fixtures/images";
+import { createTempDir } from "../fixtures/temp";
 let h: ReturnType<typeof createExtensionHarness>;
 let requests: Array<{ url: string; init: RequestInit; body: any }>;
 beforeEach(() => {
@@ -179,6 +184,114 @@ describe("custom xAI tools", () => {
     expect(
       requests.at(-1)?.body.input[0].content.map(({ type }: any) => type),
     ).toEqual(["input_image", "input_text"]);
+  });
+  it.each([
+    ["xai_generate_text", "image_url"],
+    ["xai_analyze_image", "image"],
+  ] as const)("sends a verified workspace image as a data URL for %s", async (name, imageField) => {
+    const temp = await createTempDir("pi-xai-tool-local-image-");
+    try {
+      const workspace = join(temp.path, "workspace");
+      await mkdir(workspace);
+      await writeFile(join(workspace, "inside.png"), tinyPngBytes());
+      setXaiNetworkToolActive(h.api, TEST_MODEL, name, true);
+
+      const result = await h.tools.get(name).execute(
+        "call",
+        {
+          ...(name === "xai_generate_text" ? { prompt: "describe" } : { question: "what?" }),
+          [imageField]: "inside.png",
+        },
+        undefined,
+        () => {},
+        { ...authContext(TEST_MODEL), cwd: workspace },
+      );
+
+      expect(result.content[0].text).toBe("OK");
+      expect(requests).toHaveLength(1);
+      expect(JSON.stringify(requests[0].body)).toContain("data:image/png;base64,");
+      expect(JSON.stringify(requests[0].body)).not.toContain("inside.png");
+    } finally {
+      await temp.cleanup();
+    }
+  });
+  it.each([
+    ["xai_generate_text", "image_url"],
+    ["xai_analyze_image", "image"],
+  ] as const)(
+    "rejects absolute, file URL, traversal, and symlink escapes for %s before fetch",
+    async (name, imageField) => {
+      const temp = await createTempDir("pi-xai-tool-image-escape-");
+      try {
+        const workspace = join(temp.path, "workspace");
+        const external = join(temp.path, "external");
+        const outside = join(external, "SENSITIVE-private.png");
+        await mkdir(workspace);
+        await mkdir(external);
+        await writeFile(outside, tinyPngBytes());
+        const inputs = [
+          outside,
+          pathToFileURL(outside).href,
+          relative(workspace, outside),
+        ];
+        if (process.platform !== "win32") {
+          await symlink(outside, join(workspace, "escape.png"));
+          inputs.push("escape.png");
+        }
+        setXaiNetworkToolActive(h.api, TEST_MODEL, name, true);
+
+        for (const input of inputs) {
+          const result = await h.tools.get(name).execute(
+            "call",
+            {
+              ...(name === "xai_generate_text" ? { prompt: "describe" } : { question: "what?" }),
+              [imageField]: input,
+            },
+            undefined,
+            () => {},
+            { ...authContext(TEST_MODEL), cwd: workspace },
+          );
+          expect(result.content[0].text).toMatch(/Invalid image input.*No xAI request was sent/);
+          expect(JSON.stringify(result)).not.toMatch(/SENSITIVE|private\.png|external/);
+          expect(requests).toHaveLength(0);
+        }
+      } finally {
+        await temp.cleanup();
+      }
+    },
+  );
+  it.each([
+    ["xai_generate_text", { prompt: "describe", image_url: "inside.png" }],
+    ["xai_analyze_image", { image: "inside.png", question: "what?" }],
+  ])("fails closed for local %s input without a workspace context", async (name, params) => {
+    setXaiNetworkToolActive(h.api, TEST_MODEL, name as any, true);
+    let credentialTouches = 0;
+    const result = await h.tools
+      .get(name)
+      .execute("call", params, undefined, () => {}, {
+        model: TEST_MODEL,
+        modelRegistry: {
+          find() {
+            credentialTouches++;
+            throw new Error("invalid local input must not resolve or refresh credentials");
+          },
+          async getApiKeyAndHeaders() {
+            credentialTouches++;
+            throw new Error("invalid local input must not resolve or refresh credentials");
+          },
+        },
+      });
+
+    expect(result.content[0].text).toMatch(/Invalid image input.*No xAI request was sent/);
+    expect(credentialTouches).toBe(0);
+    expect(requests).toHaveLength(0);
+  });
+  it.each([
+    ["xai_generate_text", { prompt: "describe", image_url: "https://example.test/generate.png" }],
+    ["xai_analyze_image", { image: "https://example.test/analyze.png", question: "what?" }],
+  ])("keeps remote %s input compatible without a workspace context", async (name, params) => {
+    await run(name, params);
+    expect(requests).toHaveLength(1);
   });
   it.each([
     ["xai_generate_text", { prompt: "describe", image_url: "/private/missing/generate-secret.png" }],

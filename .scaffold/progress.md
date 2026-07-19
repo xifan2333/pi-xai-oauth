@@ -1,34 +1,43 @@
-# Execution Progress — Restore Grok 4.3 OAuth visibility
+# Execution Progress — PR #96
 
-**Branch:** `feature/restore-grok-4-3-oauth`
+**Branch:** `cursor/critical-bug-management-2bee`
+**Started:** 2026-07-19
 
 ## Completed
 
-- [x] Confirmed pi's fresh normalized OAuth cache contains only `grok-4.5`.
-- [x] Confirmed the official Grok CLI's newer authenticated `models_cache.json` also contains only `grok-4.5`.
-- [x] Verified no local normalization or hidden-entry filter dropped Grok 4.3.
-- [x] Reviewed current xAI model documentation: Grok 4.3 remains a distinct public request model.
-- [x] Ran one bounded authenticated OAuth Responses probe without logging credentials or raw bodies; HTTP 200 completed and reported response model `grok-4.3`.
-- [x] Added `XAI_MODEL_ENTITLEMENT_COMPATIBILITY` separately from canonical aliases, mapping the proven Grok 4.3 request route to the present Grok 4.5 entitlement source.
-- [x] Added Grok 4.3 none/low/medium/high reasoning metadata while retaining authenticated modality evidence and conservative source context limits.
-- [x] Added focused expansion, canonicalization, non-recursion, runtime entitlement, and metadata assertions.
-- [x] Confirmed `pi -e . --list-models xai-auth` now lists `grok-4.3` at a conservative 500K context.
-- [x] Updated README and AGENTS policy wording.
+- [x] Confirmed `main` and `origin/main` at `d6de44f`.
+- [x] Confirmed the only pre-existing worktree items are untracked `.claude/`,
+  `anime-characters.jpg`, and `anime-characters.mp4`.
+- [x] Confirmed PR #96 is draft and its stale remote head is `d1c0b11`.
+- [x] Preserved the stale head as `safety/pr-96-stale`.
+- [x] Recreated the local PR branch directly from current `origin/main`.
+- [x] Audited the stale three-file patch and current media/image call graph.
+- [x] Started parallel read-only callsite/test and synchronous-reader security reviews.
+- [x] Added a descriptor-based synchronous workspace reader with realpath containment,
+  regular-file checks, no-follow/nonblocking open, a bounded read loop, and byte/pixel validation.
+- [x] Routed legacy normalization through verified bytes and enforced extension/MIME agreement.
+- [x] Made both custom tools use a validated `ctx.cwd` or fail closed for local input.
+- [x] Added direct normalizer, shared reader, tool, payload, and vision-routing regressions.
+- [x] Documented workspace-only limits in README and the Unreleased changelog.
+- [x] Bound the checked candidate identity to the opened descriptor using bigint
+  device/inode fields, closing both pre-stat and pre-open intermediate-directory races.
+- [x] Moved local tool normalization ahead of credential resolution so invalid workspace
+  inputs cannot trigger OAuth refresh or any other authenticated network work.
+- [x] Added deterministic sync/async stat/open race regressions.
+- [x] Final focused image/media/tool/payload/vision run: 6 files, 82 tests passed.
+- [x] Final `npm test`: 43 files / 470 tests plus the real loader passed.
+- [x] Final `npm run typecheck` and `git diff --check` passed.
+- [x] Final `npm run test:coverage`: 84.69% statements, 78.13% branches,
+  86.47% functions, and 88.90% lines; every configured floor passed.
+- [x] Final `npm run compatibility:check`: 124 packed files and peer-policy checks passed.
+- [x] Final exact Pi 0.80.1 and 0.80.10 packed test/loader/typecheck matrices passed.
+- [x] Independent final security review is clean after verifying both race windows and
+  the pre-credential local-input failure path.
 
-## Validation
+## In Progress
 
-- [x] Focused model suite: 20 tests passed.
-- [x] Primary TypeScript LSP diagnostics: zero findings.
-- [x] `git diff --check`.
-- [x] Full `npm test`: 413 tests plus real loader smoke passed.
-- [x] `npm run typecheck`.
-- [x] `npm run test:coverage`: all configured V8 floors passed.
-- [x] `npm run compatibility:check`: packed manifest and peer policy passed.
-- [x] `npm run compatibility:boundaries`: exact Pi 0.80.1 and 0.80.10 suites/typecheck passed.
+- [ ] Commit and refresh PR #96 with an exact lease, wait for remote checks, then mark ready.
 
-## Residual constraints
+## Remaining Validation
 
-- The exact cache never stores Grok 4.3 unless xAI itself returns it.
-- Grok 4.3 remains distinct from Grok 4.5 for outbound requests and canonical resolution.
-- Unverified `grok-latest` / `grok-4.3-latest` compatibility is not inferred from the Grok 4.3 probe.
-- `.claude/` is unrelated untracked state and must not be committed.
+- [ ] Exact-lease push, PR body refresh, ready-for-review transition, and remote check verification.

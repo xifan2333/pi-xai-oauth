@@ -510,14 +510,20 @@ Opt-in paid image generation with xAI's current image generation model. Enable i
 ```
 
 ### `xai_analyze_image`
-Opt-in analysis of an image URL, data URL, or local `.png` / `.jpg` path with Grok vision. Enable it through `/xai-tools` first.
+Opt-in analysis of an image URL, data URL, or bounded local `.png` / `.jpg` path with Grok vision. Local files must be inside the active workspace. Enable it through `/xai-tools` first.
 
 ```json
 {
-  "image": "/Users/me/Desktop/screenshot.png",
+  "image": "assets/screenshot.png",
   "question": "What error is visible?"
 }
 ```
+
+Legacy local image inputs are limited to byte-validated PNG/JPEG regular files inside the
+active workspace. Paths are resolved through realpath, so traversal and outward symlinks are
+rejected; reads are capped at 8 MiB and 12 million decoded pixels before base64 encoding.
+Absolute paths and `file://` URLs remain compatible only when their resolved file is inside
+that workspace.
 
 ### `xai_edit_image`
 
@@ -635,7 +641,7 @@ Then run `pi /list-providers` — you should see `xai-auth` listed.
 
 ### `422 "Failed to deserialize ... ModelInput"` with images
 
-This means xAI rejected a multimodal Responses `input` shape. Use the latest package version and restart pi or run `/reload`. The provider normalizes local `.png`/`.jpg` paths into `data:image/...;base64,...` URLs, adds image `detail`, moves system/developer text to top-level `instructions`, and rewrites image-bearing tool results so `function_call_output.output` stays text-only (xAI rejects arrays there).
+This means xAI rejected a multimodal Responses `input` shape. Use the latest package version and restart pi or run `/reload`. The provider normalizes validated, bounded workspace-local `.png`/`.jpg` paths into `data:image/...;base64,...` URLs, adds image `detail`, moves system/developer text to top-level `instructions`, and rewrites image-bearing tool results so `function_call_output.output` stays text-only (xAI rejects arrays there).
 
 > **Fixed in repair**: Requests from other providers (DeepSeek, OpenAI Codex, etc.) no longer get mutated by the xAI sanitation hook.
 
@@ -643,7 +649,7 @@ If you call `xai_generate_text` directly, `image_url` may be either:
 
 - an `http(s)://...` URL
 - a `data:image/png;base64,...` or `data:image/jpeg;base64,...` URL
-- a local `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `/Users/me/My\\ Image.png`
+- a workspace-contained `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `assets/My\\ Image.png` and in-workspace absolute or `file://` paths
 
 ### `500 "Auth context expired"` after screenshots
 

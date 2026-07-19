@@ -39,7 +39,7 @@ function xaiToolDisabledError(toolName: XaiNetworkToolName, details: Record<stri
 
 function invalidXaiImageInputError() {
   return xaiToolError(
-    "Error: Invalid image input. Provide a valid image URL, data URL, or existing supported local file. No xAI request was sent.",
+    "Error: Invalid image input. Provide a valid image URL, data URL, or supported local workspace file. No xAI request was sent.",
     { error: true },
   );
 }
@@ -71,17 +71,21 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_generate_text");
         if (!activeModel) return xaiToolDisabledError("xai_generate_text", { prompt: params?.prompt });
-        const credential = await resolveXaiCredential(ctx);
-        if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
-        }
 
         const model = params.model || activeModel.id || defaultXaiRuntimeModelId() || DEFAULT_XAI_MODEL;
         let imageUrl: string | undefined;
         try {
-          imageUrl = normalizeXaiImageInput(params.image_url);
+          const workspaceRoot = ctx?.cwd;
+          imageUrl = normalizeXaiImageInput(
+            params.image_url,
+            typeof workspaceRoot === "string" && workspaceRoot.trim() ? workspaceRoot : "",
+          );
         } catch {
           return invalidXaiImageInputError();
+        }
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
         }
         const input = imageUrl
           ? [
@@ -620,18 +624,22 @@ Be specific and cite examples where helpful.`;
       execute: async (_toolCallId: string, params: { image?: string; question?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_analyze_image");
         if (!activeModel) return xaiToolDisabledError("xai_analyze_image");
-        const credential = await resolveXaiCredential(ctx);
-        if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
-        }
         const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
         let imageInput: string | undefined;
         try {
-          imageInput = normalizeXaiImageInput(params.image);
+          const workspaceRoot = ctx?.cwd;
+          imageInput = normalizeXaiImageInput(
+            params.image,
+            typeof workspaceRoot === "string" && workspaceRoot.trim() ? workspaceRoot : "",
+          );
         } catch {
           return invalidXaiImageInputError();
         }
         if (!imageInput) return invalidXaiImageInputError();
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
+        }
         const input = [{ role: "user", content: [{ type: "input_image", image_url: imageInput, detail: "high" }, { type: "input_text", text: question }] }];
         let data: any;
         try {
