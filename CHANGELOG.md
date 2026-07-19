@@ -11,6 +11,10 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
 
+### Fixed
+
+- Restricted legacy local PNG/JPEG inputs across custom tools, Responses payload normalization, and vision routing to byte-bounded, byte-validated regular files inside the active workspace, with sanitized failures for traversal, outward symlinks, special files, MIME spoofing, oversized sources, and pixel bombs.
+
 ## 1.3.6 - 2026-07-18
 
 ### Added

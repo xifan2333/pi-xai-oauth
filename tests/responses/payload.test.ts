@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   XAI_GROK_NATIVE_TOOL_NAME_MAP,
@@ -19,6 +22,7 @@ import {
   KNOWN_XAI_MODEL_METADATA,
   setXaiRuntimeModels,
 } from "../../extensions/xai/models";
+import { tinyPngBytes } from "../fixtures/images";
 import { TEST_MODEL } from "../fixtures/models";
 
 afterEach(() => setXaiRuntimeModels(CURATED_FALLBACK_MODELS));
@@ -316,6 +320,55 @@ describe("Responses payload normalization", () => {
         detail: "high",
       },
     ]);
+  });
+  it("materializes only local Responses images inside the provider workspace", () => {
+    const insideDir = mkdtempSync(join(process.cwd(), ".xai-payload-inside-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "xai-payload-outside-"));
+    const inside = join(insideDir, "inside.png");
+    const outside = join(outsideDir, "SENSITIVE-outside.png");
+    writeFileSync(inside, tinyPngBytes());
+    writeFileSync(outside, tinyPngBytes());
+    try {
+      const result: any = rewriteXaiResponsesPayload(
+        {
+          model: "grok-4.5",
+          input: [{
+            role: "user",
+            content: [{ type: "image_url", image_url: inside }],
+          }],
+        },
+        TEST_MODEL,
+      );
+      expect(result.input[0].content[0]).toMatchObject({
+        type: "input_image",
+        detail: "auto",
+      });
+      expect(result.input[0].content[0].image_url).toMatch(/^data:image\/png;base64,/);
+      expect(JSON.stringify(result)).not.toContain(inside);
+
+      let error: Error | undefined;
+      try {
+        rewriteXaiResponsesPayload(
+          {
+            model: "grok-4.5",
+            input: [{
+              role: "user",
+              content: [{ type: "input_image", image_url: outside }],
+            }],
+          },
+          TEST_MODEL,
+        );
+      } catch (caught) {
+        error = caught as Error;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).toMatch(/outside the workspace/);
+      expect(error?.message).not.toMatch(/SENSITIVE|outside\.png/);
+      expect(error?.message).not.toContain(outside);
+    } finally {
+      rmSync(insideDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
   it("detects only structural image content inside final Responses input", () => {
     expect(

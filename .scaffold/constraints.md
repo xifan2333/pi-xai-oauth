@@ -1,32 +1,26 @@
-# Constraints & Safety Rules — Issue #82
+# Constraints & Safety Rules — PR #96
 
-## Identity and credentials
+## Local image policy
 
-- Resolve the OAuth bearer through Pi's existing credential path; never accept API-key provenance for this surface.
-- Obtain `x-userid` only from pinned authenticated `GET https://cli-chat-proxy.grok.com/v1/user`.
-- Keep identity transient within one fetch call. Never persist, cache, log, display, fingerprint, or copy it into catalog/auth state.
-- On any identity transport, auth, redirect, timeout, cancellation, byte, JSON, shape, or validation failure, stop before billing.
-- Never log or reflect bearer tokens, authenticated headers, user identity, raw bodies, or transport exception details.
+- Preserve legacy local PNG/JPEG compatibility only for verified workspace-contained files.
+- Reuse shared media limits, inspection, containment policy, and result types.
+- Keep `normalizeXaiImageInput` synchronous.
+- Keep remote URL and existing data-URL pass-through behavior unchanged.
+- Never reflect supplied paths in normalization, filesystem, tool, payload, or routing errors.
+- Do not broaden support to unrecognized extensions or unrelated media routes.
 
-## Billing and parsing
+## Tool and caller policy
 
-- Pin `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`; never accept a caller/catalog endpoint.
-- Reject redirects; use a 15-second per-request timeout and 64 KiB response limit.
-- Bound JSON depth, node count, array size, object keys, history periods, user ID, labels, timestamps, percentages, billing cycles, and cent values.
-- Treat config fields as optional. Support only observed new fields and documented legacy fallbacks.
-- Billing errors and optional status must never affect chat.
-
-## Status lifecycle
-
-- One-shot `/xai-usage` is explicit and does not enable status.
-- Status is off by default and requires `/xai-usage status on` with an active `xai-auth` model.
-- Status is in-memory/session-only, refreshes only after completed turns, and never more often than once per minute.
-- Clear and disable status on model, provider, account, session start/shutdown, and non-xAI context changes.
+- `xai_generate_text(image_url)` and `xai_analyze_image` must use the active tool `ctx.cwd`.
+- Local tool input without a valid workspace context must fail before any outbound request.
+- Payload normalization and vision routing remain synchronous and default to `process.cwd()`.
+- Do not change tool opt-in, credentials, model entitlement, or transport policy.
 
 ## Delivery
 
-- Keep implementation changes in the isolated issue-82 worktree; delegated audits are read-only.
-- Preserve `safety/issue-82-pre-main-rebase` and use exact force-with-lease against the known old remote head.
-- Use locked npm dependencies; use UV instead of pip if Python becomes necessary.
-- Preserve merged wire, modality, image-edit, catalog, OAuth, and Pi 0.80.1/0.80.10 compatibility behavior.
-- Update scaffold after major phases. Push only after full validation and independent review; do not merge PR #89.
+- Rebuild PR #96 from current main; do not merge its stale synchronous implementation verbatim.
+- Preserve `safety/pr-96-stale` and force-push only with an exact lease against
+  `d1c0b11b5f81707831a13bbd2ca0f63f171129a7`.
+- Do not change the package version.
+- Preserve and exclude `.claude/`, `anime-characters.jpg`, and `anime-characters.mp4`.
+- Use UV instead of pip if Python becomes necessary.
