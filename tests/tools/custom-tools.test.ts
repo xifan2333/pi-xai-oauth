@@ -59,7 +59,6 @@ describe("custom xAI tools", () => {
   });
   it.each([
     ["xai_generate_text", { prompt: "guard" }],
-    ["xai_web_search", { query: "guard" }],
     ["xai_x_search", { query: "guard" }],
     ["xai_multi_agent", { query: "guard" }],
     ["xai_deep_research", { topic: "guard" }],
@@ -154,13 +153,6 @@ describe("custom xAI tools", () => {
     expect(
       new Headers(request.init.headers).get("x-grok-conv-id"),
     ).toBeTruthy();
-  });
-  it("uses the active model and native web-search tool", async () => {
-    await run("xai_web_search", { query: "xAI docs" });
-    expect(requests.at(-1)?.body).toMatchObject({
-      model: "grok-4.5",
-      tools: [{ type: "web_search", enable_image_understanding: true }],
-    });
   });
   it("maps X date filters and code interpreter", async () => {
     await run("xai_x_search", {
@@ -379,28 +371,5 @@ describe("custom xAI tools", () => {
       "web_search",
       "x_search",
     ]);
-  });
-  it("translates one provider error without retrying or changing the active model", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: any, init: RequestInit = {}) => {
-        requests.push({ url: String(url), init, body: requestBody(init) });
-        return jsonResponse({ error: "credits" }, 403);
-      }),
-    );
-    const model = { ...TEST_MODEL, id: "grok-4.3" } as any;
-    setXaiNetworkToolActive(h.api, model, "xai_web_search", true);
-    const result = await h.tools
-      .get("xai_web_search")
-      .execute(
-        "call",
-        { query: "one" },
-        undefined,
-        () => {},
-        authContext(model),
-      );
-    expect(result.content[0].text).toMatch(/xAI API Error 403/);
-    expect(requests).toHaveLength(1);
-    expect(requests[0].body.model).toBe("grok-4.3");
   });
 });

@@ -33,7 +33,7 @@ pi --model grok-4.5:high "Review this architecture for failure modes"
 pi --model grok-4.5:low "Quick status check"   # fast mode
 ```
 
-This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom xAI tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.). The normalized cache remains exact; registration may additionally expose narrowly verified compatibility routes such as Grok 4.3 and Composer only while their required authenticated entitlement source is present.
+This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom xAI tools (`xai_generate_text`, `web_search`, `xai_x_search`, etc.). The normalized cache remains exact; registration may additionally expose narrowly verified compatibility routes such as Grok 4.3 and Composer only while their required authenticated entitlement source is present.
 
 > **Latest release:** `pi-xai-oauth` **1.3.6** adds authenticated account-specific model discovery, browser and device OAuth, encrypted reasoning replay, Grok-native local tools, bounded image editing, and explicit subscription usage while hardening xAI routing, payloads, headers, redirects, and entitlement enforcement. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
@@ -87,7 +87,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint for every Grok model; the public `api.x.ai` Responses endpoint is reserved for a future explicit API-key path
 - **Revision-pinned wire contract** — route-specific headers, truthful package identity, protected request metadata, redirect rejection, and the upstream Grok Build review procedure are documented without impersonating the official client
 
-> **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `xai_web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
+> **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
 
 ---
 
@@ -147,7 +147,7 @@ Then optionally configure it as default:
 
 > **⚠️ Important: install only one copy**
 >
-> `pi-xai-oauth` registers fixed tool names such as `xai_generate_text`, `xai_web_search`, and `xai_x_search`. If you install more than one copy — for example `npm:pi-xai-oauth` plus a local checkout, or two different local checkouts — pi will fail to start with `Tool "xai_generate_text" conflicts with ...` errors.
+> `pi-xai-oauth` registers fixed private tool names such as `xai_generate_text`, `xai_grok_web_search`, and `xai_x_search`. If you install more than one copy — for example `npm:pi-xai-oauth` plus a local checkout, or two different local checkouts — pi will fail to start with `Tool "xai_generate_text" conflicts with ...` errors.
 >
 > Check with:
 > ```bash
@@ -426,7 +426,6 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | Tool | Category | Additional usage / cost risk |
 |------|----------|------------------------------|
 | `xai_generate_text` | Generation | Separate model-token usage |
-| `xai_web_search` | Search | Model tokens plus native tool usage |
 | `xai_x_search` | Search | Model tokens plus native tool usage |
 | `xai_multi_agent` | Research | High/variable: 4 or 16 agents plus web/X tools |
 | `xai_deep_research` | Research | High/variable model and web/X tool usage |
@@ -452,8 +451,8 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 
 ```text
 /xai-tools status
-/xai-tools enable xai_web_search
-/xai-tools disable xai_web_search
+/xai-tools enable web_search
+/xai-tools disable web_search
 /xai-tools enable xai_generate_image
 /xai-tools enable xai_edit_image
 /xai-tools enable xai_image_to_video
@@ -461,7 +460,7 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 /xai-tools disable vision-routing
 ```
 
-`vision-routing` is transport policy rather than a callable model tool, so it never enters Pi's active-tool registry. It appears only when exact authenticated capability evidence supports a text-only source and a separate text-and-image target. `web_search` appears in the picker for any active xAI model (still opt-in). `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
+`vision-routing` is transport policy rather than a callable model tool, so it never enters Pi's active-tool registry. It appears only when exact authenticated capability evidence supports a text-only source and a separate text-and-image target. `web_search` appears once in the picker for any active xAI model (still opt-in); the older `xai_web_search` spelling remains accepted only as a backward-compatible `/xai-tools enable` or `disable` argument. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
@@ -487,12 +486,13 @@ Opt-in deep multi-agent research using Grok's multi-agent model plus native web 
 }
 ```
 
-### `xai_web_search`
-Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/xai-tools` first.
+### `web_search`
+Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/xai-tools` first. The optional `allowed_domains` list is forwarded unchanged.
 
 ```json
 {
-  "query": "Rust vs Go performance 2026"
+  "query": "Rust vs Go performance 2026",
+  "allowed_domains": ["rust-lang.org", "go.dev"]
 }
 ```
 

@@ -34,6 +34,10 @@ try {
     "collision-free Grok web-search dispatcher should be registered",
   );
   assert.ok(
+    !loaded.tools.has("xai_web_search"),
+    "legacy xAI web-search wrapper should not be registered alongside the Grok dispatcher",
+  );
+  assert.ok(
     !loaded.tools.has("web_search"),
     "public Grok web-search name must remain free for other extensions",
   );

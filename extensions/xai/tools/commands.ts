@@ -25,7 +25,6 @@ interface NetworkToolOption {
 
 const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
   { name: "xai_generate_text", category: "generation", costRisk: "token usage", summary: "separate Grok response" },
-  { name: "xai_web_search", category: "search", costRisk: "token + tool", summary: "native xAI web search" },
   { name: "xai_x_search", category: "search", costRisk: "token + tool", summary: "native xAI X search" },
   { name: "xai_multi_agent", category: "research", costRisk: "high/variable", summary: "4- or 16-agent web/X research" },
   { name: "xai_deep_research", category: "research", costRisk: "high/variable", summary: "multi-step web/X research" },
@@ -50,6 +49,7 @@ const XAI_TOOLS_USAGE =
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
+  if (normalized === "xai_web_search") return XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME;
   return NETWORK_TOOL_OPTIONS.find(
     ({ name, displayName }) =>
       name.toLowerCase() === normalized || displayName?.toLowerCase() === normalized,

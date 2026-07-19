@@ -16,7 +16,7 @@ describe("network-tool lifecycle", () => {
   it("requires an active xAI model for web_search", () => {
     const h = createExtensionHarness([...XAI_NETWORK_TOOL_NAMES]);
     expect(
-      setXaiNetworkToolActive(h.api, undefined, "xai_web_search", true),
+      setXaiNetworkToolActive(h.api, undefined, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, true),
     ).toMatchObject({ ok: false, active: false });
     expect(
       setXaiNetworkToolActive(
@@ -66,7 +66,7 @@ describe("network-tool lifecycle", () => {
     const read = createExtensionHarness();
     read.failRegistry({ get: true });
     expect(
-      setXaiNetworkToolActive(read.api, TEST_MODEL, "xai_web_search", true),
+      setXaiNetworkToolActive(read.api, TEST_MODEL, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, true),
     ).toMatchObject({
       ok: false,
       active: false,
@@ -75,23 +75,23 @@ describe("network-tool lifecycle", () => {
     const write = createExtensionHarness();
     write.failRegistry({ set: true });
     expect(
-      setXaiNetworkToolActive(write.api, TEST_MODEL, "xai_web_search", true),
+      setXaiNetworkToolActive(write.api, TEST_MODEL, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, true),
     ).toMatchObject({
       ok: false,
       active: false,
       error: expect.stringMatching(/could not be updated/),
     });
     write.failRegistry();
-    expect(isXaiNetworkToolActive(write.api, "xai_web_search")).toBe(false);
+    expect(isXaiNetworkToolActive(write.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
   });
   it("selectively disables one tool while preserving another", () => {
     const h = createExtensionHarness();
-    setXaiNetworkToolActive(h.api, TEST_MODEL, "xai_web_search", true);
+    setXaiNetworkToolActive(h.api, TEST_MODEL, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, true);
     setXaiNetworkToolActive(h.api, TEST_MODEL, "xai_generate_image", true);
     expect(
-      setXaiNetworkToolActive(h.api, undefined, "xai_web_search", false),
+      setXaiNetworkToolActive(h.api, undefined, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME, false),
     ).toEqual({ ok: true, active: false });
-    expect(isXaiNetworkToolActive(h.api, "xai_web_search")).toBe(false);
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(false);
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
   });
   it("does not allow direct registry injection to bypass package authorization", () => {
