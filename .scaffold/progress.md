@@ -21,8 +21,8 @@
 
 ## In Progress
 
-- [ ] Compatibility boundaries + commit/push/PR.
+- [x] Compatibility boundaries + commit/push/PR.
 
 ## Delivery
 
-- [ ] Publish fix PR for vision-routing Pi converter bypass.
+- [x] Published fix PR: https://github.com/BlockedPath/pi-xai-oauth/pull/109
