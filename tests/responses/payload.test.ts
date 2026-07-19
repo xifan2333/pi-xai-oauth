@@ -143,6 +143,53 @@ describe("Responses payload normalization", () => {
     expect(inlineImages(result)).toHaveLength(0);
     expect(JSON.stringify(result)).toMatch(/historical tool image.*omitted/);
   });
+  it.each([
+    {
+      name: "image-only",
+      content: [{ type: "input_image", image_url: tiny, detail: "auto" }],
+    },
+    {
+      name: "text-and-image",
+      content: [
+        { type: "input_text", text: "describe" },
+        { type: "input_image", image_url: tiny, detail: "auto" },
+      ],
+    },
+  ])("omits consumed $name user images only when explicitly requested", ({ content }) => {
+    const payload = {
+      model: TEST_MODEL.id,
+      input: [
+        { role: "user", content },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+        { role: "user", content: "next" },
+      ],
+    };
+    const routed = rewriteXaiResponsesPayload(payload, TEST_MODEL, { omitConsumedVisionImages: true });
+    expect(inlineImages(routed)).toHaveLength(0);
+    expect(JSON.stringify(routed)).toMatch(/historical user image omitted/);
+    expect(inlineImages(rewriteXaiResponsesPayload(payload, TEST_MODEL))).toHaveLength(1);
+  });
+  it("omits consumed computer screenshots only when explicitly requested", () => {
+    const payload = {
+      model: TEST_MODEL.id,
+      input: [
+        {
+          type: "computer_call_output",
+          call_id: "computer_old",
+          output: { type: "computer_screenshot", image_url: "https://example.test/old.png" },
+        },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+        { role: "user", content: "next" },
+      ],
+    };
+    const routed = rewriteXaiResponsesPayload(payload, TEST_MODEL, { omitConsumedVisionImages: true });
+    const routedInput = (routed as { input: Array<Record<string, unknown>> }).input;
+    expect(routedInput[0].output).toEqual({ type: "computer_screenshot" });
+    expect(routedInput[1]).toMatchObject({ role: "user" });
+    expect(xaiResponsesPayloadContainsImage(routed)).toBe(false);
+    expect(JSON.stringify(routed)).toMatch(/historical computer screenshot omitted/);
+    expect(xaiResponsesPayloadContainsImage(rewriteXaiResponsesPayload(payload, TEST_MODEL))).toBe(true);
+  });
   it("retains pending tool images until the next assistant output", () => {
     expect(
       inlineImages(

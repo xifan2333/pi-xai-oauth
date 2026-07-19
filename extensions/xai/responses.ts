@@ -441,6 +441,12 @@ export function streamSimpleXaiResponses(
     },
     { streaming: true },
   );
+  // Pi's Responses converter replaces user/tool images with placeholders when
+  // model.input lacks "image". Capture the exact enabled grant so a reset and
+  // re-enable cannot authorize an already-started request under a new grant.
+  const visionGrantSignal = visionRouting?.signalFor(selectedModelId);
+  const visionEnabled = visionGrantSignal !== undefined && !visionGrantSignal.aborted;
+  const modelInputs = Array.isArray((model as any).input) ? [...(model as any).input] : ["text"];
   const streamModel = {
     ...model,
     id: selectedModelId,
@@ -451,6 +457,9 @@ export function streamSimpleXaiResponses(
   // the API tag expected by pi's OpenAI Responses transport.
   const openAIResponsesModel = {
     ...streamModel,
+    ...(visionEnabled && !modelInputs.includes("image")
+      ? { input: [...modelInputs.filter((value) => value !== "image"), "image"] }
+      : {}),
     api: "openai-responses" as const,
   };
   // The OAuth bearer comes only from options.apiKey. Required proxy metadata
@@ -461,6 +470,15 @@ export function streamSimpleXaiResponses(
     routedSourceController.signal,
     ...(options?.signal ? [options.signal] : []),
   ]);
+  const planForCapturedVisionGrant = (payload: unknown) => {
+    if (!xaiResponsesPayloadContainsImage(payload) || !visionGrantSignal) return undefined;
+    if (visionGrantSignal.aborted) throw new Error(XAI_VISION_ROUTING_INVALIDATED_ERROR);
+    const plan = visionRouting?.plan(selectedModelId, payload);
+    if (!plan || plan.signal !== visionGrantSignal) {
+      throw new Error(XAI_VISION_ROUTING_INVALIDATED_ERROR);
+    }
+    return plan;
+  };
 
   const stream = createForwardingAssistantStream();
   let grokNativeToolRoutes: GrokNativeToolRoutes = {};
@@ -489,13 +507,14 @@ export function streamSimpleXaiResponses(
           async onPayload(payload) {
             const canonicalInput = canonicalizeXaiResponsesPayload(payload);
             if (xaiResponsesPayloadContainsLocalImageReference(canonicalInput)) {
-              const inputPlan = visionRouting?.plan(selectedModelId, canonicalInput);
+              const inputPlan = planForCapturedVisionGrant(canonicalInput);
               if (!inputPlan) assertXaiRuntimeModelAcceptsPayload(selectedModelId, canonicalInput);
             }
             const rewritten = rewriteXaiResponsesPayload(canonicalInput, streamModel, {
               ...options,
               sessionId: sessionId || routingSessionId,
-              preserveCurrentToolImages: visionRouting?.isEnabledFor(selectedModelId),
+              preserveCurrentToolImages: visionEnabled,
+              omitConsumedVisionImages: visionEnabled,
             });
             const userRewritten = await options?.onPayload?.(rewritten, streamModel);
             const canonicalPayload = canonicalizeXaiResponsesPayload(
@@ -506,7 +525,7 @@ export function streamSimpleXaiResponses(
             let exposedPayload = exposeGrokNativeToolNames(policyPayload);
             pinXaiPayloadModel(selectedModelId, exposedPayload);
 
-            const plan = visionRouting?.plan(selectedModelId, exposedPayload);
+            const plan = planForCapturedVisionGrant(exposedPayload);
             if (plan) {
               const compactedVisionPayload = await compactXaiInlineImages(exposedPayload) as Record<string, unknown>;
               if (!visionRouting?.validate(plan)) throw new Error(XAI_VISION_ROUTING_INVALIDATED_ERROR);

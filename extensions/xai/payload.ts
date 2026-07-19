@@ -201,6 +201,10 @@ function isResponsesInputImagePart(value: unknown): value is Record<string, any>
 }
 
 type ToolImageDisposition = "attached" | "omitted";
+const HISTORICAL_USER_IMAGE_PLACEHOLDER =
+  "(historical user image omitted after a later assistant response)";
+const HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER =
+  "[historical computer screenshot omitted after a later assistant response]";
 
 function textForFunctionCallOutput(output: unknown, imageDisposition: ToolImageDisposition): string {
   if (typeof output === "string") return output;
@@ -233,10 +237,40 @@ function isAssistantResponseItem(value: unknown): boolean {
   return item.type === "reasoning" || item.type === "function_call";
 }
 
+function stripConsumedUserImages(item: Record<string, any>): Record<string, any> {
+  if (item.role !== "user" || !Array.isArray(item.content)) return item;
+  let insertedPlaceholder = false;
+  let changed = false;
+  const content: unknown[] = [];
+  for (const part of item.content) {
+    if (!isResponsesInputImagePart(part)) {
+      content.push(part);
+      continue;
+    }
+    changed = true;
+    if (!insertedPlaceholder) {
+      content.push({ type: "input_text", text: HISTORICAL_USER_IMAGE_PLACEHOLDER });
+      insertedPlaceholder = true;
+    }
+  }
+  return changed ? { ...item, content } : item;
+}
+
+function stripConsumedComputerScreenshot(item: Record<string, any>): Record<string, any> {
+  if (item.type !== "computer_call_output" || !item.output || typeof item.output !== "object") return item;
+  const output = item.output as Record<string, unknown>;
+  if (
+    output.type !== "computer_screenshot" ||
+    (output.image_url === undefined && output.file_id === undefined)
+  ) return item;
+  return { ...item, output: { type: "computer_screenshot" } };
+}
+
 function normalizeXaiResponsesInput(
   input: unknown[],
   model: Model<Api>,
   preserveCurrentToolImages = false,
+  omitConsumedVisionImages = false,
 ): unknown[] {
   const normalizedInput = input.map(normalizeXaiResponsesImageParts) as Record<string, any>[];
   const rewritten: unknown[] = [];
@@ -252,6 +286,21 @@ function normalizeXaiResponsesInput(
 
   for (let index = 0; index < normalizedInput.length; index++) {
     const item = normalizedInput[index];
+    if (omitConsumedVisionImages && hasLaterAssistantOutput[index] && item && typeof item === "object") {
+      if (item.role === "user") {
+        rewritten.push(stripConsumedUserImages(item));
+        continue;
+      }
+      const strippedComputerOutput = stripConsumedComputerScreenshot(item);
+      if (strippedComputerOutput !== item) {
+        rewritten.push(strippedComputerOutput);
+        rewritten.push({
+          role: "user",
+          content: [{ type: "input_text", text: HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER }],
+        });
+        continue;
+      }
+    }
     if (!item || typeof item !== "object" || item.type !== "function_call_output" || !Array.isArray(item.output)) {
       rewritten.push(item);
       continue;
@@ -350,6 +399,7 @@ export function xaiResponsesPayloadContainsImage(payload: unknown): boolean {
 
 export interface XaiPayloadRewriteOptions extends SimpleStreamOptions {
   preserveCurrentToolImages?: boolean;
+  omitConsumedVisionImages?: boolean;
 }
 
 /** Rewrite generic OpenAI Responses payloads into xAI-compatible payloads. */
@@ -372,6 +422,7 @@ export function rewriteXaiResponsesPayload(
       [...body.input],
       model,
       options?.preserveCurrentToolImages,
+      options?.omitConsumedVisionImages,
     ) as Record<string, any>[];
     const instructionParts: string[] = [];
 

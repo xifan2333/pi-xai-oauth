@@ -139,6 +139,96 @@ describe("opt-in vision routing", () => {
     expect(JSON.stringify(requests[1])).toMatch(/xAI-generated visual description.*red square/s);
   });
 
+  it("keeps Pi-converted conversation images available to enabled vision routing", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    expect(controller.enable(sourceModel).state).toBe("enabled");
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return body.model === target.id
+        ? jsonResponse({ id: "vision", output_text: "A red square with the word STOP." })
+        : streamResponse("Understood.");
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      {
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "What is shown?" },
+            { type: "image", data: Buffer.from(tinyPngBytes()).toString("base64"), mimeType: "image/png" },
+          ],
+          timestamp: Date.now(),
+        }],
+      } as any,
+      { apiKey: "oauth-token" } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(2);
+    expect(requests[0].model).toBe(target.id);
+    expect(containsImage(requests[0])).toBe(true);
+    expect(requests[1].model).toBe(source.id);
+    expect(containsImage(requests[1])).toBe(false);
+    expect(JSON.stringify(requests[1])).toMatch(/xAI-generated visual description.*red square/s);
+    expect(JSON.stringify(requests[1])).not.toMatch(/image omitted/i);
+  });
+
+  it("omits consumed historical user images instead of routing them again", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    controller.enable(sourceModel);
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return body.model === target.id
+        ? jsonResponse({ id: "vision", output_text: "old image" })
+        : streamResponse();
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Describe this." },
+              { type: "image", data: Buffer.from(tinyPngBytes()).toString("base64"), mimeType: "image/png" },
+            ],
+            timestamp: 1,
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Already described." }],
+            api: "xai-responses",
+            provider: "xai-auth",
+            model: source.id,
+            usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: {} },
+            stopReason: "stop",
+            timestamp: 2,
+          },
+          { role: "user", content: "Answer a new question.", timestamp: 3 },
+        ],
+      } as any,
+      { apiKey: "oauth-token" } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].model).toBe(source.id);
+    expect(containsImage(requests[0])).toBe(false);
+    expect(JSON.stringify(requests[0])).toMatch(/historical user image omitted/);
+  });
+
   it("routes a valid provider-workspace image as verified bytes", async () => {
     const insideDir = mkdtempSync(join(process.cwd(), ".xai-vision-inside-"));
     const inside = join(insideDir, "inside.png");
@@ -260,6 +350,33 @@ describe("opt-in vision routing", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("does not adopt routing enabled after a request starts", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      { messages: [{ role: "user", content: "describe", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        onPayload(payload: any) {
+          controller.enable(sourceModel);
+          payload.input = [{
+            role: "user",
+            content: [{ type: "input_image", image_url: "https://example.test/private.png" }],
+          }];
+        },
+      } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toMatch(/explicitly text-only.*no xAI request was sent/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("routes current tool images but omits consumed historical images", async () => {
     const controller = createXaiVisionRoutingController();
     controller.replaceCatalog([source, target]);
@@ -275,20 +392,20 @@ describe("opt-in vision routing", () => {
 
     const current = streamSimpleXaiResponses(
       sourceModel,
-      { messages: [{ role: "user", content: "inspect", timestamp: Date.now() }] } as any,
       {
-        apiKey: "oauth-token",
-        onPayload(payload: any) {
-          payload.input = [{
-            type: "function_call_output",
-            call_id: "call_image",
-            output: [
-              { type: "input_text", text: "screenshot" },
-              { type: "input_image", image_url: "https://example.test/tool.png" },
-            ],
-          }];
-        },
+        messages: [{
+          role: "toolResult",
+          toolCallId: "call_image",
+          toolName: "screenshot",
+          content: [
+            { type: "text", text: "screenshot" },
+            { type: "image", data: Buffer.from(tinyPngBytes()).toString("base64"), mimeType: "image/png" },
+          ],
+          isError: false,
+          timestamp: Date.now(),
+        }],
       } as any,
+      { apiKey: "oauth-token" } as any,
       controller,
     );
     await current.result();
@@ -360,6 +477,45 @@ describe("opt-in vision routing", () => {
     await stream.result();
     expect(aborted).toBe(true);
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a reset and re-enabled replacement grant before routing", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    controller.enable(sourceModel);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    let hookModelInput: unknown;
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      {
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Describe this." },
+            { type: "image", data: Buffer.from(tinyPngBytes()).toString("base64"), mimeType: "image/png" },
+          ],
+          timestamp: Date.now(),
+        }],
+      } as any,
+      {
+        apiKey: "old-account-token",
+        onPayload(payload: unknown, hookModel: { input: unknown }) {
+          hookModelInput = hookModel.input;
+          controller.reset();
+          controller.replaceCatalog([source, target]);
+          controller.enable(sourceModel);
+          return payload;
+        },
+      } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(hookModelInput).toEqual(["text"]);
+    expect(result.errorMessage).toBe(XAI_VISION_ROUTING_INVALIDATED_ERROR);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("prevents the source request after catalog invalidation", async () => {
