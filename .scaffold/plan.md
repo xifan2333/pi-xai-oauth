@@ -1,33 +1,27 @@
-# Implementation Plan — Refresh PR #101: Contain Grok-Native Direct File Adapters
+# Implementation Plan — Issue #114: Post-hook vision pruning
 
-**Branch:** `cursor/critical-bug-management-92fc`
-**Base:** `origin/main` at `fe8250575403fa7929ae4e6508a5f09ef45b3d91`
-**Stale PR safety ref:** `safety/pr-101-stale` (`0f9ca07b71699a933b094a968539fe5739b23d6b`)
+**Branch:** `fix/114-post-hook-vision-pruning`
+**Base:** `origin/main` at `941cb4a`
 
 ## Goal
 
-Apply deterministic post-`realpath` workspace containment to Grok-native `read_file`,
-`search_replace`, and `list_dir`, retain bounded full-file reads and pi's mutation
-semantics, and document the deliberate exclusion of unrestricted terminal commands.
+Prevent caller payload hooks from reintroducing consumed historical images into the
+vision-routing target request while preserving current images, text-only enforcement,
+screenshot schema, and the original captured grant.
 
 ## Phases
 
-1. [x] Confirm clean scope, current main, stale PR head, reviews, checks, and lease target.
-2. [x] Preserve the stale head and rebuild the PR branch directly from current main.
-3. [x] Reapply and audit the stale containment implementation.
-4. [x] Harden missing-leaf and bounded-read behavior while preserving cancellation and queues.
-5. [x] Add direct-adapter, oversized-read, safe-path, and unrestricted-terminal regressions.
-6. [x] Clarify schemas, README, changelog, and persistent state.
-7. [x] Run focused, full, coverage, typecheck, policy, boundary, and hygiene gates.
-8. [ ] Obtain independent review, amend, exact-lease force-push, refresh PR #101, and merge.
+1. [x] Confirm issue scope, clean branch, and current payload/vision flow.
+2. [x] Extract a shared consumed-history payload helper.
+3. [x] Reapply pruning to the canonical post-hook payload before route planning.
+4. [x] Add streaming regressions for hook-returned user images and screenshots.
+5. [x] Document post-hook pruning and update the changelog.
+6. [x] Run full tests, typecheck, compatibility checks, and independent review.
 
 ## Validation Contract
 
-- Relative and absolute in-workspace paths work for read, replace, create, and list.
-- Outside absolute paths, escaping traversal, and outward file/directory symlinks fail.
-- Missing leaves are creatable only through a physically contained existing parent.
-- Package-owned full-file reads for negative offsets and exact replacement stop at
-  5,000,000 bytes.
-- Cancellation, pi's per-file mutation queue, stale-snapshot detection, and normal behavior remain.
-- `run_terminal_command` still delegates to pi `bash` without workspace containment.
-- `.claude/`, `anime-characters.jpg`, and `anime-characters.mp4` remain untracked.
+- Historical hook-returned user images never reach the vision target.
+- Current hook-returned images still route when the captured grant is valid.
+- Historical `computer_call_output.output` remains object-shaped and reference-free.
+- Disabled routing still rejects hook-added images rather than silently pruning them.
+- Reset/re-enable cannot authorize a request under a replacement grant.

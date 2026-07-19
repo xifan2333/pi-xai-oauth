@@ -229,6 +229,101 @@ describe("opt-in vision routing", () => {
     expect(JSON.stringify(requests[0])).toMatch(/historical user image omitted/);
   });
 
+  it("reapplies history pruning after a payload hook while preserving the current image", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    controller.enable(sourceModel);
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return body.model === target.id
+        ? jsonResponse({ id: "vision", output_text: "current image only" })
+        : streamResponse();
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      { messages: [{ role: "user", content: "inspect", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        onPayload(payload: any) {
+          payload.input = [
+            {
+              role: "user",
+              content: [{ type: "image", data: "aGlzdG9yaWNhbA==", mimeType: "image/png" }],
+            },
+            { role: "assistant", content: [{ type: "output_text", text: "already used" }] },
+            {
+              role: "user",
+              content: [{ type: "input_image", image_url: "https://example.test/current.png" }],
+            },
+          ];
+        },
+      } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(2);
+    expect(requests[0].model).toBe(target.id);
+    expect(JSON.stringify(requests[0])).toContain("current.png");
+    expect(JSON.stringify(requests[0])).not.toContain("aGlzdG9yaWNhbA");
+    expect(requests[1].model).toBe(source.id);
+    expect(containsImage(requests[1])).toBe(false);
+    expect(JSON.stringify(requests[1])).toMatch(/historical user image omitted/);
+  });
+
+  it("strips hook-returned historical computer screenshot references without changing its schema", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    controller.enable(sourceModel);
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return streamResponse();
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      { messages: [{ role: "user", content: "continue", timestamp: Date.now() }] } as any,
+      {
+        apiKey: "oauth-token",
+        onPayload(payload: any) {
+          payload.input = [
+            {
+              type: "computer_call_output",
+              call_id: "computer_old",
+              output: {
+                type: "computer_screenshot",
+                image_url: "https://example.test/private-old.png",
+                file_id: "file-private-old",
+              },
+            },
+            { role: "assistant", content: [{ type: "output_text", text: "already inspected" }] },
+            { role: "user", content: [{ type: "input_text", text: "continue" }] },
+          ];
+        },
+      } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].model).toBe(source.id);
+    expect(requests[0].input[0]).toMatchObject({
+      type: "computer_call_output",
+      call_id: "computer_old",
+      output: { type: "computer_screenshot" },
+    });
+    expect(requests[0].input[0].output).toEqual({ type: "computer_screenshot" });
+    expect(JSON.stringify(requests[0])).not.toMatch(/private-old|file-private-old/);
+    expect(JSON.stringify(requests[0]).match(/historical computer screenshot omitted/g)).toHaveLength(1);
+  });
+
   it("routes a valid provider-workspace image as verified bytes", async () => {
     const insideDir = mkdtempSync(join(process.cwd(), ".xai-vision-inside-"));
     const inside = join(insideDir, "inside.png");

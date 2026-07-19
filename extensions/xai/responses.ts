@@ -13,6 +13,7 @@ import {
   canonicalizeXaiResponsesPayload,
   exposeGrokNativeToolNames,
   internalizeGrokNativeToolCalls,
+  omitConsumedXaiResponsesVisionImages,
   rewriteXaiResponsesPayload,
   type GrokNativeToolRoutes,
   XAI_PAYLOAD_CANONICALIZATION_ERROR,
@@ -520,7 +521,13 @@ export function streamSimpleXaiResponses(
             const canonicalPayload = canonicalizeXaiResponsesPayload(
               userRewritten === undefined ? rewritten : userRewritten,
             );
-            const policyPayload = applyXaiOAuthResponsesPolicy(canonicalPayload);
+            // A caller hook can reconstruct history after the initial rewrite.
+            // Reapply the same consumed-image rule before planning, but only for
+            // the vision grant captured when this stream started.
+            const visionSafePayload = visionEnabled
+              ? omitConsumedXaiResponsesVisionImages(canonicalPayload)
+              : canonicalPayload;
+            const policyPayload = applyXaiOAuthResponsesPolicy(visionSafePayload);
             grokNativeToolRoutes = xaiPayloadGrokNativeToolRoutes(policyPayload);
             let exposedPayload = exposeGrokNativeToolNames(policyPayload);
             pinXaiPayloadModel(selectedModelId, exposedPayload);

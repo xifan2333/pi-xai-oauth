@@ -1,42 +1,24 @@
-# Execution Progress — vision-routing Pi converter hardening
+# Execution Progress — Issue #114
 
-**Branch:** `fix/pr-109-review`
+**Branch:** `fix/114-post-hook-vision-pruning`
 **Started:** 2026-07-19
 
 ## Completed
 
-- [x] Audited vision routing + encrypted reasoning replay paths.
-- [x] Confirmed encrypted reasoning isolation (Pi provider/API/model match; vision
-      description request sends no history/ciphertext).
-- [x] Found critical bug: Pi `downgradeUnsupportedImages` strips images for
-      text-only models before `onPayload`, so vision routing never saw real
-      conversation images (tests only injected via `onPayload`).
-- [x] Fixed `streamSimpleXaiResponses` to temporarily advertise `image` on the
-      delegated conversion model while vision routing is enabled.
-- [x] Added regression covering Pi-converted user image messages.
-- [x] Documented the temporary conversion advertisement in
-      `docs/model-input-modalities.md` and `CHANGELOG.md`.
-- [x] Focused vision-routing suite + full `npm test` + typecheck +
-      `compatibility:check` passed.
-- [x] Scoped synthetic image capability to Pi's delegated converter while keeping
-      package rewrites and payload hooks on truthful text-only metadata.
-- [x] Bound each routed stream to its captured grant signal so reset/re-enable
-      cannot authorize an old request under a replacement account or catalog.
-- [x] Omitted consumed historical user images with a bounded placeholder while
-      preserving current user/tool images and ordinary image-capable behavior.
-- [x] Added multi-turn, real Pi tool-result, grant ABA, late-enable, hook metadata,
-      image-only, and text-plus-image regressions.
-- [x] Closed independent review's remaining historical `computer_call_output`
-      screenshot replay gap with bounded pruning and focused coverage.
-- [x] Preserved the required `computer_screenshot` output object while removing
-      its image references and adding a separate bounded historical placeholder.
-
-## In Progress
-
-- [x] Full `npm test` passed (43 files / 481 tests + loader), typecheck and
-      compatibility policy passed, exact Pi 0.80.1 / 0.80.10 boundaries passed,
-      and final independent review reported no concrete blocker.
+- [x] Read issue #114 and audited the pre-hook rewrite / post-hook planning boundary.
+- [x] Ran parallel scout and security/correctness design review.
+- [x] Extracted `omitConsumedXaiResponsesVisionImages` in `payload.ts`.
+- [x] Reused the helper in ordinary payload normalization and after caller hooks.
+- [x] Preserved current images, historical screenshot schema, and captured-grant checks.
+- [x] Added hook-returned historical user-image and computer-screenshot regressions.
+- [x] Updated modality documentation and changelog wording.
+- [x] Focused payload/vision tests passed (36 tests).
+- [x] Typecheck passed.
+- [x] Full `npm test` passed (43 files / 484 tests plus loader).
+- [x] Compatibility policy/pack checks passed.
+- [x] Exact Pi 0.80.1 and 0.80.10 boundary matrices passed.
+- [x] Final independent review reported no concrete blocker.
 
 ## Delivery
 
-- [x] Published fix PR: https://github.com/BlockedPath/pi-xai-oauth/pull/109
+Implementation and validation are complete; the branch is ready for commit/PR delivery.
