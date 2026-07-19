@@ -139,6 +139,46 @@ describe("opt-in vision routing", () => {
     expect(JSON.stringify(requests[1])).toMatch(/xAI-generated visual description.*red square/s);
   });
 
+  it("keeps Pi-converted conversation images available to enabled vision routing", async () => {
+    const controller = createXaiVisionRoutingController();
+    controller.replaceCatalog([source, target]);
+    expect(controller.enable(sourceModel).state).toBe("enabled");
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: any, init: RequestInit = {}) => {
+      const body = requestBody(init);
+      requests.push(body);
+      return body.model === target.id
+        ? jsonResponse({ id: "vision", output_text: "A red square with the word STOP." })
+        : streamResponse("Understood.");
+    }));
+
+    const stream = streamSimpleXaiResponses(
+      sourceModel,
+      {
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "What is shown?" },
+            { type: "image", data: Buffer.from(tinyPngBytes()).toString("base64"), mimeType: "image/png" },
+          ],
+          timestamp: Date.now(),
+        }],
+      } as any,
+      { apiKey: "oauth-token" } as any,
+      controller,
+    );
+    const result = await stream.result();
+
+    expect(result.errorMessage).toBeUndefined();
+    expect(requests).toHaveLength(2);
+    expect(requests[0].model).toBe(target.id);
+    expect(containsImage(requests[0])).toBe(true);
+    expect(requests[1].model).toBe(source.id);
+    expect(containsImage(requests[1])).toBe(false);
+    expect(JSON.stringify(requests[1])).toMatch(/xAI-generated visual description.*red square/s);
+    expect(JSON.stringify(requests[1])).not.toMatch(/image omitted/i);
+  });
+
   it("routes a valid provider-workspace image as verified bytes", async () => {
     const insideDir = mkdtempSync(join(process.cwd(), ".xai-vision-inside-"));
     const inside = join(insideDir, "inside.png");

@@ -19,6 +19,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
 - Restricted legacy local PNG/JPEG inputs across custom tools, Responses payload normalization, and vision routing to byte-bounded, byte-validated regular files inside the active workspace, with sanitized failures for traversal, outward symlinks, special files, MIME spoofing, oversized sources, and pixel bombs.
+- Fixed opt-in vision routing so enabled sessions temporarily advertise image input to Pi's Responses converter; otherwise Pi replaced conversation images with placeholders before routing could describe them for text-only sources.
 
 ## 1.3.6 - 2026-07-18
 

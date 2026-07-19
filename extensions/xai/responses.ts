@@ -441,11 +441,19 @@ export function streamSimpleXaiResponses(
     },
     { streaming: true },
   );
+  // Pi's Responses converter replaces user/tool images with placeholders when
+  // model.input lacks "image". Opt-in vision routing must see the real image
+  // parts before it can describe and strip them for the text-only source.
+  const visionEnabled = !!visionRouting?.isEnabledFor(selectedModelId);
+  const modelInputs = Array.isArray((model as any).input) ? [...(model as any).input] : ["text"];
   const streamModel = {
     ...model,
     id: selectedModelId,
     baseUrl: route.baseUrl,
     headers: scrubXaiReservedHeaders((model as any).headers) as Record<string, string>,
+    ...(visionEnabled && !modelInputs.includes("image")
+      ? { input: [...modelInputs.filter((value) => value !== "image"), "image"] }
+      : {}),
   };
   // Keep the xAI stream model for routing/payload rewriting, but delegate with
   // the API tag expected by pi's OpenAI Responses transport.
