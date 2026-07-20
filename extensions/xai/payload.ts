@@ -197,7 +197,17 @@ export function normalizeXaiResponsesImageParts(value: unknown): unknown {
 }
 
 function isResponsesInputImagePart(value: unknown): value is Record<string, any> {
-  return !!value && typeof value === "object" && (value as Record<string, any>).type === "input_image";
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, any>;
+  if (item.type === "input_image" || item.type === "image_url") return true;
+  if (
+    item.type === "computer_screenshot" &&
+    (item.image_url !== undefined || item.file_id !== undefined)
+  ) return true;
+  return (
+    item.type === "image" &&
+    (typeof item.data === "string" || item.image_url !== undefined || item.source !== undefined)
+  );
 }
 
 type ToolImageDisposition = "attached" | "omitted";
@@ -205,6 +215,10 @@ const HISTORICAL_USER_IMAGE_PLACEHOLDER =
   "(historical user image omitted after a later assistant response)";
 const HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER =
   "[historical computer screenshot omitted after a later assistant response]";
+
+function historicalToolImagePlaceholder(imageCount: number): string {
+  return `[${imageCount} historical tool image${imageCount === 1 ? "" : "s"} omitted after a later assistant response]`;
+}
 
 function textForFunctionCallOutput(output: unknown, imageDisposition: ToolImageDisposition): string {
   if (typeof output === "string") return output;
@@ -224,7 +238,7 @@ function textForFunctionCallOutput(output: unknown, imageDisposition: ToolImageD
     chunks.push(
       imageDisposition === "attached"
         ? `[${imageCount} image${imageCount === 1 ? "" : "s"} attached in the following user message]`
-        : `[${imageCount} historical tool image${imageCount === 1 ? "" : "s"} omitted after a later assistant response]`,
+        : historicalToolImagePlaceholder(imageCount),
     );
   }
   return chunks.join("\n");
@@ -237,23 +251,62 @@ function isAssistantResponseItem(value: unknown): boolean {
   return item.type === "reasoning" || item.type === "function_call";
 }
 
-function stripConsumedUserImages(item: Record<string, any>): Record<string, any> {
-  if (item.role !== "user" || !Array.isArray(item.content)) return item;
-  let insertedPlaceholder = false;
+const OMIT_CONSUMED_VISION_IMAGE = Symbol("omit-consumed-xai-vision-image");
+
+interface StrippedVisionImages {
+  value: unknown | typeof OMIT_CONSUMED_VISION_IMAGE;
+  imageCount: number;
+}
+
+function stripRecognizedVisionImages(value: unknown): StrippedVisionImages {
+  if (!value || typeof value !== "object") return { value, imageCount: 0 };
+  if (isResponsesInputImagePart(value)) {
+    return { value: OMIT_CONSUMED_VISION_IMAGE, imageCount: 1 };
+  }
+  if (Array.isArray(value)) {
+    let imageCount = 0;
+    let changed = false;
+    const rewritten: unknown[] = [];
+    for (const child of value) {
+      const stripped = stripRecognizedVisionImages(child);
+      imageCount += stripped.imageCount;
+      if (stripped.value === OMIT_CONSUMED_VISION_IMAGE) {
+        changed = true;
+        continue;
+      }
+      if (stripped.value !== child) changed = true;
+      rewritten.push(stripped.value);
+    }
+    return { value: changed ? rewritten : value, imageCount };
+  }
+
+  let imageCount = 0;
   let changed = false;
-  const content: unknown[] = [];
-  for (const part of item.content) {
-    if (!isResponsesInputImagePart(part)) {
-      content.push(part);
+  const source = value as Record<string, unknown>;
+  const rewritten: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(source)) {
+    const stripped = stripRecognizedVisionImages(child);
+    imageCount += stripped.imageCount;
+    if (stripped.value === OMIT_CONSUMED_VISION_IMAGE) {
+      changed = true;
       continue;
     }
-    changed = true;
-    if (!insertedPlaceholder) {
-      content.push({ type: "input_text", text: HISTORICAL_USER_IMAGE_PLACEHOLDER });
-      insertedPlaceholder = true;
-    }
+    if (stripped.value !== child) changed = true;
+    rewritten[key] = stripped.value;
   }
-  return changed ? { ...item, content } : item;
+  return { value: changed ? rewritten : value, imageCount };
+}
+
+function withHistoricalUserImagePlaceholder(item: Record<string, any>): Record<string, any> {
+  const placeholder = { type: "input_text", text: HISTORICAL_USER_IMAGE_PLACEHOLDER };
+  if (Array.isArray(item.content)) return { ...item, content: [...item.content, placeholder] };
+  if (typeof item.content === "string") {
+    return {
+      ...item,
+      content: [{ type: "input_text", text: item.content }, placeholder],
+    };
+  }
+  return { ...item, content: [placeholder] };
 }
 
 function stripConsumedComputerScreenshot(item: Record<string, any>): Record<string, any> {
@@ -266,6 +319,81 @@ function stripConsumedComputerScreenshot(item: Record<string, any>): Record<stri
   return { ...item, output: { type: "computer_screenshot" } };
 }
 
+/** Remove image inputs consumed by a later assistant output from a canonical Responses payload. */
+export function omitConsumedXaiResponsesVisionImages(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(payload.input)) return payload;
+
+  const input = payload.input as unknown[];
+  const hasLaterAssistantOutput = new Array<boolean>(input.length).fill(false);
+  let assistantOutputSeen = false;
+  for (let index = input.length - 1; index >= 0; index--) {
+    hasLaterAssistantOutput[index] = assistantOutputSeen;
+    if (isAssistantResponseItem(input[index])) assistantOutputSeen = true;
+  }
+
+  let changed = false;
+  const rewritten: unknown[] = [];
+  for (let index = 0; index < input.length; index++) {
+    const item = input[index];
+    if (!hasLaterAssistantOutput[index] || !item || typeof item !== "object") {
+      rewritten.push(item);
+      continue;
+    }
+
+    const record = item as Record<string, any>;
+    const strippedComputerOutput = stripConsumedComputerScreenshot(record);
+    const computerScreenshotRemoved = strippedComputerOutput !== record;
+    const stripped = stripRecognizedVisionImages(strippedComputerOutput);
+    if (stripped.value === OMIT_CONSUMED_VISION_IMAGE) {
+      changed = true;
+      rewritten.push({
+        role: "user",
+        content: [{ type: "input_text", text: HISTORICAL_USER_IMAGE_PLACEHOLDER }],
+      });
+      continue;
+    }
+    const strippedRecord = stripped.value as Record<string, any>;
+
+    if (record.role === "user" && stripped.imageCount > 0) {
+      changed = true;
+      rewritten.push(withHistoricalUserImagePlaceholder(strippedRecord));
+      continue;
+    }
+
+    if (record.type === "function_call_output" && stripped.imageCount > 0) {
+      changed = true;
+      const outputText = textForFunctionCallOutput(strippedRecord.output, "omitted");
+      rewritten.push({
+        ...strippedRecord,
+        output: [outputText, historicalToolImagePlaceholder(stripped.imageCount)].filter(Boolean).join("\n") ||
+          "(tool returned no text output)",
+      });
+      continue;
+    }
+
+    if (computerScreenshotRemoved || stripped.imageCount > 0) {
+      changed = true;
+      rewritten.push(strippedRecord);
+      rewritten.push({
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: computerScreenshotRemoved
+            ? HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER
+            : HISTORICAL_USER_IMAGE_PLACEHOLDER,
+        }],
+      });
+      continue;
+    }
+
+    rewritten.push(item);
+  }
+
+  return changed ? { ...payload, input: rewritten } : payload;
+}
+
 function normalizeXaiResponsesInput(
   input: unknown[],
   model: Model<Api>,
@@ -273,34 +401,23 @@ function normalizeXaiResponsesInput(
   omitConsumedVisionImages = false,
 ): unknown[] {
   const normalizedInput = input.map(normalizeXaiResponsesImageParts) as Record<string, any>[];
+  const visionSafePayload = omitConsumedVisionImages
+    ? omitConsumedXaiResponsesVisionImages({ input: normalizedInput })
+    : { input: normalizedInput };
+  const visionSafeInput = visionSafePayload.input as Record<string, any>[];
   const rewritten: unknown[] = [];
   const modelInputs = Array.isArray((model as any).input) ? ((model as any).input as unknown[]) : [];
   const supportsImages = preserveCurrentToolImages || modelInputs.includes("image");
-  const hasLaterAssistantOutput = new Array<boolean>(normalizedInput.length).fill(false);
+  const hasLaterAssistantOutput = new Array<boolean>(visionSafeInput.length).fill(false);
   let assistantOutputSeen = false;
 
-  for (let index = normalizedInput.length - 1; index >= 0; index--) {
+  for (let index = visionSafeInput.length - 1; index >= 0; index--) {
     hasLaterAssistantOutput[index] = assistantOutputSeen;
-    if (isAssistantResponseItem(normalizedInput[index])) assistantOutputSeen = true;
+    if (isAssistantResponseItem(visionSafeInput[index])) assistantOutputSeen = true;
   }
 
-  for (let index = 0; index < normalizedInput.length; index++) {
-    const item = normalizedInput[index];
-    if (omitConsumedVisionImages && hasLaterAssistantOutput[index] && item && typeof item === "object") {
-      if (item.role === "user") {
-        rewritten.push(stripConsumedUserImages(item));
-        continue;
-      }
-      const strippedComputerOutput = stripConsumedComputerScreenshot(item);
-      if (strippedComputerOutput !== item) {
-        rewritten.push(strippedComputerOutput);
-        rewritten.push({
-          role: "user",
-          content: [{ type: "input_text", text: HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER }],
-        });
-        continue;
-      }
-    }
+  for (let index = 0; index < visionSafeInput.length; index++) {
+    const item = visionSafeInput[index];
     if (!item || typeof item !== "object" || item.type !== "function_call_output" || !Array.isArray(item.output)) {
       rewritten.push(item);
       continue;
