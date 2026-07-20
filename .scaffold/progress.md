@@ -26,7 +26,7 @@
 - [x] #115 / PR #122: trim duplicated Pi-converted vision regression assertions.
 - [x] #116 / PR #123: use typed `model.input` in vision conversion routing.
 - [x] #117 / PR #126: assert mixed historical content retains ordinary user text with the bounded placeholder.
-- [x] #119: split vision-routing modality docs into conversion, authorization-lifecycle, and request-behavior paragraphs (on main as `24df74a`).
+- [x] #119: split vision-routing modality docs into conversion, authorization-lifecycle, and request-behavior paragraphs (on main as `24df74a`; issue closed).
 
 ## Final validation (series)
 
@@ -42,3 +42,4 @@
 
 - [x] Vision-routing hardening and follow-ups are merged on `origin/main` (`24df74a`).
 - [x] Scaffold progress consolidated under issue #118; branch and delivery state match post-merge main.
+- [x] Opened PR: <https://github.com/BlockedPath/pi-xai-oauth/pull/127>

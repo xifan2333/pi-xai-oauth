@@ -21,7 +21,7 @@ Scaffold-only consolidation. Production code, tests, and modality documentation 
 | PR #122 / #115 — trim duplicated vision assertions | Merged |
 | PR #123 / #116 — typed `model.input` | Merged |
 | PR #126 / #117 — mixed historical text preserved | Merged |
-| #119 modality-doc split (`24df74a`) | On main; issue still open until closed |
+| #119 modality-doc split (`24df74a`) | On main; issue closed |
 
 ## Deliverable
 

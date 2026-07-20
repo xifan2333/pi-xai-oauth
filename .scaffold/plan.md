@@ -13,7 +13,7 @@ Replace the repeated vision-routing progress narration with a short post-merge r
 2. [x] Fast-forward `chore/118-scaffold-progress` onto current main.
 3. [x] Rewrite `.scaffold/progress.md` into consolidated completed/delivery entries with no completed work under `In Progress`.
 4. [x] Retarget plan, context, and constraints to issue #118 scaffold-only scope.
-5. [ ] Open a PR that closes #118 (and note #119 already landed on main).
+5. [x] Open a PR that closes #118 (and note #119 already landed on main).
 
 ## Validation Contract
 
