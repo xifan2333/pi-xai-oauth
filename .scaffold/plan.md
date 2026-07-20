@@ -1,21 +1,24 @@
-# Implementation Plan — Issue #119: Vision-routing modality documentation
+# Implementation Plan — Issue #118: Consolidate vision-routing scaffold progress
 
-**Branch:** `docs/119-vision-routing-modalities`
-**Base:** `origin/main`
+**Branch:** `chore/118-scaffold-progress`
+**Base:** `origin/main` at `24df74a`
 
 ## Goal
 
-Make the explicit vision-routing exception easier to audit by separating conversion, authorization-lifecycle, and request-behavior guarantees without changing policy or behavior claims.
+Replace the repeated vision-routing progress narration with a short post-merge record that keeps security decisions and final validation evidence, and points branch/delivery state at current main.
 
 ## Phases
 
-1. [x] Confirm issue scope, branch state, and the documented/runtime guarantees.
-2. [x] Split the dense exception text and remove duplicated guarantees.
-3. [x] Review the final diff against every acceptance criterion.
+1. [x] Confirm issue scope, blockers, and that the vision-routing series is already on `origin/main`.
+2. [x] Fast-forward `chore/118-scaffold-progress` onto current main.
+3. [x] Rewrite `.scaffold/progress.md` into consolidated completed/delivery entries with no completed work under `In Progress`.
+4. [x] Retarget plan, context, and constraints to issue #118 scaffold-only scope.
+5. [ ] Open a PR that closes #118 (and note #119 already landed on main).
 
 ## Validation Contract
 
-- Converter-only image advertisement is stated once and precisely.
-- Grant capture, invalidation, and current-unconsumed-image handling remain explicit.
-- The target request remains image-only and the final source assertion remains text-only.
-- Privacy, entitlement, and request behavior claims do not change.
+- No completed work remains under `In Progress`.
+- Branch and delivery state match post-merge `origin/main`.
+- Converter, metadata, historical-image, and validation details are not repeated across many bullets.
+- Security-relevant decisions and final validation results remain recorded.
+- Only `.scaffold/*` changes; no production behavior or docs policy changes.
