@@ -46,6 +46,9 @@ const NETWORK_TOOL_OPTIONS: readonly NetworkToolOption[] = [
 const XAI_TOOLS_USAGE =
   "Usage: /xai-tools [status | enable <tool> | disable <tool>]";
 
+/** Event channel used by pi-clickable-menu (and other extensions) to drive /xai-tools. */
+export const XAI_TOOLS_MENU_CHANNEL = "pi-clickable-menu:xai-tools";
+
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
@@ -246,78 +249,141 @@ async function showXaiToolPicker(
   await showXaiToolSelectLoop(pi, ctx, model);
 }
 
+/** Shared /xai-tools argument handler (slash command + menu bridge). */
+async function handleXaiToolsArgs(
+	pi: ExtensionAPI,
+	visionRouting: XaiVisionRoutingController | undefined,
+	args: string,
+	ctx: ExtensionCommandContext,
+): Promise<void> {
+	const [action, rawToolName, ...extra] = args.trim().split(/\s+/).filter(Boolean);
+	const model = activeXaiModel(ctx);
+
+	if (!action) {
+		if (!model) {
+			ctx.ui.notify("Select an xAI/Grok model before opening /xai-tools.", "error");
+			return;
+		}
+		await showXaiToolPicker(pi, ctx, model);
+		return;
+	}
+
+	if (action.toLowerCase() === "status" && !rawToolName) {
+		ctx.ui.notify(
+			`xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, visionRouting, model)}`,
+			"info",
+		);
+		return;
+	}
+
+	const normalizedAction = action.toLowerCase();
+	const requestedName = rawToolName?.toLowerCase();
+	if (
+		requestedName === XAI_VISION_ROUTING_NAME &&
+		(normalizedAction === "enable" || normalizedAction === "disable") &&
+		extra.length === 0
+	) {
+		if (!visionRouting) {
+			ctx.ui.notify("xAI vision routing is unavailable.", "error");
+			return;
+		}
+		const result =
+			normalizedAction === "enable" ? visionRouting.enable(model) : visionRouting.disable();
+		if (result.state === "enabled") {
+			ctx.ui.notify(
+				`Enabled vision routing for this xAI session: images are sent to ${result.targetModelId} in a separate authenticated request that may consume additional usage or credits; its generated description becomes sensitive session content. No cross-request image or description cache is created.`,
+				"warning",
+			);
+		} else if (normalizedAction === "disable") {
+			ctx.ui.notify("Disabled vision routing.", "info");
+		} else {
+			ctx.ui.notify(result.reason ?? "xAI vision routing is unavailable.", "error");
+		}
+		return;
+	}
+
+	const toolName = commandToolName(rawToolName);
+	if (
+		(normalizedAction !== "enable" && normalizedAction !== "disable") ||
+		!toolName ||
+		extra.length > 0
+	) {
+		ctx.ui.notify(XAI_TOOLS_USAGE, "error");
+		return;
+	}
+
+	const result = setXaiNetworkToolActive(
+		pi,
+		model,
+		toolName,
+		normalizedAction === "enable",
+	);
+	notifyUpdate(ctx, toolName, result.active, result.error);
+}
+
+type XaiToolsMenuRequest = {
+	action?: "open" | "status" | "enable" | "disable";
+	tool?: string;
+	/** ExtensionCommandContext from the menu host (required for open / UI notify). */
+	ctx?: ExtensionCommandContext;
+	done?: (result: { ok: boolean; error?: string }) => void;
+}
+
 /** Register the package-owned command for explicitly managing network-backed xAI tools. */
 export function registerXaiToolsCommand(
-  pi: ExtensionAPI,
-  visionRouting?: XaiVisionRoutingController,
+	pi: ExtensionAPI,
+	visionRouting?: XaiVisionRoutingController,
 ) {
-  pi.registerCommand("xai-tools", {
-    description: "Enable or disable network-backed xAI tools for this session",
-    handler: async (args, ctx) => {
-      const [action, rawToolName, ...extra] = args.trim().split(/\s+/).filter(Boolean);
-      const model = activeXaiModel(ctx);
+	pi.registerCommand("xai-tools", {
+		description: "Enable or disable network-backed xAI tools for this session",
+		handler: async (args, ctx) => {
+			await handleXaiToolsArgs(pi, visionRouting, args, ctx);
+		},
+	});
 
-      if (!action) {
-        if (!model) {
-          ctx.ui.notify("Select an xAI/Grok model before opening /xai-tools.", "error");
-          return;
-        }
-        await showXaiToolPicker(pi, ctx, model);
-        return;
-      }
+	// Bridge for pi-clickable-menu (and peers): emit on XAI_TOOLS_MENU_CHANNEL.
+	pi.events.on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
+		const data = (raw ?? {}) as XaiToolsMenuRequest;
+		const reply = (result: { ok: boolean; error?: string }) => {
+			try {
+				data.done?.(result);
+			} catch {
+				// ignore listener reply failures
+			}
+		};
 
-      if (action.toLowerCase() === "status" && !rawToolName) {
-        ctx.ui.notify(
-          `xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, visionRouting, model)}`,
-          "info",
-        );
-        return;
-      }
+		const ctx = data.ctx;
+		if (!ctx || typeof ctx !== "object" || !ctx.ui) {
+			reply({ ok: false, error: "xAI tools bridge requires a command UI context." });
+			return;
+		}
 
-      const normalizedAction = action.toLowerCase();
-      const requestedName = rawToolName?.toLowerCase();
-      if (
-        requestedName === XAI_VISION_ROUTING_NAME &&
-        (normalizedAction === "enable" || normalizedAction === "disable") &&
-        extra.length === 0
-      ) {
-        if (!visionRouting) {
-          ctx.ui.notify("xAI vision routing is unavailable.", "error");
-          return;
-        }
-        const result = normalizedAction === "enable"
-          ? visionRouting.enable(model)
-          : visionRouting.disable();
-        if (result.state === "enabled") {
-          ctx.ui.notify(
-            `Enabled vision routing for this xAI session: images are sent to ${result.targetModelId} in a separate authenticated request that may consume additional usage or credits; its generated description becomes sensitive session content. No cross-request image or description cache is created.`,
-            "warning",
-          );
-        } else if (normalizedAction === "disable") {
-          ctx.ui.notify("Disabled vision routing.", "info");
-        } else {
-          ctx.ui.notify(result.reason ?? "xAI vision routing is unavailable.", "error");
-        }
-        return;
-      }
-
-      const toolName = commandToolName(rawToolName);
-      if (
-        (normalizedAction !== "enable" && normalizedAction !== "disable")
-        || !toolName
-        || extra.length > 0
-      ) {
-        ctx.ui.notify(XAI_TOOLS_USAGE, "error");
-        return;
-      }
-
-      const result = setXaiNetworkToolActive(
-        pi,
-        model,
-        toolName,
-        normalizedAction === "enable",
-      );
-      notifyUpdate(ctx, toolName, result.active, result.error);
-    },
-  });
+		const action = (data.action ?? "open").toLowerCase();
+		try {
+			if (action === "open") {
+				await handleXaiToolsArgs(pi, visionRouting, "", ctx);
+				reply({ ok: true });
+				return;
+			}
+			if (action === "status") {
+				await handleXaiToolsArgs(pi, visionRouting, "status", ctx);
+				reply({ ok: true });
+				return;
+			}
+			if (action === "enable" || action === "disable") {
+				const tool = typeof data.tool === "string" ? data.tool.trim() : "";
+				if (!tool) {
+					reply({ ok: false, error: "xAI tools bridge enable/disable requires tool." });
+					return;
+				}
+				await handleXaiToolsArgs(pi, visionRouting, `${action} ${tool}`, ctx);
+				reply({ ok: true });
+				return;
+			}
+			reply({ ok: false, error: `Unknown xAI tools bridge action: ${action}` });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			reply({ ok: false, error: message });
+		}
+	});
 }
