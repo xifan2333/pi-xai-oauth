@@ -608,6 +608,35 @@ describe("Grok-native tools", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("returns an explicit fallback for a successful web_search response without text", async () => {
+    const model = { ...TEST_MODEL, id: "grok-4.5" };
+    expect(
+      setXaiNetworkToolActive(
+        h.api,
+        model,
+        XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+        true,
+      ),
+    ).toEqual({ ok: true, active: true });
+
+    const fetchMock = vi.fn(async () => jsonResponse({ id: "resp-empty", output: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await h.tools
+      .get(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)
+      .execute(
+        "call",
+        { query: "unfindable topic" },
+        new AbortController().signal,
+        () => {},
+        { cwd: temp.path, ...authContext(model) },
+      );
+
+    expect(result.content[0].text).toBe("No results for: unfindable topic");
+    expect(result.details).toEqual({ response_id: "resp-empty" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("activates native local tools without mutating unrelated public tools", () => {
     const foreignNames = Object.values(XAI_GROK_NATIVE_TOOL_NAME_MAP);
     h.setActiveTools(["read", "bash", ...foreignNames]);

@@ -1,22 +1,22 @@
-# Execution Progress — Issue #116
+# Execution Progress — Issue #112
 
-**Branch:** `cleanup/116-typed-model-input`
+**Branch:** `fix/112-empty-web-search-response`
 **Started:** 2026-07-20
 
 ## Completed
 
-- [x] Read issue #116 and confirmed the branch is based on clean `origin/main`.
-- [x] Audited the vision conversion path and supported Pi `Model.input` contract.
-- [x] Ran parallel scout and independent implementation review.
-- [x] Identified the one-line typed-copy change and focused regression coverage.
-- [x] Replaced the cast/fallback with a direct copy of `model.input`.
-- [x] Focused vision/image tests passed (2 files / 34 tests).
+- [x] Read issue #112 and confirmed a clean issue branch based on `origin/main`.
+- [x] Audited the Grok-native web-search dispatcher and response-text helpers.
+- [x] Ran parallel scout and independent acceptance review.
+- [x] Switched the dispatcher to strict assistant-text extraction with `No results for: <query>` fallback.
+- [x] Added a successful empty-response regression that preserves `details.response_id`.
+- [x] Focused Grok-native tests passed (21 tests).
 - [x] Typecheck passed.
-- [x] Full `npm test` passed (43 files / 485 tests plus loader).
-- [x] Project diagnostics reported zero primary language-server findings in `responses.ts`.
-- [x] Final fresh-context review reported no blocker.
+- [x] Full `npm test` passed (43 files / 486 tests plus loader).
+- [x] Pi Lens reported no error findings in the changed TypeScript files.
+- [x] Final fresh-context review found no blocker and confirmed issue acceptance.
 - [x] Exact Pi 0.80.1 and 0.80.10 compatibility boundaries passed.
 
 ## Delivery
 
-Issue #116 is fully validated and ready to commit, open as a PR, and merge.
+Issue #112 is implemented and validated, ready to commit or open as a PR.
