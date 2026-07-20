@@ -27,7 +27,7 @@ import {
   XAI_PROVIDER_ID,
 } from "../constants";
 import { createXaiResponse } from "../responses";
-import { extractResponsesText, messageFromError, statusFromError } from "../text";
+import { extractStrictResponsesText, messageFromError, statusFromError } from "../text";
 import { xaiToolError } from "./common";
 import {
   grepArgsForLocalSearch,
@@ -1029,8 +1029,9 @@ export function registerGrokNativeTools(pi: ExtensionAPI) {
           },
           signal,
         );
+        const text = extractStrictResponsesText(data) || `No results for: ${query}`;
         return {
-          content: [{ type: "text", text: extractResponsesText(data) }],
+          content: [{ type: "text", text }],
           details: { response_id: data.id },
         };
       } catch (error) {
