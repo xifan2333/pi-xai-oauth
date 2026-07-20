@@ -447,7 +447,7 @@ export function streamSimpleXaiResponses(
   // re-enable cannot authorize an already-started request under a new grant.
   const visionGrantSignal = visionRouting?.signalFor(selectedModelId);
   const visionEnabled = visionGrantSignal !== undefined && !visionGrantSignal.aborted;
-  const modelInputs = Array.isArray((model as any).input) ? [...(model as any).input] : ["text"];
+  const modelInputs = [...model.input];
   const streamModel = {
     ...model,
     id: selectedModelId,

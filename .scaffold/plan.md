@@ -1,28 +1,24 @@
-# Implementation Plan — Issue #114: Post-hook vision pruning
+# Implementation Plan — Issue #116: Typed model input
 
-**Branch:** `fix/114-post-hook-vision-pruning`
-**Base:** `origin/main` at `941cb4a`
+**Branch:** `cleanup/116-typed-model-input`
+**Base:** `origin/main` at `67524bb`
 
 ## Goal
 
-Prevent caller payload hooks from reintroducing consumed historical images into the
-vision-routing target request while preserving current images, text-only enforcement,
-screenshot schema, and the original captured grant.
+Use the required `Model.input` type directly in vision conversion routing without
+changing the converter-only synthetic image capability used by enabled routing.
 
 ## Phases
 
-1. [x] Confirm issue scope, clean branch, and current payload/vision flow.
-2. [x] Extract a shared consumed-history payload helper.
-3. [x] Reapply pruning to the canonical post-hook payload before route planning.
-4. [x] Add streaming regressions for hook-returned user images and screenshots.
-5. [x] Document post-hook pruning and update the changelog.
-6. [x] Run full tests, typecheck, compatibility checks, and independent review.
-7. [x] Close adversarial review's recursive historical-image bypass and revalidate PR #120.
+1. [x] Confirm issue scope, branch state, and the supported Pi `Model.input` contract.
+2. [x] Review enabled and disabled vision-routing regressions.
+3. [x] Replace the cast/fallback with a direct defensive copy of `model.input`.
+4. [x] Run focused vision/image tests, typecheck, and the full test gate.
+5. [x] Perform an independent final diff review.
 
 ## Validation Contract
 
-- Historical hook-returned user images never reach the vision target.
-- Current hook-returned images still route when the captured grant is valid.
-- Historical `computer_call_output.output` remains object-shaped and reference-free.
-- Disabled routing still rejects hook-added images rather than silently pruning them.
-- Reset/re-enable cannot authorize a request under a replacement grant.
+- The conversion path reads `model.input` without a broad cast or fallback.
+- Enabled routing still exposes a synthetic image capability only to Pi's converter.
+- Disabled routing still rejects image payloads before transport.
+- No duplicate model-input type is introduced.
