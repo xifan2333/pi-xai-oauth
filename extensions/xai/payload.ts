@@ -211,7 +211,7 @@ function isResponsesInputImagePart(value: unknown): value is Record<string, any>
 }
 
 type ToolImageDisposition = "attached" | "omitted";
-const HISTORICAL_USER_IMAGE_PLACEHOLDER =
+export const HISTORICAL_USER_IMAGE_PLACEHOLDER =
   "(historical user image omitted after a later assistant response)";
 const HISTORICAL_COMPUTER_SCREENSHOT_PLACEHOLDER =
   "[historical computer screenshot omitted after a later assistant response]";

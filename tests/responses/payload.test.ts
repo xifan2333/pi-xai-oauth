@@ -8,6 +8,7 @@ import {
   XAI_GROK_NATIVE_WEB_SEARCH_NAME,
 } from "../../extensions/xai/constants";
 import {
+  HISTORICAL_USER_IMAGE_PLACEHOLDER,
   applyXaiOAuthResponsesPolicy,
   canonicalizeXaiResponsesPayload,
   exposeGrokNativeToolNames,
@@ -143,19 +144,8 @@ describe("Responses payload normalization", () => {
     expect(inlineImages(result)).toHaveLength(0);
     expect(JSON.stringify(result)).toMatch(/historical tool image.*omitted/);
   });
-  it.each([
-    {
-      name: "image-only",
-      content: [{ type: "input_image", image_url: tiny, detail: "auto" }],
-    },
-    {
-      name: "text-and-image",
-      content: [
-        { type: "input_text", text: "describe" },
-        { type: "input_image", image_url: tiny, detail: "auto" },
-      ],
-    },
-  ])("omits consumed $name user images only when explicitly requested", ({ content }) => {
+  it("omits consumed image-only user images only when explicitly requested", () => {
+    const content = [{ type: "input_image", image_url: tiny, detail: "auto" }];
     const payload = {
       model: TEST_MODEL.id,
       input: [
@@ -168,6 +158,35 @@ describe("Responses payload normalization", () => {
     expect(inlineImages(routed)).toHaveLength(0);
     expect(JSON.stringify(routed)).toMatch(/historical user image omitted/);
     expect(inlineImages(rewriteXaiResponsesPayload(payload, TEST_MODEL))).toHaveLength(1);
+  });
+  it("retains non-image user text while replacing a consumed mixed-content historical image", () => {
+    const payload = {
+      model: TEST_MODEL.id,
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "describe" },
+            { type: "input_image", image_url: tiny, detail: "auto" },
+          ],
+        },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+        { role: "user", content: "next" },
+      ],
+    };
+    const routed = rewriteXaiResponsesPayload(payload, TEST_MODEL, {
+      omitConsumedVisionImages: true,
+    }) as { input: Array<Record<string, unknown>> };
+
+    // Distinct mixed-content invariant: the ordinary user text survives
+    // while only the historical image is replaced by the bounded placeholder.
+    expect(inlineImages(routed)).toHaveLength(0);
+    const firstUser = routed.input[0];
+    expect(firstUser).toMatchObject({ role: "user" });
+    expect(firstUser.content).toEqual([
+      { type: "input_text", text: "describe" },
+      { type: "input_text", text: HISTORICAL_USER_IMAGE_PLACEHOLDER },
+    ]);
   });
   it("omits consumed computer screenshots only when explicitly requested", () => {
     const payload = {
