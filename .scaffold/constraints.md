@@ -1,22 +1,21 @@
-# Constraints & Safety Rules — Issue #114
+# Constraints & Safety Rules — Issue #118
 
-## Vision-routing policy
+## Scaffold-only scope
 
-- Reapply consumed historical-image pruning after caller payload hooks.
-- Preserve current unconsumed user and tool images when routing is authorized.
-- Preserve truthful text-only source metadata and final image-free enforcement.
-- Keep historical `computer_call_output.output` object-shaped while removing references.
-- Keep every routed request bound to the exact grant captured at stream start.
+- Touch only `.scaffold/*` for this issue.
+- Do not change production code, tests, modality docs, changelog, package version, or OAuth behavior.
+- Do not invent unmerged work or restate closed issues as open.
 
-## Security boundaries
+## Progress content rules
 
-- Do not resolve, fetch, log, or reflect historical image references during pruning.
-- Do not silently strip hook-added images when vision routing was not captured as enabled.
-- Do not send conversation history, tools, or encrypted reasoning to the vision target.
-- Keep placeholders fixed and bounded.
+- Keep security-relevant vision-routing decisions: converter-only image advertisement, truthful text-only metadata elsewhere, grant capture/invalidation, consumed historical-image pruning (including post-hook recursive scrubbing), current-unconsumed image routing, and no history/tools/ciphertext on the vision target.
+- Keep final validation evidence (test counts, typecheck, exact Pi boundaries, independent review outcome).
+- Remove transient execution narration and duplicate converter/metadata/historical-image/validation bullets.
+- Never leave completed work under `In Progress`.
+- Keep branch and delivery state aligned with post-merge `origin/main`.
 
 ## Non-goals
 
-- Do not introduce immutable provenance for hook-reordered history.
-- Do not change entitlement selection, OAuth credentials, or package version.
-- Do not touch unrelated extensions or tools.
+- Do not re-open or re-implement vision-routing, pruning, or modality-doc work.
+- Do not treat `.scaffold/` as an authoritative security control.
+- Do not rewrite git history of earlier PRs.
