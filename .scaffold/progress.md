@@ -1,19 +1,20 @@
-# Execution Progress — Issue #117
+# Execution Progress — Issue #119
 
-**Branch:** `test/117-historical-image-text`
+**Branch:** `docs/119-vision-routing-modalities`
 **Started:** 2026-07-20
 
 ## Completed
 
-- [x] Read issue #117 and confirmed the mixed historical-user-image test gap.
-- [x] Audited `omitConsumedXaiResponsesVisionImages` and `withHistoricalUserImagePlaceholder` to confirm ordinary user text survives while the historical image is replaced by the bounded placeholder.
-- [x] Exported `HISTORICAL_USER_IMAGE_PLACEHOLDER` from `extensions/xai/payload.ts` so the mixed-content invariant can be asserted exactly.
-- [x] Split the shared parameterized user-image test: kept the image-only case with its existing assertions and added a dedicated mixed-content test asserting the distinct invariant (text survives, image replaced by placeholder).
-- [x] Focused payload tests passed (21 tests).
+- [x] Read issue #119 and confirmed the dedicated issue branch is clean.
+- [x] Audited the current modality documentation and vision-routing implementation outline.
+- [x] Split the vision-routing exception into concise conversion, authorization-lifecycle, and request-behavior paragraphs.
+- [x] Verified every acceptance guarantee appears exactly once where required.
+- [x] Independent fresh-context review confirmed all acceptance criteria pass.
+- [x] Rebased onto `origin/main` and resolved the scaffold progress conflict.
+- [x] Full `npm test` passed after the rebase (43 files / 486 tests plus loader).
 - [x] Typecheck passed.
-- [x] Full `npm test` passed (43 files / 486 tests plus loader).
-- [x] Pi Lens reported no primary LSP errors in the changed TypeScript files (only pre-existing project-wide style warnings).
+- [x] Exact Pi 0.80.1 and 0.80.10 compatibility boundaries passed.
 
 ## Delivery
 
-Issue #117 is implemented and validated, ready to commit or open as a PR.
+Issue #119 is implemented and validated, ready to commit or open as a PR.

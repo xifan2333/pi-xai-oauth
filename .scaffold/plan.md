@@ -1,23 +1,21 @@
-# Implementation Plan — Issue #112: Empty web-search response
+# Implementation Plan — Issue #119: Vision-routing modality documentation
 
-**Branch:** `fix/112-empty-web-search-response`
+**Branch:** `docs/119-vision-routing-modalities`
 **Base:** `origin/main`
 
 ## Goal
 
-Return a clear non-empty Grok-native `web_search` result when xAI succeeds without assistant text, while preserving response IDs and existing error behavior.
+Make the explicit vision-routing exception easier to audit by separating conversion, authorization-lifecycle, and request-behavior guarantees without changing policy or behavior claims.
 
 ## Phases
 
-1. [x] Confirm issue scope, branch state, and current dispatcher behavior.
-2. [x] Review strict versus display response-text extraction and existing web-search tests.
-3. [x] Add the explicit `No results for: <query>` fallback and focused regression coverage.
-4. [x] Run focused tests, diagnostics, typecheck, and the full project gate.
-5. [x] Perform an independent final diff review.
+1. [x] Confirm issue scope, branch state, and the documented/runtime guarantees.
+2. [x] Split the dense exception text and remove duplicated guarantees.
+3. [x] Review the final diff against every acceptance criterion.
 
 ## Validation Contract
 
-- Successful responses with assistant text remain unchanged.
-- Successful responses without assistant text return `No results for: <query>`.
-- Successful response IDs remain available in `details.response_id`.
-- Opt-in, model, credential, domain-filter, and error paths remain unchanged.
+- Converter-only image advertisement is stated once and precisely.
+- Grant capture, invalidation, and current-unconsumed-image handling remain explicit.
+- The target request remains image-only and the final source assertion remains text-only.
+- Privacy, entitlement, and request behavior claims do not change.
