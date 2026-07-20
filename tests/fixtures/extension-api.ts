@@ -26,6 +26,28 @@ export function createExtensionHarness(
   let activeTools = [...initialTools];
   let failGet = false;
   let failSet = false;
+  // Minimal EventBus (pi.events) for extension cross-talk tests.
+  const eventListeners = new Map<string, Set<(data: unknown) => void>>();
+  const events = {
+    on(channel: string, handler: (data: unknown) => void) {
+      let set = eventListeners.get(channel);
+      if (!set) {
+        set = new Set();
+        eventListeners.set(channel, set);
+      }
+      set.add(handler);
+      return () => {
+        set!.delete(handler);
+      };
+    },
+    emit(channel: string, data: unknown) {
+      const set = eventListeners.get(channel);
+      if (!set) return;
+      for (const handler of [...set]) {
+        handler(data);
+      }
+    },
+  };
   const api = {
     on(event: string, handler: AnyHandler) {
       handlers.set(event, handler);
@@ -55,7 +77,7 @@ export function createExtensionHarness(
       selectedModels.push(model);
       return true;
     },
-    events: {} as any,
+    events,
   } as unknown as ExtensionAPI;
   return {
     api,

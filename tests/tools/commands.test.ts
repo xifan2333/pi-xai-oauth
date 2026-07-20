@@ -3,7 +3,10 @@ import {
   XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
   XAI_GROK_NATIVE_WEB_SEARCH_NAME,
 } from "../../extensions/xai/constants";
-import { registerXaiToolsCommand } from "../../extensions/xai/tools/commands";
+import {
+  registerXaiToolsCommand,
+  XAI_TOOLS_MENU_CHANNEL,
+} from "../../extensions/xai/tools/commands";
 import { registerCustomXaiTools } from "../../extensions/xai/tools/custom-tools";
 import {
   isXaiNetworkToolActive,
@@ -309,4 +312,44 @@ describe("/xai-tools command", () => {
     expect(afterPageUp).toMatch(/xai_x_search/);
     expect(afterPageDown).toMatch(/xai_generate_text/);
   });
+
+  it("registers the clickable-menu event bridge and enables a tool via emit", async () => {
+    const { h, notices } = setup();
+    expect(typeof h.api.events.on).toBe("function");
+    expect(typeof h.api.events.emit).toBe("function");
+
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "enable",
+        tool: "xai_generate_image",
+        ctx: commandContext(TEST_MODEL, notices),
+        done: resolve,
+      });
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
+    expect(notices.at(-1).message).toMatch(/may use xAI credits/);
+  });
+
+  it("replies with an error when the bridge lacks a UI context", async () => {
+    const { h } = setup();
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "status",
+        done: resolve,
+      });
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/command UI context/i);
+  });
+
+  it("skips bridge registration when pi.events.on is missing", () => {
+    const h = createExtensionHarness();
+    // Simulate older/partial API surface used by some fixtures.
+    (h.api as any).events = {};
+    expect(() => registerXaiToolsCommand(h.api)).not.toThrow();
+    expect(h.commands.has("xai-tools")).toBe(true);
+  });
+
 });

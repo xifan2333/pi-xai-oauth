@@ -342,7 +342,14 @@ export function registerXaiToolsCommand(
 	});
 
 	// Bridge for pi-clickable-menu (and peers): emit on XAI_TOOLS_MENU_CHANNEL.
-	pi.events.on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
+	// Guard: unit fixtures / older Pi builds may omit events.on.
+	const on =
+		pi.events && typeof pi.events.on === "function"
+			? pi.events.on.bind(pi.events)
+			: null;
+	if (!on) return;
+
+	on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
 		const data = (raw ?? {}) as XaiToolsMenuRequest;
 		const reply = (result: { ok: boolean; error?: string }) => {
 			try {
