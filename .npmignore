@@ -19,3 +19,4 @@ auth.json
 *.local
 pi-session-*.html
 cat.svg
+.agent-task.md

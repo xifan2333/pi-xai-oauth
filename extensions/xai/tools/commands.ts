@@ -53,6 +53,8 @@ const xaiToolsMenuUnsubscribeByApi = new WeakMap<ExtensionAPI, () => void>();
 
 type XaiToolsCommandResult = { ok: true } | { ok: false; error: string };
 
+type XaiToolsMenuDone = (result: XaiToolsCommandResult) => void;
+
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
@@ -347,14 +349,6 @@ async function handleXaiToolsArgs(
 	return { ok: false, error };
 }
 
-type XaiToolsMenuRequest = {
-	action?: "open" | "status" | "enable" | "disable";
-	tool?: string;
-	/** ExtensionCommandContext from the menu host (required for open / UI notify). */
-	ctx?: ExtensionCommandContext;
-	done?: (result: { ok: boolean; error?: string }) => void;
-}
-
 /** Register the package-owned command for explicitly managing network-backed xAI tools. */
 export function registerXaiToolsCommand(
 	pi: ExtensionAPI,
@@ -378,23 +372,64 @@ export function registerXaiToolsCommand(
 	if (!on) return;
 
 	const unsubscribe = on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
-		const data = (raw ?? {}) as XaiToolsMenuRequest;
-		const reply = (result: { ok: boolean; error?: string }) => {
-			try {
-				data.done?.(result);
-			} catch {
-				// ignore listener reply failures
+		let source: Record<string, unknown> | undefined;
+		let done: XaiToolsMenuDone | undefined;
+		try {
+			if (raw !== null && (typeof raw === "object" || typeof raw === "function")) {
+				source = raw as Record<string, unknown>;
+				const candidate = source.done;
+				if (typeof candidate === "function") done = candidate as XaiToolsMenuDone;
 			}
-		};
-
-		const ctx = data.ctx;
-		if (!ctx || typeof ctx !== "object" || !ctx.ui) {
-			reply({ ok: false, error: "xAI tools bridge requires a command UI context." });
+		} catch {
+			// A throwing done accessor cannot provide a callable reply path.
 			return;
 		}
 
-		const action = (data.action ?? "open").toLowerCase();
+		// A response is impossible without a callable callback. Never dispatch an
+		// unacknowledgeable request or throw back through the shared event bus.
+		if (!done) return;
+
+		let replied = false;
+		const reply = (result: XaiToolsCommandResult) => {
+			if (replied) return;
+			replied = true;
+			try {
+				done(result);
+			} catch {
+				// Ignore host callback failures after the listener has completed its reply.
+			}
+		};
+
 		try {
+			if (!source || Array.isArray(raw) || typeof raw !== "object") {
+				reply({ ok: false, error: "xAI tools bridge request must be an object." });
+				return;
+			}
+
+			const rawAction = source.action;
+			if (rawAction !== undefined && typeof rawAction !== "string") {
+				reply({ ok: false, error: "xAI tools bridge action must be a string." });
+				return;
+			}
+			const action = (rawAction ?? "open").trim().toLowerCase();
+
+			const rawTool = source.tool;
+			if (rawTool !== undefined && typeof rawTool !== "string") {
+				reply({ ok: false, error: "xAI tools bridge tool must be a string." });
+				return;
+			}
+
+			const rawCtx = source.ctx;
+			if (!rawCtx || typeof rawCtx !== "object") {
+				reply({ ok: false, error: "xAI tools bridge requires a command UI context." });
+				return;
+			}
+			const ctx = rawCtx as ExtensionCommandContext;
+			if (!ctx.ui || typeof ctx.ui.notify !== "function") {
+				reply({ ok: false, error: "xAI tools bridge requires a command UI context." });
+				return;
+			}
+
 			if (action === "open") {
 				// Menu hosts (pi-clickable-menu) treat a missing done within ~4s as
 				// bridge failure. Acknowledge once the interactive picker is accepted
@@ -414,16 +449,20 @@ export function registerXaiToolsCommand(
 					reply({ ok: false, error: "Interactive selection requires TUI or RPC mode." });
 					return;
 				}
+				const picker = ctx.mode === "tui" ? ctx.ui.custom : ctx.ui.select;
+				if (typeof picker !== "function") {
+					reply({ ok: false, error: "xAI tools bridge requires an interactive picker UI." });
+					return;
+				}
 				reply({ ok: true });
 				try {
 					await showXaiToolPicker(pi, ctx, model);
-				} catch (err) {
-					// done already acknowledged launch; surface post-launch failures in-UI only.
-					const message = err instanceof Error ? err.message : String(err);
+				} catch {
+					// done already acknowledged launch; surface a bounded UI-only error.
 					try {
-						ctx.ui.notify(message, "error");
+						ctx.ui.notify("xAI tools picker failed.", "error");
 					} catch {
-						// ignore notify failures after ack
+						// Ignore notify failures after acknowledgement.
 					}
 				}
 				return;
@@ -434,7 +473,7 @@ export function registerXaiToolsCommand(
 				return;
 			}
 			if (action === "enable" || action === "disable") {
-				const tool = typeof data.tool === "string" ? data.tool.trim() : "";
+				const tool = rawTool?.trim() ?? "";
 				if (!tool) {
 					reply({ ok: false, error: "xAI tools bridge enable/disable requires tool." });
 					return;
@@ -443,10 +482,9 @@ export function registerXaiToolsCommand(
 				reply(result);
 				return;
 			}
-			reply({ ok: false, error: `Unknown xAI tools bridge action: ${action}` });
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			reply({ ok: false, error: message });
+			reply({ ok: false, error: "Unknown xAI tools bridge action." });
+		} catch {
+			reply({ ok: false, error: "xAI tools bridge request failed." });
 		}
 	});
 	if (typeof unsubscribe === "function") {

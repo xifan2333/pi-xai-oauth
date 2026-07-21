@@ -1,20 +1,23 @@
-# Constraints & Safety Rules — Issue #130
+# Constraints & Safety Rules — Issue #131
 
 ## Scope
 
-- Expand unit coverage for the existing `pi-clickable-menu:xai-tools` bridge.
-- Limit changes to command tests, the bridge registration implementation when correctness requires it, and persistent state notes.
+- Document the listener-owned `pi-clickable-menu:xai-tools` protocol as v1.
+- Apply only the small malformed-payload hardening requested by #131.
+- Add focused tests, README linkage, release notes, and state updates.
 
 ## Must
 
-- Preserve issue #128's early `open` acknowledgement before picker closure.
-- Preserve issue #129's honest `done` results for status, enable, disable, and failures.
-- Isolate throwing host callbacks and avoid duplicate handling after same-API registration.
-- Keep slash-command behavior and UI notifications unchanged.
-- Never log raw bridge payloads, credentials, or authenticated state.
+- Keep `XAI_TOOLS_MENU_CHANNEL` as the single production source of truth.
+- Preserve issue #128's early `open` launch acknowledgement.
+- Preserve issue #129's honest `status`, `enable`, and `disable` outcomes.
+- Validate raw action, tool, context/UI, and callback fields before command dispatch.
+- Call a supplied callable `done` exactly once for every accepted or rejected request.
+- Keep errors bounded to safe human-readable messages; never reflect raw payloads or context.
 
 ## Must not
 
-- Work on GitHub #131 documentation or #132 built-in-tool changes.
-- Change OAuth, catalog, transport, routing, or unrelated tool behavior.
-- Add broad fixture behavior when the existing event bus already models the contract.
+- Add a separate shared-type package or require a new wire-version field.
+- Re-await picker close before acknowledging `open`.
+- Expand bridge behavior/coverage into issue #130 or built-in tool work in #132.
+- Change OAuth, catalog, transport, or unrelated tool behavior.

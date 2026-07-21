@@ -1,20 +1,29 @@
-# Shared Agent Context — Issue #130
+# Shared Agent Context — Issue #131
 
-**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/130>
-**Linear:** [BLO-13](https://linear.app/blockedpath/issue/BLO-13/gh-130-expand-bridge-unit-coverage-openstatusdisableinvalid-tooldouble)
-**Series:** BLO-10 / GitHub #128–#131
-**Branch:** `test/130-bridge-unit-coverage`
+**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/131>
+**Branch:** `docs/131-bridge-contract`
+**Base:** current `origin/main` with #128 and #129 merged
 
 ## Problem
 
-The bridge contract fixes are merged, but success/default/error and callback-lifecycle branches remain incompletely covered. Repeated `registerXaiToolsCommand` calls also retain the old event listener and can double-handle one request.
+The cross-package `pi-clickable-menu:xai-tools` event contract is informal. The listener casts raw payloads directly, then calls `.toLowerCase()` on `action` outside its protected dispatch block. A non-string action can throw before a supplied `done` callback is invoked.
 
-## Approach
+## Existing behavior to preserve
 
-Add focused bridge tests for omitted/explicit open, status, disable, empty and invalid tools, unknown action, callback throw isolation, and repeated registration. Preserve issue #128's early open acknowledgement and issue #129's honest result forwarding; replace any prior same-API bridge listener during re-registration.
+- `XAI_TOOLS_MENU_CHANNEL` in `extensions/xai/tools/commands.ts` is exported and is the listener-owned channel source of truth.
+- `open` reports `{ ok: true }` when the picker is accepted for launch, not when it closes.
+- `status`, `enable`, and `disable` forward the shared command handler's actual success or failure.
 
-## Focus
+## Approved approach
 
-- Production: `extensions/xai/tools/commands.ts` only if required for repeated-registration correctness
-- Regressions: `tests/tools/commands.test.ts`
-- Fixture: `tests/fixtures/extension-api.ts` only if existing multi-listener support proves insufficient
+Add `docs/bridge-xai-tools.md` as protocol v1, link it from README, and state that v1 is a document/behavior revision rather than a wire `version` field. Validate raw object fields and required UI methods before dispatch. If a callable `done` is supplied, reply exactly once with a discriminated success/error result. Missing or non-callable `done` cannot be answered and must fail safely without dispatch.
+
+## Implemented
+
+- Production: `extensions/xai/tools/commands.ts` now validates the raw payload before dispatch and uses a once-only reply closure.
+- Regressions: `tests/tools/commands.test.ts` covers non-string action/tool fields, unusable UI context, missing callable `done`, and the stable channel literal.
+- Documentation: `docs/bridge-xai-tools.md`, `README.md`, and `CHANGELOG.md` define and link protocol v1.
+
+## Validation state
+
+`npm test`, `npm run typecheck`, and both exact packed compatibility boundaries pass. The full local suite reports 44 files and 508 tests. The package dry-run excludes `.agent-task.md`, final pi-lens session diagnostics have no blockers, and the final independent review is clean.

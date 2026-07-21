@@ -1,29 +1,28 @@
-# Execution Progress — Issue #130
+# Execution Progress — Issue #131
 
-**Branch:** `test/130-bridge-unit-coverage`
-**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/130
-**Linear:** BLO-13
+**Branch:** `docs/131-bridge-contract`
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/131
 
 ## Completed
 
-- [x] Confirmed the branch starts at current `origin/main` with #128 and #129 merged.
-- [x] Read the bridge implementation, command tests, extension fixture, and issue requirements.
-- [x] Ran parallel scout/reviewer recon and mapped every requested case.
-- [x] Installed locked dependencies and confirmed the existing 22 focused tests pass.
-- [x] Captured the focused baseline: 84% statements, 76.47% branches, and 87.02% lines for `commands.ts`.
-- [x] Added all requested bridge cases: default/explicit open, status, disable, empty/invalid tools, unknown action, throwing `done`, and repeated registration.
-- [x] Replaced prior same-API bridge subscriptions during registration to prevent duplicate handling.
-- [x] Focused suite passes (30 tests); focused `commands.ts` coverage rose to 86.34% statements, 78.7% branches, and 89.47% lines.
-- [x] Full suite passes (44 files, 508 tests), loader smoke passes, and TypeScript reports no errors.
-- [x] Compatibility policy/pack checks and exact Pi 0.80.1 / 0.81.1 packed boundaries pass.
-- [x] Diagnostics have no blocking errors; two fresh independent reviewers found no fixes worth doing.
-
-## In Progress
-
-- None.
+- [x] Read the task, issue, project guidance, entrypoint, setup, README, and prior scaffold state.
+- [x] Confirmed the branch is based on current `origin/main` with #128/#129 merged.
+- [x] Inspected the listener, peer emitter, focused tests, changelog, and documentation patterns.
+- [x] Ran parallel scout/reviewer analysis; both identified the non-string `action` path that can skip `done`.
+- [x] Chose a document-versioned v1 contract with no new wire field and the existing exported channel constant as source of truth.
+- [x] Added `docs/bridge-xai-tools.md`, README linkage, and Unreleased changelog notes.
+- [x] Added pre-dispatch validation for action, tool, command UI context, picker surface, and callable `done`.
+- [x] Added exactly-once replies and fail-safe no-dispatch behavior when no callable reply exists.
+- [x] Added malformed action/tool/UI/callback regressions and a channel-stability assertion.
+- [x] Focused command tests pass (30); TypeScript typecheck passes.
+- [x] Full policy/unit/loader gate passes (44 files, 508 tests).
+- [x] Exact packed Pi 0.80.1 and 0.81.1 compatibility boundaries pass.
+- [x] Package dry-run includes the protocol doc and excludes `.agent-task.md`.
+- [x] Final independent review reports no remaining blockers or fixes worth doing now.
+- [x] Final pi-lens session diagnostics report no blocking issues.
+- [x] Committed and pushed the implementation on `docs/131-bridge-contract`.
+- [x] Opened PR #140 with `Closes #131`.
 
 ## Delivery
 
-- Commit: `643cfc7` (`test(tools): expand menu bridge coverage`)
-- Pull request: https://github.com/BlockedPath/pi-xai-oauth/pull/139
-- PR body closes GitHub #130.
+PR: https://github.com/BlockedPath/pi-xai-oauth/pull/140

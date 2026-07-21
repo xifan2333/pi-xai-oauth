@@ -9,6 +9,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 ### Added
 
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
+- Added the listener-owned, versioned `pi-clickable-menu:xai-tools` bridge contract, covering its canonical channel, request shape, action timing, and honest result semantics.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
 - Added ModelRuntime re-registration coverage, a store-backed models-store precedence regression (discard stale overlays when the local catalog is newer), and request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
 
@@ -23,6 +24,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Fixed
 
+- Fixed the `pi-clickable-menu:xai-tools` bridge so malformed action, tool, and command-context fields are rejected before dispatch and every request with a callable `done` receives exactly one result.
 - Fixed the `pi-clickable-menu:xai-tools` bridge so `status`, `enable`, and `disable` return the shared command handler's actual success or failure instead of acknowledging toast-only failures as successful.
 - Fixed the `pi-clickable-menu:xai-tools` bridge so `action: "open"` acknowledges `done` when the interactive picker is accepted for launch, instead of waiting until the picker closes (avoids the menu host's ~4s false timeout).
 - Consolidated duplicate `xai_web_search` and Grok-native `web_search` registrations into one collision-safe, opt-in `web_search` picker entry. The old `xai_web_search` command spelling remains an input-only compatibility alias, and the public name is still never registered globally.
