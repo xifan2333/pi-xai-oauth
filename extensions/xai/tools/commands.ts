@@ -49,6 +49,8 @@ const XAI_TOOLS_USAGE =
 /** Event channel used by pi-clickable-menu (and other extensions) to drive /xai-tools. */
 export const XAI_TOOLS_MENU_CHANNEL = "pi-clickable-menu:xai-tools";
 
+type XaiToolsCommandResult = { ok: true } | { ok: false; error: string };
+
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
@@ -114,6 +116,36 @@ function notifyUpdate(
       : `Disabled ${displayName}.`,
     active ? "warning" : "info",
   );
+}
+
+function handleVisionRoutingUpdate(
+  visionRouting: XaiVisionRoutingController | undefined,
+  action: "enable" | "disable",
+  model: Model<Api> | undefined,
+  ctx: ExtensionCommandContext,
+): XaiToolsCommandResult {
+  if (!visionRouting) {
+    const error = "xAI vision routing is unavailable.";
+    ctx.ui.notify(error, "error");
+    return { ok: false, error };
+  }
+
+  const result = action === "enable" ? visionRouting.enable(model) : visionRouting.disable();
+  if (result.state === "enabled") {
+    ctx.ui.notify(
+      `Enabled vision routing for this xAI session: images are sent to ${result.targetModelId} in a separate authenticated request that may consume additional usage or credits; its generated description becomes sensitive session content. No cross-request image or description cache is created.`,
+      "warning",
+    );
+    return { ok: true };
+  }
+  if (action === "disable") {
+    ctx.ui.notify("Disabled vision routing.", "info");
+    return { ok: true };
+  }
+
+  const error = result.reason ?? "xAI vision routing is unavailable.";
+  ctx.ui.notify(error, "error");
+  return { ok: false, error };
 }
 
 async function showXaiToolSelectLoop(
@@ -237,16 +269,18 @@ async function showXaiToolPicker(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   model: Model<Api>,
-) {
+): Promise<XaiToolsCommandResult> {
   if (!ctx.hasUI) {
-    ctx.ui.notify(`${XAI_TOOLS_USAGE} Interactive selection requires TUI or RPC mode.`, "error");
-    return;
+    const error = `${XAI_TOOLS_USAGE} Interactive selection requires TUI or RPC mode.`;
+    ctx.ui.notify(error, "error");
+    return { ok: false, error };
   }
   if (ctx.mode === "tui") {
     await showXaiToolTuiPicker(pi, ctx, model);
-    return;
+    return { ok: true };
   }
   await showXaiToolSelectLoop(pi, ctx, model);
+  return { ok: true };
 }
 
 /** Shared /xai-tools argument handler (slash command + menu bridge). */
@@ -255,17 +289,17 @@ async function handleXaiToolsArgs(
 	visionRouting: XaiVisionRoutingController | undefined,
 	args: string,
 	ctx: ExtensionCommandContext,
-): Promise<void> {
+): Promise<XaiToolsCommandResult> {
 	const [action, rawToolName, ...extra] = args.trim().split(/\s+/).filter(Boolean);
 	const model = activeXaiModel(ctx);
 
 	if (!action) {
 		if (!model) {
-			ctx.ui.notify("Select an xAI/Grok model before opening /xai-tools.", "error");
-			return;
+			const error = "Select an xAI/Grok model before opening /xai-tools.";
+			ctx.ui.notify(error, "error");
+			return { ok: false, error };
 		}
-		await showXaiToolPicker(pi, ctx, model);
-		return;
+		return showXaiToolPicker(pi, ctx, model);
 	}
 
 	if (action.toLowerCase() === "status" && !rawToolName) {
@@ -273,7 +307,7 @@ async function handleXaiToolsArgs(
 			`xAI API tools${model ? ` for ${model.id}` : " (no active xAI model)"}: ${activeToolStatus(pi, visionRouting, model)}`,
 			"info",
 		);
-		return;
+		return { ok: true };
 	}
 
 	const normalizedAction = action.toLowerCase();
@@ -283,23 +317,7 @@ async function handleXaiToolsArgs(
 		(normalizedAction === "enable" || normalizedAction === "disable") &&
 		extra.length === 0
 	) {
-		if (!visionRouting) {
-			ctx.ui.notify("xAI vision routing is unavailable.", "error");
-			return;
-		}
-		const result =
-			normalizedAction === "enable" ? visionRouting.enable(model) : visionRouting.disable();
-		if (result.state === "enabled") {
-			ctx.ui.notify(
-				`Enabled vision routing for this xAI session: images are sent to ${result.targetModelId} in a separate authenticated request that may consume additional usage or credits; its generated description becomes sensitive session content. No cross-request image or description cache is created.`,
-				"warning",
-			);
-		} else if (normalizedAction === "disable") {
-			ctx.ui.notify("Disabled vision routing.", "info");
-		} else {
-			ctx.ui.notify(result.reason ?? "xAI vision routing is unavailable.", "error");
-		}
-		return;
+		return handleVisionRoutingUpdate(visionRouting, normalizedAction, model, ctx);
 	}
 
 	const toolName = commandToolName(rawToolName);
@@ -309,7 +327,7 @@ async function handleXaiToolsArgs(
 		extra.length > 0
 	) {
 		ctx.ui.notify(XAI_TOOLS_USAGE, "error");
-		return;
+		return { ok: false, error: XAI_TOOLS_USAGE };
 	}
 
 	const result = setXaiNetworkToolActive(
@@ -318,7 +336,13 @@ async function handleXaiToolsArgs(
 		toolName,
 		normalizedAction === "enable",
 	);
-	notifyUpdate(ctx, toolName, result.active, result.error);
+	if (result.ok) {
+		notifyUpdate(ctx, toolName, result.active);
+		return { ok: true };
+	}
+	const error = result.error ?? "The xAI tool request failed.";
+	notifyUpdate(ctx, toolName, result.active, error);
+	return { ok: false, error };
 }
 
 type XaiToolsMenuRequest = {
@@ -401,8 +425,8 @@ export function registerXaiToolsCommand(
 				return;
 			}
 			if (action === "status") {
-				await handleXaiToolsArgs(pi, visionRouting, "status", ctx);
-				reply({ ok: true });
+				const result = await handleXaiToolsArgs(pi, visionRouting, "status", ctx);
+				reply(result);
 				return;
 			}
 			if (action === "enable" || action === "disable") {
@@ -411,8 +435,8 @@ export function registerXaiToolsCommand(
 					reply({ ok: false, error: "xAI tools bridge enable/disable requires tool." });
 					return;
 				}
-				await handleXaiToolsArgs(pi, visionRouting, `${action} ${tool}`, ctx);
-				reply({ ok: true });
+				const result = await handleXaiToolsArgs(pi, visionRouting, `${action} ${tool}`, ctx);
+				reply(result);
 				return;
 			}
 			reply({ ok: false, error: `Unknown xAI tools bridge action: ${action}` });

@@ -35,6 +35,15 @@ function setup() {
   return { h, notices, run };
 }
 
+function emitMenuRequest(
+  h: ReturnType<typeof createExtensionHarness>,
+  request: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, { ...request, done: resolve });
+  });
+}
+
 describe("/xai-tools command", () => {
   it("enables vision routing as transport policy without registering an active tool", async () => {
     const h = createExtensionHarness();
@@ -330,6 +339,65 @@ describe("/xai-tools command", () => {
     expect(result).toEqual({ ok: true });
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
     expect(notices.at(-1).message).toMatch(/may use xAI credits/);
+  });
+
+  it.each([
+    ["an unknown tool", "not_a_tool", TEST_MODEL, /Usage:/],
+    [
+      "a non-xAI model",
+      "xai_generate_image",
+      { provider: "anthropic", id: "claude" },
+      /Select an xAI\/Grok model/,
+    ],
+    ["unavailable vision routing", "vision-routing", TEST_MODEL, /vision routing is unavailable/i],
+  ])("reports menu bridge failure for %s", async (_case, tool, model, errorPattern) => {
+    const { h, notices } = setup();
+    const result = await emitMenuRequest(h, {
+      action: "enable",
+      tool,
+      ctx: commandContext(model, notices),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(errorPattern);
+    expect(notices.at(-1).message).toMatch(errorPattern);
+  });
+
+  it("reports menu bridge registry failures when disabling a tool", async () => {
+    const { h, notices, run } = setup();
+    await run("enable xai_generate_image");
+
+    for (const failure of [
+      { registry: { get: true }, error: /could not be read/ },
+      { registry: { set: true }, error: /could not be updated/ },
+    ]) {
+      h.failRegistry(failure.registry);
+      const result = await emitMenuRequest(h, {
+        action: "disable",
+        tool: "xai_generate_image",
+        ctx: commandContext(TEST_MODEL, notices),
+      });
+      h.failRegistry();
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(failure.error);
+      expect(notices.at(-1).message).toMatch(failure.error);
+      expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
+    }
+  });
+
+  it("rejects a menu bridge enable or disable without a tool", async () => {
+    const { h, notices } = setup();
+    const result = await emitMenuRequest(h, {
+      action: "disable",
+      tool: " ",
+      ctx: commandContext(TEST_MODEL, notices),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "xAI tools bridge enable/disable requires tool.",
+    });
   });
 
   it("acknowledges menu bridge open before the interactive picker closes", async () => {

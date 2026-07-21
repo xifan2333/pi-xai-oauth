@@ -1,22 +1,22 @@
-# Implementation Plan — Issue #128: Menu bridge open ack before picker close
+# Implementation Plan — Issue #129: Honest menu bridge results
 
-**Branch:** `fix/128-menu-bridge-picker-timeout`
+**Branch:** `fix/129-menu-bridge-honest-ok`
 **Base:** `origin/main`
 
 ## Goal
 
-Stop the `pi-clickable-menu:xai-tools` bridge from awaiting interactive picker close before `done({ ok: true })`, which false-triggers the menu host’s ~4s timeout.
+Make `pi-clickable-menu:xai-tools` return the actual shared command result for `status`, `enable`, and `disable`, while preserving issue #128's early `open` launch acknowledgement.
 
 ## Phases
 
-1. [x] Confirm issue scope (#128 only; #129–#131 follow in series order).
-2. [x] Ack `open` on launch after pre-validation (active xAI model + UI), then await picker without holding `done`.
-3. [x] Add regression: `done` resolves while a held picker is still open; reject open with no model.
-4. [x] CHANGELOG + focused Vitest for `tests/tools/commands.test.ts`.
+1. [x] Map every shared-handler success and failure branch.
+2. [x] Return a structured `{ ok, error? }` result while preserving slash-command notifications.
+3. [x] Forward handler results through bridge `done` and add focused rejection regressions.
+4. [x] Run full tests, typecheck, diagnostics, exact Pi boundaries, and independent review.
 
 ## Validation Contract
 
-- `action: "open"` calls `done` when the picker is accepted for launch, not after close.
-- Missing xAI model / missing UI still reply failure before any interactive wait.
-- Post-launch picker errors notify in-UI only (do not re-call `done`).
-- Focused tools command tests pass.
+- Invalid tools, non-xAI enables, registry failures, and unavailable vision routing reply `ok: false`.
+- Successful status/enable/disable requests reply `ok: true`.
+- `open` still acknowledges accepted launch before picker close; post-launch picker failures remain UI-only.
+- Disabling outside an xAI model preserves unrelated tool authorizations.

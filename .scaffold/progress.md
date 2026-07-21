@@ -1,14 +1,18 @@
-# Execution Progress — Issue #128
+# Execution Progress — Issue #129
 
-**Branch:** `fix/128-menu-bridge-picker-timeout`
-**PR:** https://github.com/BlockedPath/pi-xai-oauth/pull/137
+**Branch:** `fix/129-menu-bridge-honest-ok`
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/129
+**Linear:** BLO-12
 
 ## Completed
 
-- [x] Bridge `open`: ack on launch after model/UI validation; await picker without holding `done`.
-- [x] Regressions: ack-before-picker-close; reject open with no xAI model.
-- [x] Adopted Pi **0.81.1** as `policy.latest` after clean packed `--candidate` (unblocks CI registry gate vs 0.81.0).
-- [x] `npm run compatibility:check`, `npm test` (495), `npm run typecheck` passed on tip.
+- [x] Read GitHub/Linear issue context and confirmed #128 is merged.
+- [x] Mapped handler, model-scope, vision-routing, bridge, and fixture behavior.
+- [x] Added structured shared-handler outcomes and honest bridge forwarding.
+- [x] Added regressions for invalid tools, non-xAI enable, unavailable vision routing, empty tool, and disable registry failures.
+- [x] Focused command tests pass (22); full suite passes (44 files, 500 tests); loader and TypeScript checks pass.
+- [x] Compatibility policy/pack checks and exact Pi 0.80.1 / 0.81.1 packed boundaries pass (0.81.1 passed on retry after one unrelated credential-test timeout).
+- [x] Fresh independent review found no production fixes; broader success-path bridge coverage remains in issue #130.
 
 ## In Progress
 
@@ -16,4 +20,4 @@
 
 ## Delivery
 
-- PR #137 closes #128; includes 0.81.1 boundary pin required for policy CI.
+Implementation and validation are complete; the branch is ready for commit/PR.
