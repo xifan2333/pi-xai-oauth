@@ -1,29 +1,23 @@
-# Shared Agent Context — Issue #131
+# Shared Agent Context — Issue #132
 
-**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/131>
-**Branch:** `docs/131-bridge-contract`
-**Base:** current `origin/main` with #128 and #129 merged
+**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/132>
+**Linear:** [BLO-15](https://linear.app/blockedpath/issue/BLO-15/gh-132-support-pis-built-in-xai-supergrok-x-premium-login-for-network)
+**Branch:** `feat/132-builtin-xai-tools`
 
 ## Problem
 
-The cross-package `pi-clickable-menu:xai-tools` event contract is informal. The listener casts raw payloads directly, then calls `.toLowerCase()` on `action` outside its protected dispatch block. A non-string action can throw before a supplied `done` callback is invoked.
+Network-tool scope and Pi-managed credential/usage lookup are hard-coded to this package's `xai-auth` provider. Pi's built-in `xai` provider now supports SuperGrok/X Premium OAuth and API keys, but installed package tools reject its active models and cannot classify its credential provenance.
 
-## Existing behavior to preserve
+## Approved Boundary
 
-- `XAI_TOOLS_MENU_CHANNEL` in `extensions/xai/tools/commands.ts` is exported and is the listener-owned channel source of truth.
-- `open` reports `{ ok: true }` when the picker is accepted for launch, not when it closes.
-- `status`, `enable`, and `disable` forward the shared command handler's actual success or failure.
+- `XAI_PROVIDER_ID = "xai-auth"` remains package ownership for registration, catalog, stream, vision routing, and automatic local Grok adapters.
+- A separate `xai` ID plus a narrow compatibility predicate applies only to network tools and usage model gating.
+- Managed credential search covers both providers active-first.
+- Built-in OAuth uses CLI-session routes; built-in API keys use public API routes.
+- Usage accepts Pi-managed OAuth only and must not fall through from an active built-in API key to another account/provider.
 
-## Approved approach
+## Focus
 
-Add `docs/bridge-xai-tools.md` as protocol v1, link it from README, and state that v1 is a document/behavior revision rather than a wire `version` field. Validate raw object fields and required UI methods before dispatch. If a callable `done` is supplied, reply exactly once with a discriminated success/error result. Missing or non-callable `done` cannot be answered and must fail safely without dispatch.
-
-## Implemented
-
-- Production: `extensions/xai/tools/commands.ts` now validates the raw payload before dispatch and uses a once-only reply closure.
-- Regressions: `tests/tools/commands.test.ts` covers non-string action/tool fields, unusable UI context, missing callable `done`, and the stable channel literal.
-- Documentation: `docs/bridge-xai-tools.md`, `README.md`, and `CHANGELOG.md` define and link protocol v1.
-
-## Validation state
-
-`npm test`, `npm run typecheck`, and both exact packed compatibility boundaries pass. The full local suite reports 44 files and 508 tests. The package dry-run excludes `.agent-task.md`, final pi-lens session diagnostics have no blockers, and the final independent review is clean.
+- Production: `extensions/xai/constants.ts`, `extensions/xai/tools/model-scope.ts`, `extensions/xai/auth.ts`, `extensions/xai/usage.ts`.
+- Regressions: tools command/lifecycle/native isolation, credentials, and usage status.
+- Docs/release: `README.md`, `CHANGELOG.md`.

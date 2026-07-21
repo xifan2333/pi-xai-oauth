@@ -11,7 +11,7 @@ import {
 import {
   XAI_CLI_BILLING_URL,
   XAI_CLI_USER_URL,
-  XAI_PROVIDER_ID,
+  isXaiToolCompatibleProvider,
   XAI_USAGE_MAX_HISTORY_PERIODS,
   XAI_USAGE_MAX_JSON_ARRAY_ITEMS,
   XAI_USAGE_MAX_JSON_DEPTH,
@@ -367,7 +367,7 @@ function httpError(status: number): XaiUsageError {
   if (status === 401 || status === 403) {
     return new XaiUsageError(
       "auth",
-      "xAI authentication was rejected. Run /login xai-auth and try again.",
+      "xAI authentication was rejected. Run /login xai or /login xai-auth and try again.",
       status,
     );
   }
@@ -391,7 +391,10 @@ async function requestBoundedJson(
   signal?: AbortSignal,
 ): Promise<unknown> {
   if (credential.kind !== "oauth-session" || !credential.token) {
-    throw new XaiUsageError("auth", "xAI OAuth credentials are required. Run /login xai-auth first.");
+    throw new XaiUsageError(
+      "auth",
+      "xAI OAuth credentials are required. Run /login xai or /login xai-auth first.",
+    );
   }
   const controller = new AbortController();
   let timedOut = false;
@@ -594,10 +597,16 @@ export function registerXaiUsage(
     try {
       credential = await dependencies.resolveCredential(ctx);
     } catch {
-      throw new XaiUsageError("auth", "xAI OAuth credentials could not be resolved. Run /login xai-auth first.");
+      throw new XaiUsageError(
+        "auth",
+        "xAI OAuth credentials could not be resolved. Run /login xai or /login xai-auth first.",
+      );
     }
     if (!credential) {
-      throw new XaiUsageError("auth", "xAI OAuth credentials are required. Run /login xai-auth first.");
+      throw new XaiUsageError(
+        "auth",
+        "xAI OAuth credentials are required. Run /login xai or /login xai-auth first.",
+      );
     }
     return dependencies.fetchUsage(credential, signal);
   };
@@ -609,7 +618,7 @@ export function registerXaiUsage(
     lastUi = ctx.ui;
     if (
       !statusEnabled
-      || ctx.model?.provider !== XAI_PROVIDER_ID
+      || !isXaiToolCompatibleProvider(ctx.model?.provider)
       || !hasPiManagedXaiOAuth(ctx)
     ) {
       reset(ctx);
@@ -630,7 +639,7 @@ export function registerXaiUsage(
         if (
           refreshGeneration === generation
           && statusEnabled
-          && ctx.model?.provider === XAI_PROVIDER_ID
+          && isXaiToolCompatibleProvider(ctx.model?.provider)
           && !controller.signal.aborted
         ) {
           ctx.ui.setStatus(XAI_USAGE_STATUS_KEY, renderXaiUsageStatus(usage));
@@ -703,7 +712,7 @@ export function registerXaiUsage(
         ctx.ui.notify("xAI usage status is off for this session.", "info");
         return;
       }
-      if (ctx.model?.provider !== XAI_PROVIDER_ID) {
+      if (!isXaiToolCompatibleProvider(ctx.model?.provider)) {
         reset(ctx);
         ctx.ui.notify("Select an xAI/Grok model before enabling xAI usage status.", "error");
         return;
@@ -725,7 +734,7 @@ export function registerXaiUsage(
     reset,
     clearIfInactive(ctx) {
       if (
-        ctx.model?.provider !== XAI_PROVIDER_ID
+        !isXaiToolCompatibleProvider(ctx.model?.provider)
         || !hasPiManagedXaiOAuth(ctx)
       ) {
         reset(ctx);

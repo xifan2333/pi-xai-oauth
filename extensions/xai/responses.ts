@@ -345,16 +345,16 @@ export async function createXaiResponse(
   const canonicalBody = canonicalizeXaiResponsesPayload(body);
   const requestedModel = typeof canonicalBody.model === "string" ? canonicalBody.model : undefined;
   const model = xaiModelForRequest(requestedModel, credential.kind);
-  const runtimeModel = credential.kind === "oauth-session"
-    ? getXaiRuntimeModel(model.id)
-    : undefined;
-  if (credential.kind === "oauth-session" && !runtimeModel) {
+  const usesPackageCatalog = credential.kind === "oauth-session"
+    && credential.catalogScope !== "host";
+  const runtimeModel = usesPackageCatalog ? getXaiRuntimeModel(model.id) : undefined;
+  if (usesPackageCatalog && !runtimeModel) {
     throw new Error(`xAI OAuth model ${model.id} is not present in the authenticated model catalog`);
   }
   const selectedModelId = runtimeModel?.id ?? model.id;
   const requestModel = selectedModelId === model.id ? model : { ...model, id: selectedModelId };
   const route = resolveXaiRoute(credential.kind, "responses");
-  if (credential.kind === "oauth-session") {
+  if (usesPackageCatalog) {
     assertXaiRuntimeModelAcceptsPayload(selectedModelId, canonicalBody);
   }
   const rewritten = rewriteXaiResponsesPayload(canonicalBody, requestModel);
@@ -362,11 +362,11 @@ export async function createXaiResponse(
     ? applyXaiOAuthResponsesPolicy(rewritten as Record<string, unknown>)
     : rewritten;
   pinXaiPayloadModel(selectedModelId, policyPayload);
-  if (credential.kind === "oauth-session") {
+  if (usesPackageCatalog) {
     assertXaiRuntimeModelAcceptsPayload(selectedModelId, policyPayload);
   }
   const payload = (await compactXaiInlineImages(policyPayload)) as Record<string, any>;
-  if (credential.kind === "oauth-session") {
+  if (usesPackageCatalog) {
     assertXaiRuntimeModelAcceptsPayload(selectedModelId, payload);
   }
   beforeSend?.();

@@ -84,7 +84,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 - **Reasoning support** — parses supplied reasoning capability and thinking levels while preserving known model compatibility
 - **Bounded last-known-good cache** — avoids routine startup delay and falls back safely when discovery is offline or unavailable
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
-- **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint for every Grok model; the public `api.x.ai` Responses endpoint is reserved for a future explicit API-key path
+- **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint; built-in `xai` API-key tool traffic uses the public `api.x.ai` Responses endpoint
 - **Revision-pinned wire contract** — route-specific headers, truthful package identity, protected request metadata, redirect rejection, and the upstream Grok Build review procedure are documented without impersonating the official client
 
 > **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
@@ -268,9 +268,9 @@ Run an explicit one-shot usage lookup from pi:
 
 The command displays only validated fields that xAI actually returned, such as included usage percentage, legacy included-credit totals, current reset time, on-demand usage/cap, prepaid balance, and bounded history count. Missing optional fields stay omitted.
 
-The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. The command requires a current Pi-stored OAuth credential and rejects stored or runtime `--api-key` provenance. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
+The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. The command accepts a current Pi-stored OAuth credential under this package's `xai-auth` provider or Pi's built-in `xai` SuperGrok/X Premium provider, and rejects stored, environment, or runtime API-key provenance. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
 
-The compact footer status is off by default and requires a separate per-session opt-in while an `xai-auth` model is active:
+The compact footer status is off by default and requires a separate per-session opt-in while an `xai-auth` or built-in `xai` model is active with Pi-managed OAuth:
 
 ```text
 /xai-usage status
@@ -413,15 +413,15 @@ The direct `read_file`, `search_replace`, `list_dir`, and `grep` adapters accept
 
 `run_terminal_command` is deliberately outside that direct-adapter containment policy: it delegates the command to pi's `bash` tool and may access paths outside the workspace. These checks are defense-in-depth for the direct file adapters, not a complete filesystem sandbox for the coding agent.
 
-Legacy Cursor names (`Read`, `Shell`, `WebSearch`, and similar) are no longer registered by this package. Local Grok-native adapters enable automatically for `xai-auth` and clear when you leave xAI models without mutating same-named public tools owned by other extensions. Internally they use collision-free `xai_grok_*` dispatcher names, then expose the official public names only in the current xAI request, so unrelated extensions can keep their own public tools. `web_search` stays opt-in because it makes an additional authenticated xAI request.
+Legacy Cursor names (`Read`, `Shell`, `WebSearch`, and similar) are no longer registered by this package. Local Grok-native adapters enable automatically only for `xai-auth` and clear when you leave that provider without mutating same-named public tools owned by other extensions. Internally they use collision-free `xai_grok_*` dispatcher names, then expose the official public names only in the current package-owned xAI request, so unrelated extensions can keep their own public tools. The network-backed `web_search` remains opt-in and also supports Pi's built-in `xai` models.
 
 ---
 
 ## Custom Tools
 
-This package registers OAuth-backed custom tools that make additional xAI API requests. They appear alongside your other agent tools in the pi TUI, but all of them are **inactive by default**.
+This package registers credential-backed custom tools that make additional xAI API requests. They appear alongside your other agent tools in the pi TUI, but all of them are **inactive by default**. For Pi's built-in `xai` provider, SuperGrok/X Premium OAuth uses the subscription session route while API-key provenance uses the public `api.x.ai` route.
 
-This opt-in boundary applies only to the extra tools below. Normal conversation with the selected `xai-auth` model works without enabling any of them.
+This opt-in boundary applies only to the extra tools below. Normal conversation continues through the selected provider: this package owns `xai-auth` chat/catalog/stream behavior and does not replace or intercept Pi's built-in `xai` transport.
 
 | Tool | Category | Additional usage / cost risk |
 |------|----------|------------------------------|
@@ -437,11 +437,11 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
 | `web_search` | Search | Model tokens plus native tool usage |
 
-**How to use them:** Select an `xai-auth` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
+**How to use them:** Select an `xai-auth` model or Pi built-in `xai` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Credential lookup prefers the active provider and can reuse `xai-auth` OAuth, built-in `xai` OAuth or API keys, and the existing Grok CLI credential fallback. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
 
-Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. Grok-native local filesystem and shell tools are automatic because they do not create a separate xAI API request.
+Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. Grok-native local filesystem and shell tools remain automatic only for `xai-auth`; built-in `xai` models receive no package-owned local adapters.
 
-In the pi TUI, select an `xai-auth` model and run:
+In the pi TUI, select an `xai-auth` or built-in `xai` model and run:
 
 ```text
 /xai-tools
@@ -598,7 +598,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 }
 ```
 
-> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. Responses-based helpers use the OAuth session proxy. Image generation and image editing are intentional exceptions: matching official Grok Build behavior, they send the OAuth bearer directly to the pinned public Images routes at `https://api.x.ai/v1/images/generations` and `https://api.x.ai/v1/images/edits`. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
+> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. OAuth-backed Responses helpers use the session proxy; built-in `xai` API-key helpers use the public API. Image generation and image editing are intentional OAuth transport exceptions: matching official Grok Build behavior, they send the OAuth bearer directly to the pinned public Images routes at `https://api.x.ai/v1/images/generations` and `https://api.x.ai/v1/images/edits`. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
 
 ---
 
@@ -692,9 +692,9 @@ This re-runs the full OAuth flow and replaces your stored tokens.
 
 ### "Does this need an xAI API key?"
 
-**No.** This uses OAuth — the same authentication as the official Grok CLI and chat interface. You sign in with your xAI / Grok account credentials. No API key required. Responses requests use the OAuth session proxy; this package does not fall back to `XAI_API_KEY` or expose an API-key provider.
+**Not for the package-owned `xai-auth` provider.** It uses OAuth—the same authentication family as the official Grok CLI and chat interface—and does not expose an API-key chat provider. Responses requests for `xai-auth` use the OAuth session proxy.
 
-The paid `xai_generate_image` helper is a deliberate transport exception: the official Grok Build client sends both OAuth and BYOK Imagine requests directly to the public Images endpoint. This does not change normal chat or Responses-helper routing.
+The opt-in network tools can also run while Pi's built-in `xai` provider is active. Built-in SuperGrok/X Premium OAuth is tagged as a subscription session; a built-in xAI API key is tagged as `api-key` and sent only to the public `api.x.ai` route. `/xai-usage` remains OAuth-only and rejects API-key provenance.
 
 If you have the official Grok CLI installed and authenticated (`~/.grok/auth.json`), this package detects and reuses those credentials automatically.
 

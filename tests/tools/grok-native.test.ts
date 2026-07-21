@@ -19,7 +19,7 @@ import {
 } from "../../extensions/xai/tools/grok-native";
 import { setXaiNetworkToolActive } from "../../extensions/xai/tools/model-scope";
 import { createExtensionHarness } from "../fixtures/extension-api";
-import { authContext, TEST_MODEL } from "../fixtures/models";
+import { authContext, BUILTIN_XAI_TEST_MODEL, TEST_MODEL } from "../fixtures/models";
 import { jsonResponse, requestBody } from "../fixtures/http";
 import { createTempDir } from "../fixtures/temp";
 
@@ -607,6 +607,38 @@ describe("Grok-native tools", () => {
     expect(stale.content[0].text).toMatch(/requires an active xAI/);
     expect(requests).toHaveLength(1);
   });
+  it("routes built-in xAI OAuth outside the package catalog and API keys through the public API", async () => {
+    setXaiRuntimeModels(CURATED_FALLBACK_MODELS);
+    const builtInModel = { ...BUILTIN_XAI_TEST_MODEL, id: "grok-4.3" } as any;
+    expect(
+      setXaiNetworkToolActive(
+        h.api,
+        builtInModel,
+        XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
+        true,
+      ),
+    ).toEqual({ ok: true, active: true });
+
+    const execute = (credentialType: "oauth" | "api_key") => h.tools
+      .get(XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)
+      .execute(
+        "call",
+        { query: `built-in ${credentialType}` },
+        new AbortController().signal,
+        () => {},
+        {
+          cwd: temp.path,
+          ...authContext(builtInModel, `${credentialType}-token`, credentialType),
+        },
+      );
+
+    expect((await execute("oauth")).content[0].text).toBe("OK");
+    expect((await execute("api_key")).content[0].text).toBe("OK");
+    expect(requests.map(({ url }) => url)).toEqual([
+      "https://cli-chat-proxy.grok.com/v1/responses",
+      "https://api.x.ai/v1/responses",
+    ]);
+  });
 
   it("returns an explicit fallback for a successful web_search response without text", async () => {
     const model = { ...TEST_MODEL, id: "grok-4.5" };
@@ -637,7 +669,7 @@ describe("Grok-native tools", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("activates native local tools without mutating unrelated public tools", () => {
+  it("activates native local tools only for xai-auth without mutating unrelated public tools", () => {
     const foreignNames = Object.values(XAI_GROK_NATIVE_TOOL_NAME_MAP);
     h.setActiveTools(["read", "bash", ...foreignNames]);
     syncGrokNativeToolsForModel(h.api, TEST_MODEL);
@@ -654,6 +686,12 @@ describe("Grok-native tools", () => {
     for (const name of XAI_GROK_NATIVE_AUTO_TOOL_NAMES) {
       expect(h.getActiveTools()).toContain(name);
     }
+
+    syncGrokNativeToolsForModel(h.api, BUILTIN_XAI_TEST_MODEL);
+    for (const name of XAI_GROK_NATIVE_AUTO_TOOL_NAMES) {
+      expect(h.getActiveTools()).not.toContain(name);
+    }
+    for (const name of foreignNames) expect(h.getActiveTools()).toContain(name);
 
     syncGrokNativeToolsForModel(h.api, { provider: "anthropic", id: "claude" } as any);
     for (const name of XAI_GROK_NATIVE_AUTO_TOOL_NAMES) {

@@ -6,6 +6,7 @@ import {
   getGrokAuthCredentials,
   getStartupXaiCatalogAuth,
   resolveXaiCredential,
+  resolvePiManagedXaiCredential,
   resolvePiManagedXaiOAuthCredential,
 } from "../../extensions/xai/auth";
 import {
@@ -13,7 +14,7 @@ import {
   setXaiRuntimeModels,
 } from "../../extensions/xai/models";
 import { createTempDir } from "../fixtures/temp";
-import { TEST_MODEL } from "../fixtures/models";
+import { BUILTIN_XAI_TEST_MODEL, TEST_MODEL } from "../fixtures/models";
 let temp: Awaited<ReturnType<typeof createTempDir>>;
 
 const boundaryProviderConfig = {
@@ -181,6 +182,69 @@ describe("credential resolution", () => {
       token: "composer-only-token",
     });
   });
+  it("prefers active built-in OAuth and preserves OAuth-session provenance", async () => {
+    const stored = {
+      type: "oauth",
+      access: "builtin-oauth",
+      refresh: "refresh",
+      expires: Date.now() + 60_000,
+    };
+    const lookups: string[] = [];
+    const ctx = {
+      model: BUILTIN_XAI_TEST_MODEL,
+      modelRegistry: {
+        authStorage: {
+          get: (provider: string) => provider === "xai" ? stored : { ...stored, access: "package-oauth" },
+        },
+        find: (provider: string, id: string) => {
+          lookups.push(provider);
+          return { ...BUILTIN_XAI_TEST_MODEL, provider, id };
+        },
+        isUsingOAuth: () => true,
+        getApiKeyAndHeaders: async (model: any) => ({
+          ok: true,
+          apiKey: model.provider === "xai" ? "builtin-oauth" : "package-oauth",
+        }),
+      },
+    };
+
+    await expect(resolvePiManagedXaiCredential(ctx)).resolves.toEqual({
+      catalogScope: "host",
+      kind: "oauth-session",
+      token: "builtin-oauth",
+    });
+    expect(lookups[0]).toBe("xai");
+    await expect(resolvePiManagedXaiOAuthCredential(ctx)).resolves.toEqual({
+      kind: "oauth-session",
+      token: "builtin-oauth",
+    });
+  });
+  it("tags an active built-in API key for public API routing and rejects it for usage", async () => {
+    const getApiKeyAndHeaders = vi.fn(async () => ({
+      ok: true,
+      apiKey: "BUILTIN_API_KEY",
+    }));
+    const ctx = {
+      model: BUILTIN_XAI_TEST_MODEL,
+      modelRegistry: {
+        authStorage: {
+          get: (provider: string) => provider === "xai"
+            ? { type: "api_key", key: "BUILTIN_API_KEY" }
+            : { type: "oauth", access: "package-oauth" },
+        },
+        find: (provider: string, id: string) => ({ ...BUILTIN_XAI_TEST_MODEL, provider, id }),
+        isUsingOAuth: (model: any) => model.provider === "xai-auth",
+        getApiKeyAndHeaders,
+      },
+    };
+
+    await expect(resolvePiManagedXaiCredential(ctx)).resolves.toEqual({
+      kind: "api-key",
+      token: "BUILTIN_API_KEY",
+    });
+    await expect(resolvePiManagedXaiOAuthCredential(ctx)).resolves.toBeNull();
+    expect(getApiKeyAndHeaders).toHaveBeenCalledTimes(1);
+  });
   it("uses Authorization bearer when registry omits apiKey", async () => {
     const credential = await resolveXaiCredential({
       model: TEST_MODEL,
@@ -246,14 +310,16 @@ describe("credential resolution", () => {
       model: TEST_MODEL,
       modelRegistry: {
         authStorage: {
-          get: () => ({
-            type: "oauth",
-            access: "stored-oauth-access",
-            refresh: "refresh",
-            expires: Date.now() + 60_000,
-          }),
+          get: (provider: string) => provider === "xai-auth"
+            ? {
+                type: "oauth",
+                access: "stored-oauth-access",
+                refresh: "refresh",
+                expires: Date.now() + 60_000,
+              }
+            : undefined,
         },
-        find: () => TEST_MODEL,
+        find: (provider: string) => provider === "xai-auth" ? TEST_MODEL : undefined,
         isUsingOAuth: () => true,
         getApiKeyAndHeaders,
       },

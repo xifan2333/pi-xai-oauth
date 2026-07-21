@@ -10,7 +10,7 @@ import {
   XAI_NETWORK_TOOL_NAMES,
 } from "../../extensions/xai/tools/model-scope";
 import { createExtensionHarness } from "../fixtures/extension-api";
-import { TEST_MODEL } from "../fixtures/models";
+import { BUILTIN_XAI_TEST_MODEL, TEST_MODEL } from "../fixtures/models";
 
 describe("network-tool lifecycle", () => {
   it("requires an active xAI model for web_search", () => {
@@ -38,18 +38,22 @@ describe("network-tool lifecycle", () => {
     ).toBe(true);
     expect(h.getActiveTools()).toContain("read");
   });
-  it("preserves explicit selections but removes them outside xAI", () => {
+  it("preserves explicit selections for both xAI providers but removes them outside xAI", () => {
     const h = createExtensionHarness();
-    setXaiNetworkToolActive(h.api, TEST_MODEL, "xai_generate_image", true);
-    syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
+    setXaiNetworkToolActive(h.api, BUILTIN_XAI_TEST_MODEL, "xai_generate_image", true);
+    syncXaiNetworkToolsForModel(h.api, BUILTIN_XAI_TEST_MODEL);
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
     syncXaiNetworkToolsForModel(h.api, {
       provider: "anthropic",
       id: "claude",
     } as any);
     expect(h.getActiveTools()).not.toContain("xai_generate_image");
-    syncXaiNetworkToolsForModel(h.api, TEST_MODEL);
+    syncXaiNetworkToolsForModel(h.api, BUILTIN_XAI_TEST_MODEL);
     expect(h.getActiveTools()).not.toContain("xai_generate_image");
+
+    expect(
+      setXaiNetworkToolActive(h.api, TEST_MODEL, "xai_generate_image", true),
+    ).toEqual({ ok: true, active: true });
   });
   it("does not mutate another extension's public web_search activation", () => {
     const h = createExtensionHarness(["read", XAI_GROK_NATIVE_WEB_SEARCH_NAME]);

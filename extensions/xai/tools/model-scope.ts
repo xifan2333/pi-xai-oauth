@@ -2,7 +2,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import {
   XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
-  XAI_PROVIDER_ID,
+  isXaiToolCompatibleProvider,
 } from "../constants";
 
 /** Network-backed xAI tools that make an additional authenticated API request. */
@@ -44,7 +44,7 @@ function activeToolsWithExplicitNetworkSelection(
 /** Return the active xAI model, or undefined when the session is using another provider. */
 export function activeXaiModel(ctx: Pick<ExtensionContext, "model"> | undefined): Model<Api> | undefined {
   const model = ctx?.model;
-  if (model?.provider !== XAI_PROVIDER_ID || typeof model.id !== "string" || !model.id.trim()) return undefined;
+  if (!isXaiToolCompatibleProvider(model?.provider) || typeof model.id !== "string" || !model.id.trim()) return undefined;
   return model as Model<Api>;
 }
 

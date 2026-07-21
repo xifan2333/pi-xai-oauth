@@ -6,11 +6,15 @@ import { homedir } from "os";
 import { join } from "path";
 import {
   DEFAULT_XAI_MODEL,
+  XAI_BUNDLED_PROVIDER_ID,
   XAI_GROK_CLI_AUTH_SCOPE_KEY,
   XAI_GROK_CLI_LEGACY_AUTH_SCOPE_KEY,
   XAI_OAUTH_ISSUER,
   XAI_OAUTH_REFRESH_SKEW_MS,
   XAI_PROVIDER_ID,
+  XAI_TOOL_COMPATIBLE_PROVIDER_IDS,
+  isXaiToolCompatibleProvider,
+  type XaiToolCompatibleProviderId,
 } from "./constants";
 import { getXaiRuntimeModels } from "./models";
 import { ensureFreshXaiCredentials } from "./oauth";
@@ -140,9 +144,19 @@ export function getStartupXaiCatalogAuth(now = Date.now()): StartupXaiCatalogAut
   return { credential: null, needsRegistryRefresh, credentialChangedAt };
 }
 
-function xaiRegistryCandidateIds(ctx: any): string[] {
+function xaiRegistryProviderIds(ctx: any): XaiToolCompatibleProviderId[] {
+  const activeProvider = isXaiToolCompatibleProvider(ctx?.model?.provider)
+    ? ctx.model.provider
+    : undefined;
+  return [activeProvider, ...XAI_TOOL_COMPATIBLE_PROVIDER_IDS].filter(
+    (providerId, index, values): providerId is XaiToolCompatibleProviderId =>
+      typeof providerId === "string" && values.indexOf(providerId) === index,
+  );
+}
+
+function xaiRegistryCandidateIds(ctx: any, providerId: XaiToolCompatibleProviderId): string[] {
   return [
-    ctx?.model?.provider === XAI_PROVIDER_ID ? ctx.model.id : undefined,
+    ctx?.model?.provider === providerId ? ctx.model.id : undefined,
     DEFAULT_XAI_MODEL,
     ...getXaiRuntimeModels().map((model) => model.id),
   ].filter(
@@ -151,52 +165,83 @@ function xaiRegistryCandidateIds(ctx: any): string[] {
   );
 }
 
-function legacyStoredOAuthAccess(registry: any): string | null | undefined {
-  if (typeof registry?.authStorage?.get !== "function") return undefined;
+type LegacyStoredAuth =
+  | { state: "unavailable" | "missing" | "non-oauth" }
+  | { state: "oauth"; access: string };
+
+function legacyStoredAuth(registry: any, providerId: XaiToolCompatibleProviderId): LegacyStoredAuth {
+  if (typeof registry?.authStorage?.get !== "function") return { state: "unavailable" };
   try {
-    const stored = registry.authStorage.get(XAI_PROVIDER_ID);
+    const stored = registry.authStorage.get(providerId);
+    if (stored === undefined) return { state: "missing" };
     return stored?.type === "oauth"
       && typeof stored.access === "string"
       && stored.access
-      ? stored.access
-      : null;
+      ? { state: "oauth", access: stored.access }
+      : { state: "non-oauth" };
   } catch {
-    return null;
+    return { state: "non-oauth" };
   }
 }
 
-function hasRuntimeApiKeyOverride(registry: any): boolean {
+function hasRuntimeApiKeyOverride(registry: any, providerId: XaiToolCompatibleProviderId): boolean {
   if (typeof registry?.getProviderAuthStatus !== "function") return false;
   try {
-    return registry.getProviderAuthStatus(XAI_PROVIDER_ID)?.source === "runtime";
+    return registry.getProviderAuthStatus(providerId)?.source === "runtime";
   } catch {
     return true;
   }
 }
 
-function registryModelUsesOAuth(registry: any, model: any): boolean {
+function registryModelUsesOAuth(
+  registry: any,
+  providerId: XaiToolCompatibleProviderId,
+  model: any,
+): boolean {
   try {
     if (registry.isUsingOAuth(model) !== true) return false;
-    const legacyAccess = legacyStoredOAuthAccess(registry);
-    if (legacyAccess !== undefined) return legacyAccess !== null;
+    const stored = legacyStoredAuth(registry, providerId);
+    if (stored.state !== "unavailable") return stored.state === "oauth";
     if (typeof registry.getProviderAuthStatus !== "function") return false;
-    const status = registry.getProviderAuthStatus(XAI_PROVIDER_ID);
+    const status = registry.getProviderAuthStatus(providerId);
     return status?.configured === true && status.source === "stored";
   } catch {
     return false;
   }
 }
 
-function credentialFromResolvedAuth(auth: any): XaiCredential | null {
+function providerHasNonOAuthCredential(
+  registry: any,
+  providerId: XaiToolCompatibleProviderId,
+  models: readonly any[],
+): boolean {
+  if (hasRuntimeApiKeyOverride(registry, providerId)) return true;
+  const stored = legacyStoredAuth(registry, providerId);
+  if (stored.state === "non-oauth") return true;
+  if (stored.state === "oauth") return false;
+  if (typeof registry?.getProviderAuthStatus !== "function") return false;
+  try {
+    const status = registry.getProviderAuthStatus(providerId);
+    return status?.configured === true
+      && !models.some((model) => registryModelUsesOAuth(registry, providerId, model));
+  } catch {
+    return true;
+  }
+}
+
+function credentialFromResolvedAuth(
+  auth: any,
+  kind: XaiCredential["kind"] = "oauth-session",
+): XaiCredential | null {
   if (auth?.ok && typeof auth.apiKey === "string" && auth.apiKey) {
-    return { kind: "oauth-session", token: auth.apiKey };
+    return { kind, token: auth.apiKey };
   }
   const authorization =
     auth?.ok && typeof auth.headers?.Authorization === "string"
       ? auth.headers.Authorization
       : "";
   return authorization.toLowerCase().startsWith("bearer ")
-    ? { kind: "oauth-session", token: authorization.slice("bearer ".length) }
+    ? { kind, token: authorization.slice("bearer ".length) }
     : null;
 }
 
@@ -263,7 +308,8 @@ export async function resolveRegistryRequestAuth(
   }
   if (typeof registry?.getProviderAuth === "function") {
     try {
-      return requestAuthFromResolution(await registry.getProviderAuth(XAI_PROVIDER_ID));
+      const providerId = typeof model?.provider === "string" ? model.provider : XAI_PROVIDER_ID;
+      return requestAuthFromResolution(await registry.getProviderAuth(providerId), providerId);
     } catch (error) {
       return {
         ok: false,
@@ -287,12 +333,22 @@ export async function resolvePiManagedXaiCredential(ctx: any): Promise<XaiCreden
   if (typeof registry?.find !== "function" || !registrySupportsRequestAuth(registry, modelRuntime)) {
     return null;
   }
-  for (const modelId of xaiRegistryCandidateIds(ctx)) {
-    const registryModel = registry.find(XAI_PROVIDER_ID, modelId);
-    if (!registryModel) continue;
-    const auth = await resolveRegistryRequestAuth(registry, registryModel, modelRuntime);
-    const credential = credentialFromResolvedAuth(auth);
-    if (credential) return credential;
+  for (const providerId of xaiRegistryProviderIds(ctx)) {
+    for (const modelId of xaiRegistryCandidateIds(ctx, providerId)) {
+      const registryModel = registry.find(providerId, modelId);
+      if (!registryModel) continue;
+      const auth = await resolveRegistryRequestAuth(registry, registryModel, modelRuntime);
+      const kind = providerId === XAI_BUNDLED_PROVIDER_ID
+        && !registryModelUsesOAuth(registry, providerId, registryModel)
+        ? "api-key"
+        : "oauth-session";
+      const credential = credentialFromResolvedAuth(auth, kind);
+      if (credential) {
+        return kind === "oauth-session" && ctx?.model?.provider === XAI_BUNDLED_PROVIDER_ID
+          ? { ...credential, catalogScope: "host" }
+          : credential;
+      }
+    }
   }
   return null;
 }
@@ -311,25 +367,35 @@ export async function resolvePiManagedXaiOAuthCredential(ctx: any): Promise<XaiC
   ) {
     return null;
   }
-  const legacyAccessBefore = legacyStoredOAuthAccess(registry);
-  if (legacyAccessBefore === null || hasRuntimeApiKeyOverride(registry)) {
-    return null;
-  }
-  for (const modelId of xaiRegistryCandidateIds(ctx)) {
-    const registryModel = registry.find(XAI_PROVIDER_ID, modelId);
-    if (!registryModel || !registryModelUsesOAuth(registry, registryModel)) continue;
-    const credential = credentialFromResolvedAuth(
-      await resolveRegistryRequestAuth(registry, registryModel, modelRuntime),
-    );
-    const legacyAccessAfter = legacyStoredOAuthAccess(registry);
-    if (
-      credential
-      && !hasRuntimeApiKeyOverride(registry)
-      && registryModelUsesOAuth(registry, registryModel)
-      && legacyAccessAfter !== null
-      && (legacyAccessAfter === undefined || credential.token === legacyAccessAfter)
-    ) {
-      return credential;
+  for (const providerId of xaiRegistryProviderIds(ctx)) {
+    const registryModels = xaiRegistryCandidateIds(ctx, providerId)
+      .map((modelId) => registry.find(providerId, modelId))
+      .filter(Boolean);
+    if (registryModels.length === 0) continue;
+    const activeProvider = ctx?.model?.provider === providerId;
+    if (providerHasNonOAuthCredential(registry, providerId, registryModels)) {
+      if (activeProvider) return null;
+      continue;
+    }
+    for (const registryModel of registryModels) {
+      if (!registryModelUsesOAuth(registry, providerId, registryModel)) continue;
+      const storedBefore = legacyStoredAuth(registry, providerId);
+      const credential = credentialFromResolvedAuth(
+        await resolveRegistryRequestAuth(registry, registryModel, modelRuntime),
+      );
+      const storedAfter = legacyStoredAuth(registry, providerId);
+      const storedCredentialMatches = storedAfter.state === "unavailable"
+        || (storedAfter.state === "oauth" && credential?.token === storedAfter.access);
+      if (
+        credential
+        && !hasRuntimeApiKeyOverride(registry, providerId)
+        && registryModelUsesOAuth(registry, providerId, registryModel)
+        && storedBefore.state !== "non-oauth"
+        && storedBefore.state !== "missing"
+        && storedCredentialMatches
+      ) {
+        return credential;
+      }
     }
   }
   return null;
@@ -338,32 +404,48 @@ export async function resolvePiManagedXaiOAuthCredential(ctx: any): Promise<XaiC
 /**
  * Return whether Pi currently identifies an xAI registry model as stored OAuth.
  *
- * This uses the public registry facade available across Pi 0.80.1–0.81.0.
+ * This uses the public registry facade available across Pi 0.80.1–0.81.1.
  */
 export function hasPiManagedXaiOAuth(ctx: any): boolean {
   const registry = ctx?.modelRegistry;
-  if (
-    typeof registry?.find !== "function"
-    || typeof registry?.isUsingOAuth !== "function"
-    || hasRuntimeApiKeyOverride(registry)
-  ) {
+  if (typeof registry?.find !== "function" || typeof registry?.isUsingOAuth !== "function") {
     return false;
   }
-  const legacyAccess = legacyStoredOAuthAccess(registry);
-  if (legacyAccess === null) return false;
-  return xaiRegistryCandidateIds(ctx).some((modelId) => {
-    const registryModel = registry.find(XAI_PROVIDER_ID, modelId);
-    return !!registryModel && registryModelUsesOAuth(registry, registryModel);
-  });
+  for (const providerId of xaiRegistryProviderIds(ctx)) {
+    const registryModels = xaiRegistryCandidateIds(ctx, providerId)
+      .map((modelId) => registry.find(providerId, modelId))
+      .filter(Boolean);
+    if (registryModels.length === 0) continue;
+    const activeProvider = ctx?.model?.provider === providerId;
+    if (providerHasNonOAuthCredential(registry, providerId, registryModels)) {
+      if (activeProvider) return false;
+      continue;
+    }
+    if (registryModels.some((model) => registryModelUsesOAuth(registry, providerId, model))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Resolve a tagged xAI OAuth credential from pi context or reusable Grok CLI credentials. */
 export async function resolveXaiCredential(ctx: any): Promise<XaiCredential | null> {
   const managedCredential = await resolvePiManagedXaiCredential(ctx);
   if (managedCredential) return managedCredential;
-  if (ctx?.apiKey) return { kind: "oauth-session", token: ctx.apiKey };
+  if (ctx?.apiKey) {
+    return {
+      kind: ctx?.model?.provider === XAI_BUNDLED_PROVIDER_ID ? "api-key" : "oauth-session",
+      token: ctx.apiKey,
+    };
+  }
 
   const credentials = getGrokAuthCredentials();
   if (!credentials?.access) return null;
-  return { kind: "oauth-session", token: (await ensureFreshXaiCredentials(credentials)).access };
+  const credential: XaiCredential = {
+    kind: "oauth-session",
+    token: (await ensureFreshXaiCredentials(credentials)).access,
+  };
+  return ctx?.model?.provider === XAI_BUNDLED_PROVIDER_ID
+    ? { ...credential, catalogScope: "host" }
+    : credential;
 }

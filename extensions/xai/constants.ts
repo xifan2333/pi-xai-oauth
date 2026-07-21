@@ -58,6 +58,20 @@ export const XAI_CLIENT_VERSION = XAI_PROXY_CLIENT_VERSION;
 export const XAI_USER_AGENT = `${XAI_CLIENT_IDENTIFIER}/${XAI_PACKAGE_VERSION}`;
 export const XAI_GROK_BUILD_REVIEWED_REVISION = "b189869b7755d2b482969acf6c92da3ecfeffd36";
 export const XAI_PROVIDER_ID = "xai-auth";
+export const XAI_BUNDLED_PROVIDER_ID = "xai";
+export const XAI_TOOL_COMPATIBLE_PROVIDER_IDS = [
+  XAI_PROVIDER_ID,
+  XAI_BUNDLED_PROVIDER_ID,
+] as const;
+
+export type XaiToolCompatibleProviderId = (typeof XAI_TOOL_COMPATIBLE_PROVIDER_IDS)[number];
+
+/** Return whether a provider can use this package's opt-in network tools. */
+export function isXaiToolCompatibleProvider(
+  provider: unknown,
+): provider is XaiToolCompatibleProviderId {
+  return XAI_TOOL_COMPATIBLE_PROVIDER_IDS.some((providerId) => provider === providerId);
+}
 export const DEFAULT_XAI_MODEL = "grok-4.5";
 export const DEFAULT_XAI_IMAGE_MODEL = "grok-imagine-image-quality";
 

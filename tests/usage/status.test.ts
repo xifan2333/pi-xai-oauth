@@ -4,7 +4,7 @@ import {
   type XaiUsageSnapshot,
 } from "../../extensions/xai/usage";
 import { commandContext, createExtensionHarness } from "../fixtures/extension-api";
-import { TEST_MODEL } from "../fixtures/models";
+import { BUILTIN_XAI_TEST_MODEL, TEST_MODEL } from "../fixtures/models";
 
 const usage: XaiUsageSnapshot = {
   creditUsagePercent: 25,
@@ -35,10 +35,15 @@ function setup(model: any = TEST_MODEL) {
     signal: undefined,
     modelRegistry: {
       authStorage: {
-        get: () => storedCredential,
+        get: (provider: string) => provider === model.provider ? storedCredential : undefined,
       },
-      find: () => TEST_MODEL,
-      isUsingOAuth: () => storedCredential?.type === "oauth",
+      find: (provider: string, id: string) =>
+        provider === model.provider ? { ...model, provider, id } : undefined,
+      isUsingOAuth: (registryModel: any) =>
+        registryModel?.provider === model.provider && storedCredential?.type === "oauth",
+      getProviderAuthStatus: (provider: string) => provider === model.provider
+        ? { configured: !!storedCredential, source: "stored" }
+        : { configured: false },
     },
     ui: {
       notify(message: string, type?: string) {
@@ -86,6 +91,25 @@ describe("/xai-usage command and status lifecycle", () => {
     await run("enable");
     expect(notifications.at(-1)?.message).toBe("Usage: /xai-usage [status [on|off]]");
   });
+  it("enables status for a built-in xAI model with SuperGrok OAuth", async () => {
+    const state = setup(BUILTIN_XAI_TEST_MODEL);
+
+    await state.run("status on");
+
+    expect(state.fetchUsage).toHaveBeenCalledTimes(1);
+    expect(state.statuses.at(-1)?.text).toBe("xAI 25% used · reset 2026-08-01");
+    expect(state.notifications.at(-1)?.message).toMatch(/status is on/);
+  });
+  it("rejects built-in API-key provenance before usage resolution", async () => {
+    const state = setup(BUILTIN_XAI_TEST_MODEL);
+    state.setStoredCredential({ type: "api_key", key: "BUILTIN_API_KEY" });
+
+    await state.run("status on");
+
+    expect(state.resolveCredential).not.toHaveBeenCalled();
+    expect(state.fetchUsage).not.toHaveBeenCalled();
+    expect(state.notifications.at(-1)?.message).toMatch(/could not be refreshed/);
+  });
 
   it("never treats an unrelated active-model API key as an xAI OAuth bearer", async () => {
     const harness = createExtensionHarness();
@@ -107,7 +131,7 @@ describe("/xai-usage command and status lifecycle", () => {
 
     expect(ctx.modelRegistry.getApiKeyAndHeaders).not.toHaveBeenCalled();
     expect(notifications.at(-1)).toEqual({
-      message: "xAI OAuth credentials are required. Run /login xai-auth first.",
+      message: "xAI OAuth credentials are required. Run /login xai or /login xai-auth first.",
       type: "error",
     });
   });
