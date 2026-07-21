@@ -1,22 +1,20 @@
-# Shared Agent Context — Issue #128
+# Shared Agent Context — Issue #129
 
-**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/128>
-**Linear:** [BLO-11](https://linear.app/blockedpath/issue/BLO-11/gh-128-menu-bridge-open-waits-for-picker-close-before-done-4s-false)
-**Series:** [BLO-10](https://linear.app/blockedpath/issue/BLO-10/pi-xai-oauth-menu-bridge-hardening-series-github-128-131) / GitHub #128–#131
-**Branch:** `fix/128-menu-bridge-picker-timeout`
+**Issue:** <https://github.com/BlockedPath/pi-xai-oauth/issues/129>
+**Linear:** [BLO-12](https://linear.app/blockedpath/issue/BLO-12/gh-129-menu-bridge-replies-oktrue-even-when-handlexaitoolsargs)
+**Series:** BLO-10 / GitHub #128–#131
+**Branch:** `fix/129-menu-bridge-honest-ok`
 
 ## Problem
 
-`registerXaiToolsCommand` listens on `pi-clickable-menu:xai-tools`. For `action: "open"` it awaited `handleXaiToolsArgs` / `showXaiToolPicker` and only then called `done({ ok: true })`. `pi-clickable-menu` treats a missing `done` within ~4 seconds as bridge failure, so users who keep the picker open get a false “No xAI tools bridge response” error.
+`handleXaiToolsArgs` reported ordinary rejections only through `ctx.ui.notify` and returned `void`. The menu bridge therefore replied `{ ok: true }` after invalid tools, non-xAI enables, registry failures, or unavailable vision routing.
 
 ## Fix
 
-Validate launch (active xAI model + `hasUI`), `reply({ ok: true })`, then await `showXaiToolPicker` without holding `done`. Post-launch picker errors notify only.
+Return a small shared command result and pass it unchanged to bridge `done` for `status`, `enable`, and `disable`. Keep slash-command notifications and issue #128's prevalidated, early `open` acknowledgement unchanged.
 
-## Follow-ups (out of scope)
+## Focus
 
-| Issue | Topic |
-| --- | --- |
-| #129 | Forward real success/failure through `done` for status/enable/disable |
-| #130 | Expand bridge unit coverage |
-| #131 | Document/share bridge contract |
+- Production: `extensions/xai/tools/commands.ts`
+- Regressions: `tests/tools/commands.test.ts`
+- Release note: `CHANGELOG.md`

@@ -23,6 +23,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ### Fixed
 
+- Fixed the `pi-clickable-menu:xai-tools` bridge so `status`, `enable`, and `disable` return the shared command handler's actual success or failure instead of acknowledging toast-only failures as successful.
 - Fixed the `pi-clickable-menu:xai-tools` bridge so `action: "open"` acknowledges `done` when the interactive picker is accepted for launch, instead of waiting until the picker closes (avoids the menu host's ~4s false timeout).
 - Consolidated duplicate `xai_web_search` and Grok-native `web_search` registrations into one collision-safe, opt-in `web_search` picker entry. The old `xai_web_search` command spelling remains an input-only compatibility alias, and the public name is still never registered globally.
 - Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
