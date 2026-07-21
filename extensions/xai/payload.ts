@@ -251,6 +251,41 @@ function isAssistantResponseItem(value: unknown): boolean {
   return item.type === "reasoning" || item.type === "function_call";
 }
 
+/**
+ * Vision-routing descriptions are request-ephemeral and never enter session
+ * history. Only a terminal assistant message proves the source model already
+ * consumed prior visual context. Pi flattens each assistant response into one
+ * contiguous segment of reasoning, message, and function-call items, preserving
+ * their original content order.
+ */
+function isAssistantMessage(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  return (value as Record<string, unknown>).role === "assistant";
+}
+
+function assistantMessagesInToolCallSegments(input: readonly unknown[]): boolean[] {
+  const inToolCallSegment = new Array<boolean>(input.length).fill(false);
+  for (let index = 0; index < input.length;) {
+    if (!isAssistantResponseItem(input[index])) {
+      index++;
+      continue;
+    }
+    const start = index;
+    let hasFunctionCall = false;
+    let end = index;
+    for (; end < input.length && isAssistantResponseItem(input[end]); end++) {
+      const item = input[end] as Record<string, unknown>;
+      if (item.type === "function_call") hasFunctionCall = true;
+    }
+    index = end;
+    if (!hasFunctionCall) continue;
+    for (let segmentIndex = start; segmentIndex < end; segmentIndex++) {
+      if (isAssistantMessage(input[segmentIndex])) inToolCallSegment[segmentIndex] = true;
+    }
+  }
+  return inToolCallSegment;
+}
+
 const OMIT_CONSUMED_VISION_IMAGE = Symbol("omit-consumed-xai-vision-image");
 
 interface StrippedVisionImages {
@@ -319,7 +354,7 @@ function stripConsumedComputerScreenshot(item: Record<string, any>): Record<stri
   return { ...item, output: { type: "computer_screenshot" } };
 }
 
-/** Remove image inputs consumed by a later assistant output from a canonical Responses payload. */
+/** Remove image inputs consumed by a later terminal assistant message from a canonical Responses payload. */
 export function omitConsumedXaiResponsesVisionImages(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -327,10 +362,13 @@ export function omitConsumedXaiResponsesVisionImages(
 
   const input = payload.input as unknown[];
   const hasLaterAssistantOutput = new Array<boolean>(input.length).fill(false);
-  let assistantOutputSeen = false;
+  const messageInToolCallSegment = assistantMessagesInToolCallSegments(input);
+  let assistantMessageSeen = false;
   for (let index = input.length - 1; index >= 0; index--) {
-    hasLaterAssistantOutput[index] = assistantOutputSeen;
-    if (isAssistantResponseItem(input[index])) assistantOutputSeen = true;
+    hasLaterAssistantOutput[index] = assistantMessageSeen;
+    if (isAssistantMessage(input[index]) && !messageInToolCallSegment[index]) {
+      assistantMessageSeen = true;
+    }
   }
 
   let changed = false;
