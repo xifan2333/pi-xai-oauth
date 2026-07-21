@@ -148,7 +148,7 @@ export default async function (pi: ExtensionAPI) {
       deferredRetryAfter = Date.now() + 5_000;
       return;
     }
-    const auth = await resolveRegistryRequestAuth(ctx.modelRegistry, lookupModel);
+    const auth = await resolveRegistryRequestAuth(ctx.modelRegistry, lookupModel, ctx?.modelRuntime);
     const authorization = auth?.ok && typeof auth.headers?.Authorization === "string"
       ? auth.headers.Authorization
       : "";

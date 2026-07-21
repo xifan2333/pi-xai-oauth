@@ -10,14 +10,14 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
-- Added ModelRuntime re-registration coverage proving a refreshed extension catalog replaces stale registered models, plus registry-facade request-auth projection tests for Pi 0.80.8+ `getApiKeyAndHeaders` / `getProviderAuth`.
+- Added ModelRuntime re-registration and stale `models-store.json` precedence coverage, plus request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
 
 ### Changed
 
 - Recorded the package-scope decision to keep provider-neutral goal/plan workflows, autonomous continuation, runtime plan management, and write-restriction policy out of `pi-xai-oauth`; see [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md).
 - Reviewed Pi 0.80.8 through 0.81.0 and adopted 0.81.0 as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum.
 - Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.0.
-- Centralized extension request-auth resolution through the ModelRegistry facade that projects `ModelRuntime.getAuth`, with a provider-scoped `getProviderAuth` fallback when only a provider id is available.
+- Migrated extension request-auth resolution to prefer `ModelRuntime.getAuth` when the host exposes it, then the ModelRegistry `getApiKeyAndHeaders` / `getProviderAuth` projections for older supported boundaries.
 - Deferred adopting Pi's `refreshModels(context)` provider hook: account-bound `/models-v2` discovery still needs login-generation tracking, force-refresh after credential switch, and package-owned token-free cache TTL/stale policy that the generic hook does not replace.
 
 ### Fixed
