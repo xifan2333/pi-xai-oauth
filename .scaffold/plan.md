@@ -14,7 +14,7 @@ Publish the listener-owned v1 contract for `pi-clickable-menu:xai-tools` and clo
 3. [x] Validate raw request fields before dispatch and reply exactly once to malformed requests that provide a callable `done`.
 4. [x] Add focused malformed-payload regressions and update release notes/state.
 5. [x] Run focused tests, typecheck, full gates, exact compatibility boundaries, and independent review.
-6. [ ] Commit, push, and open a PR that closes #131.
+6. [x] Commit, push, and open a PR that closes #131.
 
 ## Validation Contract
 

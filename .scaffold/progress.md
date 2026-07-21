@@ -20,11 +20,9 @@
 - [x] Package dry-run includes the protocol doc and excludes `.agent-task.md`.
 - [x] Final independent review reports no remaining blockers or fixes worth doing now.
 - [x] Final pi-lens session diagnostics report no blocking issues.
+- [x] Committed and pushed the implementation on `docs/131-bridge-contract`.
+- [x] Opened PR #140 with `Closes #131`.
 
-## In Progress
+## Delivery
 
-- [ ] Commit, push, and open the PR.
-
-## Next
-
-Commit the reviewed green diff and open a PR that closes #131.
+PR: https://github.com/BlockedPath/pi-xai-oauth/pull/140
