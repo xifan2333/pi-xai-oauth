@@ -60,12 +60,40 @@ const refreshedProviderConfig = {
   ],
 };
 
+const baselineModelConfig = {
+  id: "baseline-model",
+  name: "Baseline model",
+  reasoning: false,
+  input: ["text"] as ("text" | "image")[],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 1_000,
+  maxTokens: 100,
+};
+
 function codingAgentApi(): any {
   return PiCodingAgent as any;
 }
 
 function hasModelRuntime(): boolean {
   return typeof codingAgentApi().ModelRuntime === "function";
+}
+
+/**
+ * Mirror Pi 0.81.0 remoteModels(): discard a persisted store entry when the
+ * local catalog is newer than the store's lastModified watermark.
+ */
+function modelsFromStoreIfNewerThanLocal(
+  stored: { models?: any[]; lastModified?: number } | undefined,
+  localLastModified: number,
+): any[] | undefined {
+  if (!stored?.models?.length) return undefined;
+  if (
+    stored.lastModified === undefined
+    || stored.lastModified <= localLastModified
+  ) {
+    return undefined;
+  }
+  return stored.models;
 }
 
 beforeEach(async () => {
@@ -121,7 +149,7 @@ describe("ModelRegistry re-registration precedence", () => {
     expect(ids).toEqual(["grok-4.5", "new-entitled"]);
   });
 
-  it("does not let a stale models-store.json catalog override extension registration", async () => {
+  it("discards a stale models-store.json overlay when the local catalog is newer", async () => {
     if (!hasModelRuntime()) {
       expect(true).toBe(true);
       return;
@@ -133,6 +161,8 @@ describe("ModelRegistry re-registration precedence", () => {
     const modelsPath = join(agentDir, "models.json");
     const modelsStorePath = join(agentDir, "models-store.json");
     await writeFile(modelsPath, JSON.stringify({ providers: {} }));
+
+    // Store watermark is older than the local catalog mtime used below.
     await writeFile(
       modelsStorePath,
       JSON.stringify({
@@ -151,33 +181,107 @@ describe("ModelRegistry re-registration precedence", () => {
               maxTokens: 100,
             },
           ],
-          checkedAt: Date.now(),
-          lastModified: Date.now() - 1_000,
+          checkedAt: Date.now() - 10_000,
+          lastModified: 1,
         },
       }),
     );
 
+    let storedCredential: any = {
+      type: "oauth",
+      access: "store-oauth-access",
+      refresh: "refresh",
+      expires: Date.now() + 60_000,
+    };
+    const credentialStore = {
+      async read(providerId: string) {
+        return providerId === "xai-auth" ? storedCredential : undefined;
+      },
+      async list() {
+        return storedCredential
+          ? [{ providerId: "xai-auth", type: storedCredential.type }]
+          : [];
+      },
+      async modify(_providerId: string, update: (current: any) => Promise<any>) {
+        const next = await update(storedCredential);
+        if (next !== undefined) storedCredential = next;
+        return storedCredential;
+      },
+      async delete() {
+        storedCredential = undefined;
+      },
+    };
+
     const runtime = await codingAgent.ModelRuntime.create({
+      credentials: credentialStore,
       modelsPath,
       modelsStorePath,
-      allowModelNetwork: false,
+      allowModelNetwork: true,
     });
     const registry = new codingAgent.ModelRegistry(runtime);
 
-    registry.registerProvider("xai-auth", refreshedProviderConfig);
-    await runtime.refresh({ allowNetwork: false });
+    // Local catalog is newer than store lastModified:1, so remoteModels-style
+    // policy must discard the persisted overlay and keep the local baseline.
+    const localCatalogModifiedAt = Date.now();
+    let refreshCalls = 0;
+    let sawStaleStore = false;
 
-    expect(registry.find("xai-auth", "stale-from-store")).toBeUndefined();
-    expect(registry.find("xai-auth", "grok-4.5")).toMatchObject({
-      id: "grok-4.5",
+    registry.registerProvider("xai-auth", {
+      name: "xAI store precedence",
       baseUrl: "https://cli-chat-proxy.grok.com/v1",
+      api: "openai-responses",
+      authHeader: true,
+      oauth: {
+        name: "xAI store precedence",
+        async login() {
+          throw new Error("not used");
+        },
+        async refreshToken(credentials: any) {
+          return credentials;
+        },
+        getApiKey(credentials: any) {
+          return credentials.access;
+        },
+      },
+      models: [baselineModelConfig],
+      async refreshModels(context: {
+        store: { read: () => Promise<any> };
+        allowNetwork?: boolean;
+      }) {
+        refreshCalls += 1;
+        const stored = await context.store.read();
+        if (stored?.models?.some((model: { id: string }) => model.id === "stale-from-store")) {
+          sawStaleStore = true;
+        }
+        const fromStore = modelsFromStoreIfNewerThanLocal(stored, localCatalogModifiedAt);
+        if (fromStore) {
+          return fromStore.map((model) => ({
+            id: model.id,
+            name: model.name ?? model.id,
+            reasoning: !!model.reasoning,
+            input: model.input ?? ["text"],
+            cost: model.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: model.contextWindow ?? 1_000,
+            maxTokens: model.maxTokens ?? 100,
+          }));
+        }
+        return [baselineModelConfig];
+      },
+    });
+
+    await runtime.refresh({ allowNetwork: true, force: true });
+
+    expect(refreshCalls).toBeGreaterThan(0);
+    expect(sawStaleStore).toBe(true);
+    expect(registry.find("xai-auth", "stale-from-store")).toBeUndefined();
+    expect(registry.find("xai-auth", "baseline-model")).toMatchObject({
+      id: "baseline-model",
     });
     expect(
       runtime
         .getModels("xai-auth")
-        .map((model: { id: string }) => model.id)
-        .sort(),
-    ).toEqual(["grok-4.5", "new-entitled"]);
+        .map((model: { id: string }) => model.id),
+    ).toEqual(["baseline-model"]);
   });
 
   it("prefers ModelRuntime.getAuth over the legacy getApiKeyAndHeaders projection", async () => {

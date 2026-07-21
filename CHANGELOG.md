@@ -10,7 +10,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
-- Added ModelRuntime re-registration and stale `models-store.json` precedence coverage, plus request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
+- Added ModelRuntime re-registration coverage, a store-backed models-store precedence regression (discard stale overlays when the local catalog is newer), and request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
 
 ### Changed
 
