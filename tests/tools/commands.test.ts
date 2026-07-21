@@ -332,6 +332,53 @@ describe("/xai-tools command", () => {
     expect(notices.at(-1).message).toMatch(/may use xAI credits/);
   });
 
+  it("acknowledges menu bridge open before the interactive picker closes", async () => {
+    const { h, notices } = setup();
+    let releasePicker!: () => void;
+    const pickerHeldOpen = new Promise<void>((resolve) => {
+      releasePicker = resolve;
+    });
+    let pickerClosed = false;
+
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "open",
+        ctx: commandContext(TEST_MODEL, notices, {
+          ui: {
+            notify(message: string, type?: string) {
+              notices.push({ message, type });
+            },
+            select: async () => undefined,
+            custom: async () => {
+              await pickerHeldOpen;
+              pickerClosed = true;
+            },
+          },
+        }),
+        done: resolve,
+      });
+    });
+
+    // done must win before the held picker finishes (menu host ~4s timeout).
+    expect(result).toEqual({ ok: true });
+    expect(pickerClosed).toBe(false);
+    releasePicker();
+  });
+
+  it("rejects menu bridge open when no xAI model is active", async () => {
+    const { h, notices } = setup();
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "open",
+        ctx: commandContext(undefined, notices),
+        done: resolve,
+      });
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Select an xAI\/Grok model/i);
+    expect(notices.at(-1).message).toMatch(/Select an xAI\/Grok model/i);
+  });
+
   it("replies with an error when the bridge lacks a UI context", async () => {
     const { h } = setup();
     const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {

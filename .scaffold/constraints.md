@@ -1,21 +1,19 @@
-# Constraints & Safety Rules — Issue #118
+# Constraints & Safety Rules — Issue #128
 
-## Scaffold-only scope
+## Scope
 
-- Touch only `.scaffold/*` for this issue.
-- Do not change production code, tests, modality docs, changelog, package version, or OAuth behavior.
-- Do not invent unmerged work or restate closed issues as open.
+- Fix menu-bridge `open` ack timing only (`extensions/xai/tools/commands.ts` + focused tests + CHANGELOG/scaffold).
+- Do not implement #129 (honest `done.ok` for all toast-only failures), #130 (full bridge coverage), or #131 (cross-package contract docs) in this PR.
 
-## Progress content rules
+## Must
 
-- Keep security-relevant vision-routing decisions: converter-only image advertisement, truthful text-only metadata elsewhere, grant capture/invalidation, consumed historical-image pruning (including post-hook recursive scrubbing), current-unconsumed image routing, and no history/tools/ciphertext on the vision target.
-- Keep final validation evidence (test counts, typecheck, exact Pi boundaries, independent review outcome).
-- Remove transient execution narration and duplicate converter/metadata/historical-image/validation bullets.
-- Never leave completed work under `In Progress`.
-- Keep branch and delivery state aligned with post-merge `origin/main`.
+- Call `done({ ok: true })` when interactive open is accepted for launch, before awaiting picker close.
+- Pre-validate active xAI model and UI before ack; reply `ok: false` when open cannot launch.
+- Never re-call `done` after a successful launch ack (post-launch failures stay in-UI).
+- Never log secrets, tokens, or raw bridge payloads.
 
-## Non-goals
+## Must not
 
-- Do not re-open or re-implement vision-routing, pruning, or modality-doc work.
-- Do not treat `.scaffold/` as an authoritative security control.
-- Do not rewrite git history of earlier PRs.
+- Change slash-command `/xai-tools` interactive behavior for humans typing the command.
+- Widen scope into vision routing, OAuth, catalog, or unrelated tools.
+- Skip error handling on OAuth refresh (N/A here; do not regress elsewhere).

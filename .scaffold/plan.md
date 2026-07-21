@@ -1,24 +1,22 @@
-# Implementation Plan — Issue #118: Consolidate vision-routing scaffold progress
+# Implementation Plan — Issue #128: Menu bridge open ack before picker close
 
-**Branch:** `chore/118-scaffold-progress`
-**Base:** `origin/main` at `24df74a`
+**Branch:** `fix/128-menu-bridge-picker-timeout`
+**Base:** `origin/main`
 
 ## Goal
 
-Replace the repeated vision-routing progress narration with a short post-merge record that keeps security decisions and final validation evidence, and points branch/delivery state at current main.
+Stop the `pi-clickable-menu:xai-tools` bridge from awaiting interactive picker close before `done({ ok: true })`, which false-triggers the menu host’s ~4s timeout.
 
 ## Phases
 
-1. [x] Confirm issue scope, blockers, and that the vision-routing series is already on `origin/main`.
-2. [x] Fast-forward `chore/118-scaffold-progress` onto current main.
-3. [x] Rewrite `.scaffold/progress.md` into consolidated completed/delivery entries with no completed work under `In Progress`.
-4. [x] Retarget plan, context, and constraints to issue #118 scaffold-only scope.
-5. [x] Open a PR that closes #118 (and note #119 already landed on main).
+1. [x] Confirm issue scope (#128 only; #129–#131 follow in series order).
+2. [x] Ack `open` on launch after pre-validation (active xAI model + UI), then await picker without holding `done`.
+3. [x] Add regression: `done` resolves while a held picker is still open; reject open with no model.
+4. [x] CHANGELOG + focused Vitest for `tests/tools/commands.test.ts`.
 
 ## Validation Contract
 
-- No completed work remains under `In Progress`.
-- Branch and delivery state match post-merge `origin/main`.
-- Converter, metadata, historical-image, and validation details are not repeated across many bullets.
-- Security-relevant decisions and final validation results remain recorded.
-- Only `.scaffold/*` changes; no production behavior or docs policy changes.
+- `action: "open"` calls `done` when the picker is accepted for launch, not after close.
+- Missing xAI model / missing UI still reply failure before any interactive wait.
+- Post-launch picker errors notify in-UI only (do not re-call `done`).
+- Focused tools command tests pass.

@@ -368,8 +368,36 @@ export function registerXaiToolsCommand(
 		const action = (data.action ?? "open").toLowerCase();
 		try {
 			if (action === "open") {
-				await handleXaiToolsArgs(pi, visionRouting, "", ctx);
+				// Menu hosts (pi-clickable-menu) treat a missing done within ~4s as
+				// bridge failure. Acknowledge once the interactive picker is accepted
+				// for launch — do not wait for the user to close it.
+				const model = activeXaiModel(ctx);
+				if (!model) {
+					const error = "Select an xAI/Grok model before opening /xai-tools.";
+					ctx.ui.notify(error, "error");
+					reply({ ok: false, error });
+					return;
+				}
+				if (!ctx.hasUI) {
+					ctx.ui.notify(
+						`${XAI_TOOLS_USAGE} Interactive selection requires TUI or RPC mode.`,
+						"error",
+					);
+					reply({ ok: false, error: "Interactive selection requires TUI or RPC mode." });
+					return;
+				}
 				reply({ ok: true });
+				try {
+					await showXaiToolPicker(pi, ctx, model);
+				} catch (err) {
+					// done already acknowledged launch; surface post-launch failures in-UI only.
+					const message = err instanceof Error ? err.message : String(err);
+					try {
+						ctx.ui.notify(message, "error");
+					} catch {
+						// ignore notify failures after ack
+					}
+				}
 				return;
 			}
 			if (action === "status") {
