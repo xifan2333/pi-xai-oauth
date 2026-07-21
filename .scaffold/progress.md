@@ -20,8 +20,10 @@
 
 ## In Progress
 
-- [ ] Commit the green changes and open a PR closing GitHub #130.
+- None.
 
-## Next
+## Delivery
 
-Commit the validated changes, push this branch, and open the closing PR.
+- Commit: `643cfc7` (`test(tools): expand menu bridge coverage`)
+- Pull request: https://github.com/BlockedPath/pi-xai-oauth/pull/139
+- PR body closes GitHub #130.

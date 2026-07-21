@@ -13,7 +13,7 @@ Expand the `pi-clickable-menu:xai-tools` bridge regression matrix after issues #
 2. [x] Define focused cases for default/explicit open, status, disable, empty and invalid tools, unknown actions, throwing callbacks, and repeated registration.
 3. [x] Add the regression matrix and the smallest production fix required for single-listener re-registration.
 4. [x] Run focused tests, typecheck, full gates, exact Pi boundaries, diagnostics, and independent review.
-5. [ ] Commit and open a PR that closes GitHub #130.
+5. [x] Commit and open a PR that closes GitHub #130.
 
 ## Validation Contract
 
