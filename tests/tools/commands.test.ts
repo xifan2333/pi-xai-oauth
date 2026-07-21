@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME,
   XAI_GROK_NATIVE_WEB_SEARCH_NAME,
@@ -527,7 +527,6 @@ describe("/xai-tools command", () => {
     expect(notices.some(({ message }) => message.includes("private-picker-detail"))).toBe(false);
   });
 
-);
 
   it("reports status through the menu bridge notification path", async () => {
     const { h, notices } = setup();
@@ -717,7 +716,7 @@ describe("/xai-tools command", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "Unknown xAI tools bridge action: toggle",
+      error: "Unknown xAI tools bridge action.",
     });
     expect(notices).toEqual([]);
   });
