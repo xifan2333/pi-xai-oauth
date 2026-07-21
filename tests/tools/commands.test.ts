@@ -327,18 +327,48 @@ describe("/xai-tools command", () => {
     expect(typeof h.api.events.on).toBe("function");
     expect(typeof h.api.events.emit).toBe("function");
 
-    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
-        action: "enable",
-        tool: "xai_generate_image",
-        ctx: commandContext(TEST_MODEL, notices),
-        done: resolve,
-      });
+    const result = await emitMenuRequest(h, {
+      action: "enable",
+      tool: "xai_generate_image",
+      ctx: commandContext(TEST_MODEL, notices),
     });
 
     expect(result).toEqual({ ok: true });
     expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
     expect(notices.at(-1).message).toMatch(/may use xAI credits/);
+  });
+
+  it("reports status through the menu bridge notification path", async () => {
+    const { h, notices } = setup();
+
+    const result = await emitMenuRequest(h, {
+      action: "status",
+      ctx: commandContext(TEST_MODEL, notices),
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(notices).toEqual([
+      {
+        message: expect.stringMatching(/^xAI API tools for grok-4\.5:/),
+        type: "info",
+      },
+    ]);
+  });
+
+  it("disables an enabled tool through the menu bridge", async () => {
+    const { h, notices, run } = setup();
+    await run("enable xai_generate_image");
+    notices.length = 0;
+
+    const result = await emitMenuRequest(h, {
+      action: "disable",
+      tool: "xai_generate_image",
+      ctx: commandContext(TEST_MODEL, notices),
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(false);
+    expect(notices).toEqual([{ message: "Disabled xai_generate_image.", type: "info" }]);
   });
 
   it.each([
@@ -386,11 +416,15 @@ describe("/xai-tools command", () => {
     }
   });
 
-  it("rejects a menu bridge enable or disable without a tool", async () => {
+  it.each([
+    ["enable with an omitted tool", "enable", undefined],
+    ["disable with an empty tool", "disable", ""],
+    ["enable with a whitespace-only tool", "enable", " "],
+  ])("rejects a menu bridge %s", async (_case, action, tool) => {
     const { h, notices } = setup();
     const result = await emitMenuRequest(h, {
-      action: "disable",
-      tool: " ",
+      action,
+      tool,
       ctx: commandContext(TEST_MODEL, notices),
     });
 
@@ -398,19 +432,28 @@ describe("/xai-tools command", () => {
       ok: false,
       error: "xAI tools bridge enable/disable requires tool.",
     });
+    expect(notices).toEqual([]);
   });
 
-  it("acknowledges menu bridge open before the interactive picker closes", async () => {
+  it.each([
+    ["omitted action", undefined],
+    ["explicit open", "open"],
+  ])("acknowledges menu bridge %s before the interactive picker closes", async (_case, action) => {
     const { h, notices } = setup();
     let releasePicker!: () => void;
     const pickerHeldOpen = new Promise<void>((resolve) => {
       releasePicker = resolve;
     });
+    let finishPicker!: () => void;
+    const pickerFinished = new Promise<void>((resolve) => {
+      finishPicker = resolve;
+    });
     let pickerClosed = false;
+    const replies: Array<{ ok: boolean; error?: string }> = [];
 
-    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    const reply = new Promise<{ ok: boolean; error?: string }>((resolve) => {
       h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
-        action: "open",
+        ...(action === undefined ? {} : { action }),
         ctx: commandContext(TEST_MODEL, notices, {
           ui: {
             notify(message: string, type?: string) {
@@ -420,17 +463,72 @@ describe("/xai-tools command", () => {
             custom: async () => {
               await pickerHeldOpen;
               pickerClosed = true;
+              finishPicker();
             },
           },
         }),
-        done: resolve,
+        done(result: { ok: boolean; error?: string }) {
+          replies.push(result);
+          resolve(result);
+        },
       });
     });
 
-    // done must win before the held picker finishes (menu host ~4s timeout).
-    expect(result).toEqual({ ok: true });
+    // done must win before the held picker finishes (menu host timeout is ~4s).
+    await expect(reply).resolves.toEqual({ ok: true });
     expect(pickerClosed).toBe(false);
     releasePicker();
+    await pickerFinished;
+    await Promise.resolve();
+    expect(replies).toEqual([{ ok: true }]);
+  });
+
+  it("isolates a throwing done callback and still launches the accepted picker", async () => {
+    const { h, notices } = setup();
+    let doneCalls = 0;
+    let markPickerLaunched!: () => void;
+    const pickerLaunched = new Promise<void>((resolve) => {
+      markPickerLaunched = resolve;
+    });
+
+    expect(() => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "open",
+        ctx: commandContext(TEST_MODEL, notices, {
+          ui: {
+            notify(message: string, type?: string) {
+              notices.push({ message, type });
+            },
+            select: async () => undefined,
+            custom: async () => {
+              markPickerLaunched();
+            },
+          },
+        }),
+        done() {
+          doneCalls++;
+          throw new Error("menu host closed");
+        },
+      });
+    }).not.toThrow();
+
+    await pickerLaunched;
+    expect(doneCalls).toBe(1);
+    expect(notices).toEqual([]);
+  });
+
+  it("rejects an unknown menu bridge action", async () => {
+    const { h, notices } = setup();
+    const result = await emitMenuRequest(h, {
+      action: "toggle",
+      ctx: commandContext(TEST_MODEL, notices),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Unknown xAI tools bridge action: toggle",
+    });
+    expect(notices).toEqual([]);
   });
 
   it("rejects menu bridge open when no xAI model is active", async () => {
@@ -457,6 +555,27 @@ describe("/xai-tools command", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/command UI context/i);
+  });
+
+  it("replaces the prior menu bridge listener when registered twice", async () => {
+    const { h, notices } = setup();
+    registerXaiToolsCommand(h.api);
+    const replies: Array<{ ok: boolean; error?: string }> = [];
+
+    await new Promise<void>((resolve) => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "status",
+        ctx: commandContext(TEST_MODEL, notices),
+        done(result: { ok: boolean; error?: string }) {
+          replies.push(result);
+        },
+      });
+      setImmediate(resolve);
+    });
+
+    expect(replies).toEqual([{ ok: true }]);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ type: "info" });
   });
 
   it("skips bridge registration when pi.events.on is missing", () => {

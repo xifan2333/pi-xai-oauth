@@ -1,20 +1,20 @@
-# Constraints & Safety Rules — Issue #129
+# Constraints & Safety Rules — Issue #130
 
 ## Scope
 
-- Fix truthful `done` results for the existing xAI tools menu bridge.
-- Limit production changes to `extensions/xai/tools/commands.ts`; add focused tests and release/state notes.
+- Expand unit coverage for the existing `pi-clickable-menu:xai-tools` bridge.
+- Limit changes to command tests, the bridge registration implementation when correctness requires it, and persistent state notes.
 
 ## Must
 
-- Preserve all existing slash-command UI notifications.
-- Forward actual shared-handler outcomes for `status`, `enable`, and `disable`.
-- Preserve issue #128's early `open` launch acknowledgement and exactly-once reply behavior.
-- Keep non-xAI disable semantics: remove only the requested authorization and preserve others.
+- Preserve issue #128's early `open` acknowledgement before picker closure.
+- Preserve issue #129's honest `done` results for status, enable, disable, and failures.
+- Isolate throwing host callbacks and avoid duplicate handling after same-API registration.
+- Keep slash-command behavior and UI notifications unchanged.
 - Never log raw bridge payloads, credentials, or authenticated state.
 
 ## Must not
 
-- Re-await picker close before acknowledging `open`.
-- Expand into issue #130's full bridge matrix or issue #131's cross-package documentation.
-- Change OAuth, catalog, transport, or unrelated tool behavior.
+- Work on GitHub #131 documentation or #132 built-in-tool changes.
+- Change OAuth, catalog, transport, routing, or unrelated tool behavior.
+- Add broad fixture behavior when the existing event bus already models the contract.
