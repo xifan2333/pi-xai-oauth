@@ -8,12 +8,12 @@
 - [x] Bridge `open`: ack on launch after model/UI validation; await picker without holding `done`.
 - [x] Regressions: ack-before-picker-close; reject open with no xAI model.
 - [x] CHANGELOG Unreleased fixed entry.
-- [x] Focused `tests/tools/commands.test.ts` (17) + `npm run typecheck` passed.
+- [x] Full `npm test` (44 files / 495 tests + loader) and `npm run typecheck` passed.
 
 ## In Progress
 
 - None.
 
-## Next
+## Delivery
 
-- Commit + PR closing #128 when requested (series follow-ups #129–#131 remain separate).
+- Commit + PR closing #128 (series follow-ups #129–#131 remain separate).
