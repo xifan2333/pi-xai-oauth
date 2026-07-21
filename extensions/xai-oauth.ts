@@ -1,7 +1,7 @@
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { selectXaiModelCatalog, type XaiCatalogSelection } from "./xai/catalog";
-import { getGrokAuthCredentials, getStartupXaiCatalogAuth } from "./xai/auth";
+import { getGrokAuthCredentials, getStartupXaiCatalogAuth, resolveRegistryRequestAuth } from "./xai/auth";
 import { DEFAULT_XAI_MODEL, XAI_PROVIDER_ID } from "./xai/constants";
 import { CURATED_FALLBACK_MODELS, expandXaiCatalogWithAliases, setXaiRuntimeModels, type XaiCatalogModel } from "./xai/models";
 import { createXaiOAuth } from "./xai/oauth";
@@ -144,11 +144,11 @@ export default async function (pi: ExtensionAPI) {
     const lookupModel =
       ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
       currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
-    if (!lookupModel || typeof ctx?.modelRegistry?.getApiKeyAndHeaders !== "function") {
+    if (!lookupModel || !ctx?.modelRegistry) {
       deferredRetryAfter = Date.now() + 5_000;
       return;
     }
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(lookupModel);
+    const auth = await resolveRegistryRequestAuth(ctx.modelRegistry, lookupModel, ctx?.modelRuntime);
     const authorization = auth?.ok && typeof auth.headers?.Authorization === "string"
       ? auth.headers.Authorization
       : "";

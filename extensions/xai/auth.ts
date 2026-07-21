@@ -200,15 +200,97 @@ function credentialFromResolvedAuth(auth: any): XaiCredential | null {
     : null;
 }
 
+/**
+ * Normalize a ModelRuntime.getAuth / getProviderAuth resolution into the stable
+ * extension request-auth shape used by credential helpers.
+ */
+function requestAuthFromResolution(
+  resolution: any,
+  providerId = XAI_PROVIDER_ID,
+): { ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string } {
+  if (!resolution?.auth) {
+    return { ok: false, error: `No API key found for "${providerId}"` };
+  }
+  return {
+    ok: true,
+    apiKey: typeof resolution.auth.apiKey === "string" ? resolution.auth.apiKey : undefined,
+    headers: resolution.auth.headers,
+  };
+}
+
+function resolveAuthRuntime(registry: any, modelRuntime?: any): any | undefined {
+  if (modelRuntime && typeof modelRuntime.getAuth === "function") return modelRuntime;
+  if (registry && typeof registry.getAuth === "function") return registry;
+  if (registry?.modelRuntime && typeof registry.modelRuntime.getAuth === "function") {
+    return registry.modelRuntime;
+  }
+  if (registry?.runtime && typeof registry.runtime.getAuth === "function") {
+    return registry.runtime;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve request auth preferring ModelRuntime.getAuth when the host exposes it.
+ *
+ * Extension event contexts historically only supply `ctx.modelRegistry`. On
+ * Pi 0.80.8+, that registry projects `ModelRuntime.getAuth` through
+ * `getApiKeyAndHeaders` / `getProviderAuth`. Prefer an explicit runtime
+ * `getAuth` surface when present (including future `ctx.modelRuntime`), then
+ * the registry projections so the 0.80.1 packed boundary keeps working.
+ */
+export async function resolveRegistryRequestAuth(
+  registry: any,
+  model?: any,
+  modelRuntime?: any,
+): Promise<{ ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string } | null> {
+  const runtime = resolveAuthRuntime(registry, modelRuntime);
+  if (runtime) {
+    try {
+      return requestAuthFromResolution(
+        await runtime.getAuth(model ?? XAI_PROVIDER_ID),
+        typeof model?.provider === "string" ? model.provider : XAI_PROVIDER_ID,
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  if (model && typeof registry?.getApiKeyAndHeaders === "function") {
+    return await registry.getApiKeyAndHeaders(model);
+  }
+  if (typeof registry?.getProviderAuth === "function") {
+    try {
+      return requestAuthFromResolution(await registry.getProviderAuth(XAI_PROVIDER_ID));
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  return null;
+}
+
+function registrySupportsRequestAuth(registry: any, modelRuntime?: any): boolean {
+  return !!resolveAuthRuntime(registry, modelRuntime)
+    || typeof registry?.getApiKeyAndHeaders === "function"
+    || typeof registry?.getProviderAuth === "function";
+}
+
 /** Resolve a tagged xAI credential through pi's managed model registry. */
 export async function resolvePiManagedXaiCredential(ctx: any): Promise<XaiCredential | null> {
-  if (typeof ctx?.modelRegistry?.find !== "function" || typeof ctx?.modelRegistry?.getApiKeyAndHeaders !== "function") {
+  const registry = ctx?.modelRegistry;
+  const modelRuntime = ctx?.modelRuntime;
+  if (typeof registry?.find !== "function" || !registrySupportsRequestAuth(registry, modelRuntime)) {
     return null;
   }
   for (const modelId of xaiRegistryCandidateIds(ctx)) {
-    const registryModel = ctx.modelRegistry.find(XAI_PROVIDER_ID, modelId);
+    const registryModel = registry.find(XAI_PROVIDER_ID, modelId);
     if (!registryModel) continue;
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(registryModel);
+    const auth = await resolveRegistryRequestAuth(registry, registryModel, modelRuntime);
     const credential = credentialFromResolvedAuth(auth);
     if (credential) return credential;
   }
@@ -221,9 +303,10 @@ export async function resolvePiManagedXaiCredential(ctx: any): Promise<XaiCreden
  */
 export async function resolvePiManagedXaiOAuthCredential(ctx: any): Promise<XaiCredential | null> {
   const registry = ctx?.modelRegistry;
+  const modelRuntime = ctx?.modelRuntime;
   if (
     typeof registry?.find !== "function"
-    || typeof registry?.getApiKeyAndHeaders !== "function"
+    || !registrySupportsRequestAuth(registry, modelRuntime)
     || typeof registry?.isUsingOAuth !== "function"
   ) {
     return null;
@@ -236,7 +319,7 @@ export async function resolvePiManagedXaiOAuthCredential(ctx: any): Promise<XaiC
     const registryModel = registry.find(XAI_PROVIDER_ID, modelId);
     if (!registryModel || !registryModelUsesOAuth(registry, registryModel)) continue;
     const credential = credentialFromResolvedAuth(
-      await registry.getApiKeyAndHeaders(registryModel),
+      await resolveRegistryRequestAuth(registry, registryModel, modelRuntime),
     );
     const legacyAccessAfter = legacyStoredOAuthAccess(registry);
     if (
@@ -255,7 +338,7 @@ export async function resolvePiManagedXaiOAuthCredential(ctx: any): Promise<XaiC
 /**
  * Return whether Pi currently identifies an xAI registry model as stored OAuth.
  *
- * This uses the public registry facade available across Pi 0.80.1–0.80.10.
+ * This uses the public registry facade available across Pi 0.80.1–0.81.0.
  */
 export function hasPiManagedXaiOAuth(ctx: any): boolean {
   const registry = ctx?.modelRegistry;

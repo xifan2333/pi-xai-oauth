@@ -37,7 +37,7 @@ This package adds xAI's **account-specific OAuth model catalog** to pi, with **G
 
 > **Latest release:** `pi-xai-oauth` **1.3.6** adds authenticated account-specific model discovery, browser and device OAuth, encrypted reasoning replay, Grok-native local tools, bounded image editing, and explicit subscription usage while hardening xAI routing, payloads, headers, redirects, and entitlement enforcement. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
-> **Compatibility:** 1.3.6 supports aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.81.0`. The exact tested boundaries are 0.80.1 and 0.80.10.
+> **Compatibility:** 1.3.6 supports aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.82.0`. The exact tested boundaries are 0.80.1 and 0.81.0.
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and fix history.
 
@@ -176,13 +176,13 @@ Then optionally configure it as default:
 Both Pi runtime peers use the same bounded range:
 
 ```text
-@earendil-works/pi-ai:            >=0.80.1 <0.81.0
-@earendil-works/pi-coding-agent:  >=0.80.1 <0.81.0
+@earendil-works/pi-ai:            >=0.80.1 <0.82.0
+@earendil-works/pi-coding-agent:  >=0.80.1 <0.82.0
 ```
 
-The lower boundary is **0.80.1**, the first published Pi 0.80 release. It provides the `@earendil-works/pi-ai/compat` transport used by this extension and the matching Pi 0.80 extension-loader contract. The packed package's complete test and typecheck suites run against exact 0.80.1 in CI. The other matrix boundary is exact **0.80.10**, the latest release inside the allowed line when this policy was reviewed. Pi 0.80.8 introduced the unified `ModelRuntime` credential API and replaced the exported `AuthStorage` surface with `readStoredCredential()` for one-off reads; this package supports both the 0.80.1 legacy surface and the 0.80.10 API through a bounded read-only compatibility path.
+The lower boundary is **0.80.1**, the first published Pi 0.80 release. It provides the `@earendil-works/pi-ai/compat` transport used by this extension and the matching Pi 0.80 extension-loader contract. The packed package's complete test and typecheck suites run against exact 0.80.1 in CI. The other matrix boundary is exact **0.81.0**, the latest release inside the allowed line when this policy was reviewed. Pi 0.80.8 introduced the unified `ModelRuntime` credential API and replaced the exported `AuthStorage` surface with `readStoredCredential()` for one-off reads; this package supports both the 0.80.1 legacy surface and the 0.81.0 ModelRegistry projection of `ModelRuntime.getAuth` through a bounded compatibility path.
 
-The exclusive `<0.81.0` upper bound is deliberate. Pi is pre-1.0, so a new minor line may contain breaking API or loader changes; this project does not claim support until that line passes the packed compatibility suite. npm therefore reports a peer-resolution warning or error during installation for older releases such as 0.79.10 and for the untested 0.81 line, rather than allowing a later runtime loader failure.
+The exclusive `<0.82.0` upper bound is deliberate. Pi is pre-1.0, so a new minor line may contain breaking API or loader changes; this project does not claim support until that line passes the packed compatibility suite. npm therefore reports a peer-resolution warning or error during installation for older releases such as 0.79.10 and for the untested 0.82 line, rather than allowing a later runtime loader failure.
 
 Older `pi-xai-oauth` 1.2.4 builds supported Pi 0.79.8's then-current Responses guard. Current code uses the Pi 0.80 compat dispatcher after the 1.3.2 export migration and 1.3.3 loader-resolution fix, so that historical statement is not the current minimum.
 
@@ -751,7 +751,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-Version 1.3.6 requires aligned Pi runtime packages in `>=0.80.1 <0.81.0`, with exact packed-package validation at 0.80.1 and 0.80.10. It adds authenticated model discovery, device OAuth, encrypted reasoning replay, Grok-native tools, bounded image editing, and explicit subscription usage, together with extensive transport and entitlement hardening. See [CHANGELOG.md](CHANGELOG.md) for the complete release notes. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+Version 1.3.6 requires aligned Pi runtime packages in `>=0.80.1 <0.82.0`, with exact packed-package validation at 0.80.1 and 0.81.0. It adds authenticated model discovery, device OAuth, encrypted reasoning replay, Grok-native tools, bounded image editing, and explicit subscription usage, together with extensive transport and entitlement hardening. See [CHANGELOG.md](CHANGELOG.md) for the complete release notes. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .
