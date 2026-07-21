@@ -157,7 +157,7 @@ replacement tests pass alongside the legacy verifier.
 | `verify-compatibility.js:161-213` | one tarball, packed identity/peers/required/forbidden paths | retain `pack` mode; add Vitest config/tests/fixtures/loader smoke to required list | [x] |
 | `verify-compatibility.js:215-269` | unsupported strict failure and forced warning diagnostics | retain `unsupported` mode | [x] |
 | `verify-compatibility.js:271-291` | matrix output and command dispatch | retain plain-Node CLI | [x] |
-| `run-compatibility-matrix.js:34-114` | alias/exact parsing, checked endpoint restriction, one tarball, exact installed Pi pair, packed `npm test` and typecheck | retain clean packed matrix at 0.80.1/0.81.0 | [x] |
+| `run-compatibility-matrix.js:34-114` | alias/exact parsing, checked endpoint restriction, one tarball, exact installed Pi pair, packed `npm test` and typecheck | retain clean packed matrix at 0.80.1/0.81.1 | [x] |
 
 ## Isolation checklist
 

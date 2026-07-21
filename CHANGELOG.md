@@ -16,12 +16,14 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Recorded the package-scope decision to keep provider-neutral goal/plan workflows, autonomous continuation, runtime plan management, and write-restriction policy out of `pi-xai-oauth`; see [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md).
 - Reviewed Pi 0.80.8 through 0.81.0 and adopted 0.81.0 as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum.
-- Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.0.
+- Reviewed Pi 0.81.1 and adopted it as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum and `>=0.80.1 <0.82.0` peer range.
+- Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.1.
 - Migrated extension request-auth resolution to prefer `ModelRuntime.getAuth` when the host exposes it, then the ModelRegistry `getApiKeyAndHeaders` / `getProviderAuth` projections for older supported boundaries.
 - Deferred adopting Pi's `refreshModels(context)` provider hook: account-bound `/models-v2` discovery still needs login-generation tracking, force-refresh after credential switch, and package-owned token-free cache TTL/stale policy that the generic hook does not replace.
 
 ### Fixed
 
+- Fixed the `pi-clickable-menu:xai-tools` bridge so `action: "open"` acknowledges `done` when the interactive picker is accepted for launch, instead of waiting until the picker closes (avoids the menu host's ~4s false timeout).
 - Consolidated duplicate `xai_web_search` and Grok-native `web_search` registrations into one collision-safe, opt-in `web_search` picker entry. The old `xai_web_search` command spelling remains an input-only compatibility alias, and the public name is still never registered globally.
 - Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
 - Restricted legacy local PNG/JPEG inputs across custom tools, Responses payload normalization, and vision routing to byte-bounded, byte-validated regular files inside the active workspace, with sanitized failures for traversal, outward symlinks, special files, MIME spoofing, oversized sources, and pixel bombs.
