@@ -16,7 +16,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 - Recorded the package-scope decision to keep provider-neutral goal/plan workflows, autonomous continuation, runtime plan management, and write-restriction policy out of `pi-xai-oauth`; see [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md).
 - Reviewed Pi 0.80.8 through 0.81.0 and adopted 0.81.0 as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum.
-- Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.0.
+- Reviewed Pi 0.81.1 and adopted it as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum and `>=0.80.1 <0.82.0` peer range.
+- Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.1.
 - Migrated extension request-auth resolution to prefer `ModelRuntime.getAuth` when the host exposes it, then the ModelRegistry `getApiKeyAndHeaders` / `getProviderAuth` projections for older supported boundaries.
 - Deferred adopting Pi's `refreshModels(context)` provider hook: account-bound `/models-v2` discovery still needs login-generation tracking, force-refresh after credential switch, and package-owned token-free cache TTL/stale policy that the generic hook does not replace.
 

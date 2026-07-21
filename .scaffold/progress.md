@@ -1,14 +1,14 @@
 # Execution Progress — Issue #128
 
 **Branch:** `fix/128-menu-bridge-picker-timeout`
+**PR:** https://github.com/BlockedPath/pi-xai-oauth/pull/137
 
 ## Completed
 
-- [x] Read issue #128 and series notes (#129–#131 deferred).
 - [x] Bridge `open`: ack on launch after model/UI validation; await picker without holding `done`.
 - [x] Regressions: ack-before-picker-close; reject open with no xAI model.
-- [x] CHANGELOG Unreleased fixed entry.
-- [x] Full `npm test` (44 files / 495 tests + loader) and `npm run typecheck` passed.
+- [x] Adopted Pi **0.81.1** as `policy.latest` after clean packed `--candidate` (unblocks CI registry gate vs 0.81.0).
+- [x] `npm run compatibility:check`, `npm test` (495), `npm run typecheck` passed on tip.
 
 ## In Progress
 
@@ -16,4 +16,4 @@
 
 ## Delivery
 
-- Commit + PR closing #128 (series follow-ups #129–#131 remain separate).
+- PR #137 closes #128; includes 0.81.1 boundary pin required for policy CI.
