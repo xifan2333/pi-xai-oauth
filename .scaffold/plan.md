@@ -1,25 +1,25 @@
-# Implementation Plan — Issue #130: Bridge unit coverage
+# Implementation Plan — Issue #131: xAI tools bridge contract
 
-**Branch:** `test/130-bridge-unit-coverage`
+**Branch:** `docs/131-bridge-contract`
 **Base:** `origin/main`
 
 ## Goal
 
-Expand the `pi-clickable-menu:xai-tools` bridge regression matrix after issues #128 and #129, preserving early truthful acknowledgements and preventing repeated registration from double-handling requests.
+Publish the listener-owned v1 contract for `pi-clickable-menu:xai-tools` and close the malformed-payload gap without expanding into issues #130 or #132.
 
 ## Phases
 
-1. [x] Inspect the merged bridge contract, current tests, fixture event bus, and GitHub issue.
-2. [x] Define focused cases for default/explicit open, status, disable, empty and invalid tools, unknown actions, throwing callbacks, and repeated registration.
-3. [x] Add the regression matrix and the smallest production fix required for single-listener re-registration.
-4. [x] Run focused tests, typecheck, full gates, exact Pi boundaries, diagnostics, and independent review.
-5. [x] Commit and open a PR that closes GitHub #130.
+1. [x] Inspect issue #131, the listener, peer emitter, focused tests, and existing #128/#129 behavior.
+2. [x] Add a versioned bridge document and link it from the `/xai-tools` README section.
+3. [x] Validate raw request fields before dispatch and reply exactly once to malformed requests that provide a callable `done`.
+4. [x] Add focused malformed-payload regressions and update release notes/state.
+5. [x] Run focused tests, typecheck, full gates, exact compatibility boundaries, and independent review.
+6. [ ] Commit, push, and open a PR that closes #131.
 
 ## Validation Contract
 
-- Omitted and explicit `open` reply `{ ok: true }` before the picker closes.
-- `status`, enable, and disable report their honest results and expected UI notifications.
-- Empty/invalid tools and unknown actions reply `{ ok: false }`.
-- A throwing `done` callback cannot escape or prevent accepted picker launch.
-- Re-registering on the same ExtensionAPI replaces the prior bridge listener instead of double-handling.
-- Disabling outside an xAI model preserves unrelated tool authorizations.
+- `XAI_TOOLS_MENU_CHANNEL` remains the listener-owned source of truth.
+- Protocol v1 documents `action`, `tool`, `ctx`, and `done` without adding a wire-version field.
+- Non-string actions/tools and unusable contexts are rejected before dispatch; a callable `done` receives one `{ ok: false, error }` result.
+- `status`, `enable`, and `disable` return the shared handler's honest result.
+- `open` acknowledges accepted picker launch before picker close, with post-launch failures remaining UI-only.

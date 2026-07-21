@@ -462,6 +462,8 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 
 `vision-routing` is transport policy rather than a callable model tool, so it never enters Pi's active-tool registry. It appears only when exact authenticated capability evidence supports a text-only source and a separate text-and-image target. `web_search` appears once in the picker for any active xAI model (still opt-in); the older `xai_web_search` spelling remains accepted only as a backward-compatible `/xai-tools enable` or `disable` argument. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
 
+Extension authors that drive `/xai-tools` through `pi.events` must follow the listener-owned [xAI tools menu bridge protocol v1](docs/bridge-xai-tools.md), including its early `open` launch acknowledgement and honest success/error results.
+
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
 ### `xai_generate_text`

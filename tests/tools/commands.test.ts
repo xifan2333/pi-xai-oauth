@@ -338,6 +338,197 @@ describe("/xai-tools command", () => {
     expect(notices.at(-1).message).toMatch(/may use xAI credits/);
   });
 
+  it("keeps the listener-owned bridge channel stable", () => {
+    expect(XAI_TOOLS_MENU_CHANNEL).toBe("pi-clickable-menu:xai-tools");
+  });
+
+  it.each([
+    ["action", { action: 42 }, /action must be a string/i],
+    ["tool", { action: "enable", tool: { name: "xai_generate_image" } }, /tool must be a string/i],
+  ])("rejects a non-string bridge %s before dispatch", (_field, request, errorPattern) => {
+    const { h, notices } = setup();
+    const done = vi.fn();
+
+    expect(() => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        ...request,
+        ctx: commandContext(TEST_MODEL, notices),
+        done,
+      });
+    }).not.toThrow();
+
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith({ ok: false, error: expect.stringMatching(errorPattern) });
+    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(false);
+  });
+
+  it("does not reflect an unknown bridge action in its error", () => {
+    const { h } = setup();
+    const done = vi.fn();
+
+    h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+      action: "private-action-value",
+      ctx: commandContext(TEST_MODEL),
+      done,
+    });
+
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith({
+      ok: false,
+      error: "Unknown xAI tools bridge action.",
+    });
+    expect(done.mock.calls[0]?.[0]?.error).not.toContain("private-action-value");
+  });
+
+  it("does not reflect thrown bridge payload details in its error", () => {
+    const { h } = setup();
+    const done = vi.fn();
+    const request: Record<string, unknown> = {
+      ctx: commandContext(TEST_MODEL),
+      done,
+    };
+    Object.defineProperty(request, "action", {
+      get() {
+        throw new Error("private-payload-detail");
+      },
+    });
+
+    h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, request);
+
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith({
+      ok: false,
+      error: "xAI tools bridge request failed.",
+    });
+    expect(done.mock.calls[0]?.[0]?.error).not.toContain("private-payload-detail");
+  });
+
+  it("rejects an unusable bridge UI context before changing tool state", () => {
+    const { h } = setup();
+    const done = vi.fn();
+
+    h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+      action: "enable",
+      tool: "xai_generate_image",
+      ctx: { ...commandContext(TEST_MODEL), ui: {} },
+      done,
+    });
+
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith({
+      ok: false,
+      error: expect.stringMatching(/command UI context/i),
+    });
+    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(false);
+  });
+
+  it("does not dispatch a bridge request without a callable done", () => {
+    const { h } = setup();
+
+    expect(() => {
+      h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+        action: "enable",
+        tool: "xai_generate_image",
+        ctx: commandContext(TEST_MODEL),
+        done: "not-a-callback",
+      });
+    }).not.toThrow();
+
+    expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(false);
+  });
+
+  it.each([
+    ["an unknown tool", "not_a_tool", TEST_MODEL, /Usage:/],
+    [
+      "a non-xAI model",
+      "xai_generate_image",
+      { provider: "anthropic", id: "claude" },
+      /Select an xAI\/Grok model/,
+    ],
+    ["unavailable vision routing", "vision-routing", TEST_MODEL, /vision routing is unavailable/i],
+  ])("reports menu bridge failure for %s", async (_case, tool, model, errorPattern) => {
+    const { h, notices } = setup();
+    const result = await emitMenuRequest(h, {
+      action: "enable",
+      tool,
+      ctx: commandContext(model, notices),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(errorPattern);
+    expect(notices.at(-1).message).toMatch(errorPattern);
+  });
+
+  it("reports menu bridge registry failures when disabling a tool", async () => {
+    const { h, notices, run } = setup();
+    await run("enable xai_generate_image");
+
+    for (const failure of [
+      { registry: { get: true }, error: /could not be read/ },
+      { registry: { set: true }, error: /could not be updated/ },
+    ]) {
+      h.failRegistry(failure.registry);
+      const result = await emitMenuRequest(h, {
+        action: "disable",
+        tool: "xai_generate_image",
+        ctx: commandContext(TEST_MODEL, notices),
+      });
+      h.failRegistry();
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(failure.error);
+      expect(notices.at(-1).message).toMatch(failure.error);
+      expect(isXaiNetworkToolActive(h.api, "xai_generate_image")).toBe(true);
+    }
+  });
+
+  it("rejects a menu bridge enable or disable without a tool", async () => {
+    const { h, notices } = setup();
+    const result = await emitMenuRequest(h, {
+      action: "disable",
+      tool: " ",
+      ctx: commandContext(TEST_MODEL, notices),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "xAI tools bridge enable/disable requires tool.",
+    });
+  });
+
+  it("does not reflect post-launch picker failures or reply twice", async () => {
+    const { h, notices } = setup();
+    const done = vi.fn();
+
+    h.api.events.emit(XAI_TOOLS_MENU_CHANNEL, {
+      action: "open",
+      ctx: commandContext(TEST_MODEL, notices, {
+        ui: {
+          notify(message: string, type?: string) {
+            notices.push({ message, type });
+          },
+          select: async () => undefined,
+          custom: async () => {
+            throw new Error("private-picker-detail");
+          },
+        },
+      }),
+      done,
+    });
+
+    await vi.waitFor(() => {
+      expect(notices.at(-1)).toEqual({
+        message: "xAI tools picker failed.",
+        type: "error",
+      });
+    });
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith({ ok: true });
+    expect(notices.some(({ message }) => message.includes("private-picker-detail"))).toBe(false);
+  });
+
+);
+
   it("reports status through the menu bridge notification path", async () => {
     const { h, notices } = setup();
 
