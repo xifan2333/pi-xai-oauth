@@ -22,7 +22,7 @@ import {
   commandContext,
   createExtensionHarness,
 } from "../fixtures/extension-api";
-import { TEST_MODEL } from "../fixtures/models";
+import { BUILTIN_XAI_TEST_MODEL, TEST_MODEL } from "../fixtures/models";
 
 function setup() {
   const h = createExtensionHarness();
@@ -79,6 +79,13 @@ describe("/xai-tools command", () => {
     await run("disable vision-routing");
     expect(routing.status(model as any).state).toBe("eligible");
     expect(h.getActiveTools()).not.toContain("vision-routing");
+
+    const builtInModel = { ...model, provider: "xai" };
+    await h.commands
+      .get("xai-tools")
+      .handler("enable vision-routing", commandContext(builtInModel, notices));
+    expect(routing.status(builtInModel as any).state).toBe("unavailable");
+    expect(notices.at(-1).message).toMatch(/Select an xAI\/Grok model first/);
   });
 
   it("registers and enables/disables one eligible tool with cost warning", async () => {
@@ -135,6 +142,14 @@ describe("/xai-tools command", () => {
     await run("enable xai_web_search");
     expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
     expect(notices.at(-1).message).toMatch(/Enabled web_search/);
+  });
+  it("enables web_search for Pi's built-in xAI provider", async () => {
+    const { h, notices, run } = setup();
+
+    await run("enable web_search", BUILTIN_XAI_TEST_MODEL);
+
+    expect(isXaiNetworkToolActive(h.api, XAI_GROK_NATIVE_WEB_SEARCH_DISPATCH_NAME)).toBe(true);
+    expect(notices.at(-1).message).toMatch(/Enabled web_search.*may use xAI credits/s);
   });
   it("fails closed when registry reads or writes fail", async () => {
     const { h, notices, run } = setup();

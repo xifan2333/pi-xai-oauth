@@ -14,6 +14,8 @@ export type XaiCredentialKind = "oauth-session" | "api-key";
 export interface XaiCredential {
   kind: XaiCredentialKind;
   token: string;
+  /** Host means the active model belongs to Pi's built-in catalog, not this package's catalog. */
+  catalogScope?: "host";
 }
 
 export type XaiRequestKind =

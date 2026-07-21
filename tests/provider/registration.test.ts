@@ -27,6 +27,7 @@ describe("provider registration", () => {
     await extension(harness.api);
     const provider = harness.providers.get("xai-auth");
     expect(provider).toBeDefined();
+    expect(harness.providers.has("xai")).toBe(false);
     expect(provider).toMatchObject({
       api: "xai-responses",
       baseUrl: "https://cli-chat-proxy.grok.com/v1",

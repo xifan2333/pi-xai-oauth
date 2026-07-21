@@ -12,6 +12,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added the listener-owned, versioned `pi-clickable-menu:xai-tools` bridge contract, covering its canonical channel, request shape, action timing, and honest result semantics.
 - Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
 - Added ModelRuntime re-registration coverage, a store-backed models-store precedence regression (discard stale overlays when the local catalog is newer), and request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
+- Added opt-in network-tool and OAuth-only usage support for Pi's built-in `xai` provider, with active-provider credential preference, subscription/API-key provenance routing, and explicit isolation from package-owned catalog, stream, vision, and local-adapter behavior.
 
 ### Changed
 
