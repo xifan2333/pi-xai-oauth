@@ -3,11 +3,11 @@
     "@earendil-works/pi-ai",
     "@earendil-works/pi-coding-agent"
   ],
-  "peerRange": ">=0.80.1 <0.81.0",
+  "peerRange": ">=0.80.1 <0.82.0",
   "minimum": "0.80.1",
-  "latest": "0.80.10",
+  "latest": "0.81.0",
   "unsupported": {
     "older": "0.79.10",
-    "upper": "0.81.0"
+    "upper": "0.82.0"
   }
 }
