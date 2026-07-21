@@ -49,6 +49,8 @@ const XAI_TOOLS_USAGE =
 /** Event channel used by pi-clickable-menu (and other extensions) to drive /xai-tools. */
 export const XAI_TOOLS_MENU_CHANNEL = "pi-clickable-menu:xai-tools";
 
+const xaiToolsMenuUnsubscribeByApi = new WeakMap<ExtensionAPI, () => void>();
+
 type XaiToolsCommandResult = { ok: true } | { ok: false; error: string };
 
 function commandToolName(value: string | undefined): XaiNetworkToolName | undefined {
@@ -371,9 +373,11 @@ export function registerXaiToolsCommand(
 		pi.events && typeof pi.events.on === "function"
 			? pi.events.on.bind(pi.events)
 			: null;
+	xaiToolsMenuUnsubscribeByApi.get(pi)?.();
+	xaiToolsMenuUnsubscribeByApi.delete(pi);
 	if (!on) return;
 
-	on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
+	const unsubscribe = on(XAI_TOOLS_MENU_CHANNEL, async (raw) => {
 		const data = (raw ?? {}) as XaiToolsMenuRequest;
 		const reply = (result: { ok: boolean; error?: string }) => {
 			try {
@@ -445,4 +449,7 @@ export function registerXaiToolsCommand(
 			reply({ ok: false, error: message });
 		}
 	});
+	if (typeof unsubscribe === "function") {
+		xaiToolsMenuUnsubscribeByApi.set(pi, unsubscribe);
+	}
 }
