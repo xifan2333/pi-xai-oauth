@@ -35,9 +35,9 @@ pi --model grok-4.5:low "Quick status check"   # fast mode
 
 This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom xAI tools (`xai_generate_text`, `web_search`, `xai_x_search`, etc.). The normalized cache remains exact; registration may additionally expose narrowly verified compatibility routes such as Grok 4.3 and Composer only while their required authenticated entitlement source is present.
 
-> **Latest release:** `pi-xai-oauth` **1.3.6** adds authenticated account-specific model discovery, browser and device OAuth, encrypted reasoning replay, Grok-native local tools, bounded image editing, and explicit subscription usage while hardening xAI routing, payloads, headers, redirects, and entitlement enforcement. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
+> **Latest release:** `pi-xai-oauth` **1.4.0** adds opt-in vision routing, image-to-video generation, the `pi-clickable-menu:xai-tools` bridge, built-in SuperGrok network-tool/usage support, and Pi 0.81.1 compatibility, while hardening credential isolation, local media bounds, and Grok-native path containment. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
-> **Compatibility:** 1.3.6 supports aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.82.0`. The exact tested boundaries are 0.80.1 and 0.81.1.
+> **Compatibility:** 1.4.0 supports aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.82.0`. The exact tested boundaries are 0.80.1 and 0.81.1.
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and fix history.
 
@@ -437,7 +437,7 @@ This opt-in boundary applies only to the extra tools below. Normal conversation 
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
 | `web_search` | Search | Model tokens plus native tool usage |
 
-**How to use them:** Select an `xai-auth` model or Pi built-in `xai` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Credential lookup prefers the active provider and can reuse `xai-auth` OAuth, built-in `xai` OAuth or API keys, and the existing Grok CLI credential fallback. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
+**How to use them:** Select an `xai-auth` model or Pi built-in `xai` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Credential lookup stays on the active xAI-compatible provider (`xai-auth` OAuth, or built-in `xai` OAuth/API keys) and the existing Grok CLI credential fallback; it does not silently borrow a sibling provider's stored credentials. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
 
 Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. Grok-native local filesystem and shell tools remain automatic only for `xai-auth`; built-in `xai` models receive no package-owned local adapters.
 
@@ -753,7 +753,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-Version 1.3.6 requires aligned Pi runtime packages in `>=0.80.1 <0.82.0`, with exact packed-package validation at 0.80.1 and 0.81.1. It adds authenticated model discovery, device OAuth, encrypted reasoning replay, Grok-native tools, bounded image editing, and explicit subscription usage, together with extensive transport and entitlement hardening. See [CHANGELOG.md](CHANGELOG.md) for the complete release notes. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+Version 1.4.0 requires aligned Pi runtime packages in `>=0.80.1 <0.82.0`, with exact packed-package validation at 0.80.1 and 0.81.1. It adds opt-in vision routing, image-to-video generation, the menu bridge, built-in SuperGrok tool/usage support, and further transport and entitlement hardening on top of authenticated model discovery, device OAuth, encrypted reasoning replay, Grok-native tools, bounded image editing, and explicit subscription usage. See [CHANGELOG.md](CHANGELOG.md) for the complete release notes. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .

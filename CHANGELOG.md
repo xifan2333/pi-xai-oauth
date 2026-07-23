@@ -6,6 +6,8 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+## 1.4.0 - 2026-07-23
+
 ### Added
 
 - Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
@@ -32,6 +34,10 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
 - Restricted legacy local PNG/JPEG inputs across custom tools, Responses payload normalization, and vision routing to byte-bounded, byte-validated regular files inside the active workspace, with sanitized failures for traversal, outward symlinks, special files, MIME spoofing, oversized sources, and pixel bombs.
 - Fixed opt-in vision routing so enabled sessions advertise image input only to Pi's delegated Responses converter, retain truthful text-only metadata elsewhere, recursively strip nested historical image and screenshot shapes, reapply consumed-history pruning after caller payload hooks, route only current unconsumed user/tool images, and bind each request to its original reset-sensitive authorization grant.
+- Kept vision-routed images available across mid tool-loop turns so multi-step image work does not drop the original user/tool image after the first model hop.
+- Pinned managed credential lookup for network tools and `/xai-usage` to the active xAI-compatible provider (`xai` or `xai-auth`) instead of falling through to a sibling provider's stored credentials, and derived `catalogScope: "host"` from the credential's provider id.
+- Pinned public IPv4 resolution for dual-stack xAI video downloads so IPv6-only download hosts fail closed.
+- Handled empty web-search responses without treating a successful empty result set as a transport failure.
 
 ## 1.3.6 - 2026-07-18
 
