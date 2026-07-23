@@ -124,9 +124,11 @@ npx pi-xai-oauth
 
 This runs the setup script which:
 1. Installs `npm:pi-xai-oauth` into pi
-2. Sets `xai-auth` as your default provider
+2. Seeds `defaultProvider: "xai"` only when no provider is configured (never overwrites an existing choice, including package-owned `xai-auth`)
 3. Sets `grok-4.5` as your default model
 4. Enables `high` thinking level by default
+
+Chat stays on Pi's built-in `xai` provider by default. This package still registers optional `xai-auth` for its account catalog/stream path, and both providers can use `/xai-tools` plus `/xai-usage`.
 
 ### Manual install
 
@@ -134,16 +136,18 @@ This runs the setup script which:
 pi install npm:pi-xai-oauth
 ```
 
-Then optionally configure it as default:
+Recommended settings for native SuperGrok chat plus this package's tools/usage:
 
 ```bash
 # In ~/.pi/agent/settings.json:
 {
-  "defaultProvider": "xai-auth",
+  "defaultProvider": "xai",
   "defaultModel": "grok-4.5",
   "defaultThinkingLevel": "high"
 }
 ```
+
+Authenticate with `/login xai`. Use `/login xai-auth` only when you want this package's OAuth Responses catalog instead of Pi's built-in xAI chat.
 
 > **⚠️ Important: install only one copy**
 >
@@ -609,7 +613,8 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | Install | `pi install npm:pi-xai-oauth` |
 | One-command setup | `npx pi-xai-oauth` |
 | Try ephemeral | `pi -e npm:pi-xai-oauth` |
-| Authenticate | Launch `pi`, run `/login xai-auth`, then choose browser (default) or device code |
+| Authenticate (chat default) | Launch `pi`, run `/login xai` |
+| Authenticate (optional package catalog) | Launch `pi`, run `/login xai-auth`, then choose browser (default) or device code |
 | Update | `pi update npm:pi-xai-oauth` |
 | Remove | `pi remove npm:pi-xai-oauth` |
 | List packages | `pi list` |

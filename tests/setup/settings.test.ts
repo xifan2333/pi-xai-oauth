@@ -65,7 +65,7 @@ describe("setup settings", () => {
       addedNpmPackage: true,
     });
   });
-  it("writes pruned packages and preserves configured defaults", async () => {
+  it("writes pruned packages and preserves package-owned xai-auth defaults", async () => {
     await mkdir(join(settingsPath, ".."), { recursive: true });
     await writeFile(
       settingsPath,
@@ -85,6 +85,41 @@ describe("setup settings", () => {
       defaultModel: "grok-4.5",
       defaultThinkingLevel: "high",
       unrelated: true,
+    });
+  });
+  it("defaults missing provider to native xai without overwriting other providers", async () => {
+    await mkdir(join(settingsPath, ".."), { recursive: true });
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        packages: ["npm:other"],
+        defaultModel: "some-other-model",
+        defaultThinkingLevel: "low",
+      }),
+    );
+    setup.updateSettings(settingsPath);
+    expect(JSON.parse(await readFile(settingsPath, "utf8"))).toMatchObject({
+      packages: ["npm:other", "npm:pi-xai-oauth"],
+      defaultProvider: "xai",
+      defaultModel: "grok-4.5",
+      defaultThinkingLevel: "high",
+    });
+
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        packages: ["npm:pi-xai-oauth"],
+        defaultProvider: "anthropic",
+        defaultModel: "claude-opus-4-6",
+        defaultThinkingLevel: "medium",
+      }),
+    );
+    setup.updateSettings(settingsPath);
+    expect(JSON.parse(await readFile(settingsPath, "utf8"))).toMatchObject({
+      packages: ["npm:pi-xai-oauth"],
+      defaultProvider: "anthropic",
+      defaultModel: "grok-4.5",
+      defaultThinkingLevel: "high",
     });
   });
 });

@@ -3,7 +3,7 @@
 > **For AI coding agents only.** Keep this file machine-readable and concise. Human-facing docs live in README.md.
 
 ## Project Overview
-pi-xai-oauth is a pi-package that registers the xAI OAuth provider (`xai-auth`) and the authenticated account's OAuth-visible Grok model catalog for the pi coding agent framework, with Grok 4.5 as the curated offline fallback.
+pi-xai-oauth is a pi-package that registers the optional xAI OAuth provider (`xai-auth`) and the authenticated account's OAuth-visible Grok model catalog, with Grok 4.5 as the curated offline fallback. Opt-in network tools and `/xai-usage` also work with Pi's built-in `xai` SuperGrok/X Premium chat provider; setup seeds `defaultProvider: xai` only when unset and never overwrites an existing provider choice.
 
 Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `extensions/xai/catalog.ts` → provider registration in `extensions/xai-oauth.ts` → browser PKCE or bounded device authorization in `extensions/xai/oauth.ts` / `extensions/xai/device-auth.ts` → pinned browser OIDC/JWKS validation in `extensions/xai/oidc.ts` → streaming via xAI API helpers in `extensions/xai/responses.ts`; explicit revision-pinned subscription usage lives in `extensions/xai/usage.ts`.
 
@@ -58,7 +58,7 @@ Core flow: `bin/setup.js` → `pi install` → bounded catalog selection in `ext
 ```
 pi-xai-oauth/
 ├── bin/
-│   └── setup.js          # One-command installer + settings seeder
+│   └── setup.js          # Installer + settings seeder (native xai default when unset)
 ├── extensions/
 │   ├── xai-oauth.ts      # Thin entrypoint: provider registration + tool orchestration
 │   └── xai/              # Focused implementation modules
@@ -157,5 +157,5 @@ This repo is a **pi extension package (a library/CLI), not a standalone server**
 
 - Build / typecheck gate: `npm run typecheck` (`tsc --noEmit`). There is **no separate lint tool** configured; typecheck is the static gate.
 - Tests: `npm test` runs compatibility policy, focused Vitest regressions, and the small real Pi loader smoke. Use `npm run test:coverage` for V8 output and `npm run test:unit -- <path> -t <name>` for focus.
-- Running the "app": full end-to-end use (`pi`, `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. Offline behavior lives in focused `tests/` suites with isolated fixtures; `npm run test:loader` exercises the real Pi loader without live xAI access. Catalog fixtures live under `tests/fixtures/models-v2/`.
+- Running the "app": full end-to-end use (`pi`, `/login xai` and/or `/login xai-auth`, live Grok streaming) needs the external `pi` CLI, an interactive browser OAuth flow, and a real xAI/Grok account, so it is **not runnable headless** here. Offline behavior lives in focused `tests/` suites with isolated fixtures; `npm run test:loader` exercises the real Pi loader without live xAI access. Catalog fixtures live under `tests/fixtures/models-v2/`.
 - Any temporary demo script that imports deps must live inside the repo root (so it resolves `node_modules`), not `/tmp`.
