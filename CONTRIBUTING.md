@@ -47,12 +47,60 @@ cd pi-xai-oauth
 # Install dependencies
 npm install
 
-# Run TypeScript check
-npx tsc --noEmit
+# Run the complete policy + focused unit + real-loader suite
+npm test
+npm run typecheck
+
+# Run one suite or one named regression while developing
+npm run test:unit -- tests/catalog/cache.test.ts
+npm run test:unit -- -t "invalidates stale entitlements"
+npm run test:watch
+
+# Run measured V8 coverage and the loader smoke independently
+npm run test:coverage
+npm run test:loader
+
+# Fail on leaked asynchronous errors
+NODE_OPTIONS=--unhandled-rejections=strict npm test
+
+# Verify compatibility policy, package metadata, and unsupported peers
+npm run compatibility:check
+
+# Verify the exact minimum/latest Pi boundaries from a clean packed package
+npm run compatibility:boundaries
 
 # Test the CLI
 node bin/setup.js --help
 ```
+
+## Pi Compatibility and Release Changes
+
+The compatibility contract lives in `compatibility/pi-versions.json`. Both Pi peer ranges must remain aligned, normal development dependencies must be exact at the policy's `latest` release, and CI derives its two exact matrix cells from that policy.
+
+To evaluate a future Pi release without advertising it prematurely:
+
+```bash
+node scripts/run-compatibility-matrix.js X.Y.Z --candidate
+```
+
+This changes metadata only inside a temporary extracted tarball. For a patch inside the allowed line, update the policy `latest`, both exact Pi dev dependencies, and `package-lock.json` only after the candidate passes. For a new pre-1.0 minor, keep the existing upper bound during evaluation and widen it only after the exact candidate passes the full packed tests/typecheck and review. If the minimum changes, test the immediately previous published release as unsupported and document the support break.
+
+The xAI wire contract has an independent review process in [`compatibility/grok-build-wire-protocol.md`](compatibility/grok-build-wire-protocol.md). Pin an immutable upstream Grok Build commit, trace header/ID ownership from source, preserve the package's truthful identity and pinned routes, update request-shape/privacy tests, and never copy an official client version merely to bypass a gate. Encrypted reasoning changes must preserve the documented opaque replay, route/model isolation, local-session privacy, and redacted terminal-error contract.
+
+Every dependency/compatibility PR and release must run:
+
+```bash
+npm test
+NODE_OPTIONS=--unhandled-rejections=strict npm test
+npm run test:coverage
+npm run typecheck
+npm run compatibility:check
+npm run compatibility:boundaries
+npm pack --dry-run --json
+git diff --check
+```
+
+Do not use `--legacy-peer-deps` or `--force` for supported-version validation. The verifier uses `--force` only inside temporary negative fixtures to prove npm emits peer warnings for unsupported hosts.
 
 ## Style Guidelines
 

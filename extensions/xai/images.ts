@@ -1,7 +1,9 @@
-import { existsSync, readFileSync } from "fs";
-import { extname, isAbsolute, resolve } from "path";
-import { fileURLToPath } from "url";
+import { extname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
+import { toImageDataUrl } from "./media/data-url";
+import { readBoundedWorkspaceImageFileSync } from "./media/paths";
+import type { SupportedImageMimeType } from "./media/types";
 
 /** Aggregate base64 budget kept below the xAI OAuth gateway's observed failure range. */
 export const MAX_XAI_INLINE_IMAGE_BASE64_BYTES = 3 * 1024 * 1024;
@@ -32,7 +34,7 @@ function unescapeShellPath(value: string): string {
   return stripShellQuotes(value).replace(/\\([\\\s'"()&;@])/g, "$1");
 }
 
-function imageMimeTypeForPath(path: string): string {
+function imageMimeTypeForPath(path: string): SupportedImageMimeType {
   switch (extname(path).toLowerCase()) {
     case ".jpg":
     case ".jpeg":
@@ -44,26 +46,32 @@ function imageMimeTypeForPath(path: string): string {
   }
 }
 
-function resolveLocalImagePath(value: string): string | undefined {
+function localImagePath(value: string): string {
   const cleaned = unescapeShellPath(value);
-  if (!cleaned) return undefined;
+  if (!cleaned || cleaned.includes("\0")) {
+    throw new Error("Local image path is invalid.");
+  }
 
   if (cleaned.startsWith("file://")) {
     try {
       return fileURLToPath(cleaned);
     } catch {
-      return undefined;
+      throw new Error("Local image file URL is invalid.");
     }
   }
-
-  const candidates = [cleaned];
-  if (!isAbsolute(cleaned)) candidates.push(resolve(process.cwd(), cleaned));
-
-  return candidates.find((candidate) => existsSync(candidate));
+  return cleaned;
 }
 
-/** Normalize an image URL/path into an xAI-compatible URL or data URI. */
-export function normalizeXaiImageInput(value: unknown): string | undefined {
+/**
+ * Normalize an image URL/path into an xAI-compatible URL or data URI.
+ *
+ * Local files must use a supported extension and resolve to a validated,
+ * byte-bounded PNG or JPEG physically contained in the selected workspace.
+ */
+export function normalizeXaiImageInput(
+  value: unknown,
+  workspaceRoot = process.cwd(),
+): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const cleaned = stripShellQuotes(value);
 
@@ -71,14 +79,13 @@ export function normalizeXaiImageInput(value: unknown): string | undefined {
     return cleaned;
   }
 
-  const localPath = resolveLocalImagePath(cleaned);
-  if (!localPath) {
-    throw new Error(`Image file does not exist or is not a valid URL: ${cleaned}`);
+  const path = localImagePath(cleaned);
+  const expectedMimeType = imageMimeTypeForPath(path);
+  const verified = readBoundedWorkspaceImageFileSync(path, workspaceRoot);
+  if (verified.mimeType !== expectedMimeType) {
+    throw new Error("Local image extension does not match its byte content.");
   }
-
-  const mimeType = imageMimeTypeForPath(localPath);
-  const data = readFileSync(localPath).toString("base64");
-  return `data:${mimeType};base64,${data}`;
+  return toImageDataUrl(verified);
 }
 
 function parseInlineImageDataUrl(value: string): { mimeType: string; base64: string } | undefined {

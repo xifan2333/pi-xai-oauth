@@ -3,8 +3,6 @@ import { chmod, lstat, mkdir, open, readFile, rename, unlink } from "fs/promises
 import { dirname, join } from "path";
 import {
   XAI_CLI_MODELS_URL,
-  XAI_CLIENT_IDENTIFIER,
-  XAI_CLIENT_VERSION,
   XAI_MODEL_CATALOG_CACHE_SCHEMA,
   XAI_MODEL_CATALOG_FRESH_TTL_MS,
   XAI_MODEL_CATALOG_MAX_BYTES,
@@ -14,9 +12,10 @@ import {
 import {
   CURATED_FALLBACK_MODELS,
   knownXaiModelMetadata,
-  resolveXaiClientMode,
+  XaiModelInputProvenance,
   type XaiCatalogModel,
 } from "./models";
+import { xaiCatalogHeaders } from "./wire";
 
 const MAX_CATALOG_ENTRIES = 256;
 const MAX_MODEL_ID_LENGTH = 128;
@@ -28,6 +27,7 @@ const API_KEY_ONLY_MODEL_IDS = new Set(["grok-build-0.1"]);
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+type XaiInputModality = XaiCatalogModel["input"][number];
 
 export type XaiCatalogSource = "remote" | "fresh-cache" | "stale-cache" | "curated-fallback";
 
@@ -62,6 +62,8 @@ type CacheRecord = {
   schemaVersion: number;
   fetchedAt: number;
   models: XaiCatalogModel[];
+  /** Exact validated schema-1 contents used only if an atomic refresh must roll back. */
+  rollbackContents?: string;
 };
 
 type CacheTombstone = {
@@ -143,6 +145,71 @@ function safeDisplayName(value: unknown, fallback: string): string | undefined {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function parseAcceptsImages(value: unknown): XaiInputModality[] | undefined {
+  if (typeof value !== "boolean") return undefined;
+  return value ? ["text", "image"] : ["text"];
+}
+
+function parseInputModalities(value: unknown): XaiInputModality[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 2) return undefined;
+  if (!value.every((entry): entry is XaiInputModality => entry === "text" || entry === "image")) {
+    return undefined;
+  }
+  if (new Set(value).size !== value.length) return undefined;
+  return (["text", "image"] as const).filter((modality) => value.includes(modality));
+}
+
+function resolveCatalogModelInput(
+  obj: Record<string, unknown>,
+  meta: Record<string, unknown> | undefined,
+  known: XaiCatalogModel | undefined,
+): Pick<XaiCatalogModel, "input" | "inputProvenance"> {
+  const candidates: Array<{
+    source: Record<string, unknown> | undefined;
+    key: "acceptsImages" | "inputModalities";
+    parse: (value: unknown) => XaiInputModality[] | undefined;
+    provenance: XaiModelInputProvenance;
+  }> = [
+    {
+      source: obj,
+      key: "acceptsImages",
+      parse: parseAcceptsImages,
+      provenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    },
+    {
+      source: meta,
+      key: "acceptsImages",
+      parse: parseAcceptsImages,
+      provenance: XaiModelInputProvenance.AuthenticatedAcceptsImages,
+    },
+    {
+      source: obj,
+      key: "inputModalities",
+      parse: parseInputModalities,
+      provenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    },
+    {
+      source: meta,
+      key: "inputModalities",
+      parse: parseInputModalities,
+      provenance: XaiModelInputProvenance.AuthenticatedInputModalities,
+    },
+  ];
+  for (const candidate of candidates) {
+    if (!candidate.source || !hasOwn(candidate.source, candidate.key)) continue;
+    const input = candidate.parse(candidate.source[candidate.key]);
+    if (input) return { input, inputProvenance: candidate.provenance };
+  }
+  if (known) {
+    return { input: [...known.input], inputProvenance: XaiModelInputProvenance.Known };
+  }
+  return { input: ["text"], inputProvenance: XaiModelInputProvenance.Default };
 }
 
 function canonicalReasoningLevel(value: unknown): ThinkingLevel | undefined {
@@ -231,6 +298,7 @@ function normalizeCatalogEntry(value: unknown): EntryResult {
   if (!name) return { kind: "malformed" };
 
   const known = knownXaiModelMetadata(normalizedId);
+  const input = resolveCatalogModelInput(obj, meta, known);
   const supportsReasoningEffort = booleanValue(
     firstValue(obj, meta, ["supportsReasoningEffort", "supports_reasoning_effort"]),
   );
@@ -271,7 +339,7 @@ function normalizeCatalogEntry(value: unknown): EntryResult {
       name,
       apiBackend: "responses",
       reasoning,
-      input: known ? [...known.input] : ["text"],
+      ...input,
       cost: known ? { ...known.cost } : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow,
       maxTokens: Math.min(
@@ -336,7 +404,11 @@ function fallbackSelection(needsAuthenticatedRefresh: boolean): XaiCatalogSelect
   };
 }
 
-function validateCachedModel(value: unknown): XaiCatalogModel | undefined {
+function equalInput(left: readonly XaiInputModality[], right: readonly XaiInputModality[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function validateCachedModel(value: unknown, schemaVersion: number): XaiCatalogModel | undefined {
   const obj = objectValue(value);
   if (!obj) return undefined;
   const id = safeModelId(obj.id);
@@ -344,9 +416,7 @@ function validateCachedModel(value: unknown): XaiCatalogModel | undefined {
   const contextWindow = positiveInteger(obj.contextWindow, MAX_CONTEXT_WINDOW);
   const maxTokens = positiveInteger(obj.maxTokens, MAX_OUTPUT_TOKENS);
   const cost = objectValue(obj.cost);
-  const input = Array.isArray(obj.input)
-    ? obj.input.filter((item): item is "text" | "image" => item === "text" || item === "image")
-    : [];
+  const parsedInput = parseInputModalities(obj.input);
   if (
     !id ||
     !name ||
@@ -356,7 +426,7 @@ function validateCachedModel(value: unknown): XaiCatalogModel | undefined {
     !maxTokens ||
     maxTokens > contextWindow ||
     !cost ||
-    input.length === 0
+    !parsedInput
   ) return undefined;
   const rates = [cost.input, cost.output, cost.cacheRead, cost.cacheWrite];
   if (!rates.every((rate) => typeof rate === "number" && Number.isFinite(rate) && rate >= 0)) return undefined;
@@ -375,12 +445,44 @@ function validateCachedModel(value: unknown): XaiCatalogModel | undefined {
     map = normalized;
   }
 
+  const known = knownXaiModelMetadata(id);
+  let input: XaiInputModality[];
+  let inputProvenance: XaiModelInputProvenance;
+  if (schemaVersion === 1) {
+    // Schema 1 inputs came from package metadata/defaults and carried no
+    // authenticated provenance. Preserve membership and rederive that policy
+    // instead of promoting a legacy text input to an authenticated denial.
+    input = known ? [...known.input] : ["text"];
+    inputProvenance = known ? XaiModelInputProvenance.Known : XaiModelInputProvenance.Default;
+  } else {
+    const provenance = obj.inputProvenance;
+    if (
+      provenance !== XaiModelInputProvenance.AuthenticatedAcceptsImages &&
+      provenance !== XaiModelInputProvenance.AuthenticatedInputModalities &&
+      provenance !== XaiModelInputProvenance.Known &&
+      provenance !== XaiModelInputProvenance.Default
+    ) return undefined;
+    if (!equalInput(parsedInput, obj.input as XaiInputModality[])) return undefined;
+    if (provenance === XaiModelInputProvenance.AuthenticatedAcceptsImages) {
+      // A boolean acceptsImages field always implies text input and can only
+      // add or omit image; image-only cache entries are impossible evidence.
+      if (!parsedInput.includes("text")) return undefined;
+    } else if (provenance === XaiModelInputProvenance.Known) {
+      if (!known || !equalInput(parsedInput, known.input)) return undefined;
+    } else if (provenance === XaiModelInputProvenance.Default) {
+      if (known || !equalInput(parsedInput, ["text"])) return undefined;
+    }
+    input = parsedInput;
+    inputProvenance = provenance;
+  }
+
   return {
     id,
     name,
     apiBackend: "responses",
     reasoning: obj.reasoning,
-    input: [...new Set(input)],
+    input,
+    inputProvenance,
     cost: {
       input: cost.input as number,
       output: cost.output as number,
@@ -426,13 +528,18 @@ async function readCache(cachePath: string, now: number): Promise<CacheRecord | 
     if (info.isSymbolicLink() || !info.isFile() || info.size <= 0 || info.size > XAI_MODEL_CATALOG_MAX_BYTES) return undefined;
     if ((info.mode & 0o077) !== 0) await chmod(cachePath, 0o600);
     await chmod(dirname(cachePath), 0o700).catch(() => {});
-    const parsed = JSON.parse(await readFile(cachePath, "utf8")) as unknown;
+    const contents = await readFile(cachePath, "utf8");
+    const parsed = JSON.parse(contents) as unknown;
     const obj = objectValue(parsed);
-    if (!obj || obj.schemaVersion !== XAI_MODEL_CATALOG_CACHE_SCHEMA || obj.invalidated === true) return undefined;
+    if (
+      !obj ||
+      (obj.schemaVersion !== 1 && obj.schemaVersion !== XAI_MODEL_CATALOG_CACHE_SCHEMA) ||
+      obj.invalidated === true
+    ) return undefined;
     const fetchedAt = typeof obj.fetchedAt === "number" && Number.isFinite(obj.fetchedAt) ? obj.fetchedAt : undefined;
     if (!fetchedAt || fetchedAt > now + 5 * 60 * 1000 || now - fetchedAt > XAI_MODEL_CATALOG_MAX_STALE_MS) return undefined;
     if (!Array.isArray(obj.models) || obj.models.length > MAX_CATALOG_ENTRIES) return undefined;
-    const models = obj.models.map(validateCachedModel);
+    const models = obj.models.map((model) => validateCachedModel(model, obj.schemaVersion as number));
     if (models.some((model) => !model)) return undefined;
     const ids = new Set<string>();
     for (const model of models as XaiCatalogModel[]) {
@@ -440,7 +547,12 @@ async function readCache(cachePath: string, now: number): Promise<CacheRecord | 
       if (ids.has(key) || API_KEY_ONLY_MODEL_IDS.has(key)) return undefined;
       ids.add(key);
     }
-    return { schemaVersion: XAI_MODEL_CATALOG_CACHE_SCHEMA, fetchedAt, models: models as XaiCatalogModel[] };
+    return {
+      schemaVersion: XAI_MODEL_CATALOG_CACHE_SCHEMA,
+      fetchedAt,
+      models: models as XaiCatalogModel[],
+      ...(obj.schemaVersion === 1 ? { rollbackContents: contents } : {}),
+    };
   } catch {
     return undefined;
   }
@@ -459,9 +571,9 @@ async function withCacheWriteQueue(cachePath: string, operation: () => Promise<v
   }
 }
 
-async function writeAtomicJson(
+async function writeAtomicContents(
   cachePath: string,
-  value: CacheRecord | CacheTombstone,
+  contents: string,
   commitAllowed: () => boolean = () => true,
   clearInvalidationMarker = false,
 ): Promise<void> {
@@ -472,7 +584,7 @@ async function writeAtomicJson(
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(tempPath, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify(value)}\n`, "utf8");
+    await handle.writeFile(contents, "utf8");
     await handle.sync();
     await handle.close();
     handle = undefined;
@@ -489,6 +601,21 @@ async function writeAtomicJson(
   }
 }
 
+async function writeAtomicJson(
+  cachePath: string,
+  value: CacheRecord | CacheTombstone,
+  commitAllowed: () => boolean = () => true,
+  clearInvalidationMarker = false,
+): Promise<void> {
+  const { rollbackContents: _rollbackContents, ...persisted } = value as CacheRecord;
+  await writeAtomicContents(
+    cachePath,
+    `${JSON.stringify(persisted)}\n`,
+    commitAllowed,
+    clearInvalidationMarker,
+  );
+}
+
 async function cacheMatchesRecord(cachePath: string, expected: CacheRecord): Promise<boolean> {
   try {
     const value = JSON.parse(await readFile(cachePath, "utf8")) as unknown;
@@ -503,7 +630,9 @@ async function cacheMatchesRecord(cachePath: string, expected: CacheRecord): Pro
 }
 
 async function restorePreviousCache(cachePath: string, previous: CacheRecord | undefined): Promise<void> {
-  if (previous) {
+  if (previous?.rollbackContents !== undefined) {
+    await writeAtomicContents(cachePath, previous.rollbackContents, () => true, true);
+  } else if (previous) {
     await writeAtomicJson(cachePath, previous, () => true, true);
   } else {
     await unlink(cachePath).catch(() => {});
@@ -595,14 +724,7 @@ export async function fetchXaiModelCatalog(
     try {
       response = await fetchImpl(XAI_CLI_MODELS_URL, {
         method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${credential.access}`,
-          "X-XAI-Token-Auth": "xai-grok-cli",
-          "x-grok-client-identifier": XAI_CLIENT_IDENTIFIER,
-          "x-grok-client-version": XAI_CLIENT_VERSION,
-          "x-grok-client-mode": resolveXaiClientMode(),
-        },
+        headers: xaiCatalogHeaders(credential.access),
         redirect: "error",
         signal: abort.signal,
       });

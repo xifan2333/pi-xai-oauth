@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  NPM_VERSION: "11.6.2"
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.matrix.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Pin npm resolver
+        run: npm install --global npm@${NPM_VERSION}
+      - name: Install locked development dependencies
+        run: npm ci --strict-peer-deps
+      - name: Export exact compatibility matrix
+        id: matrix
+        run: echo "versions=$(node scripts/verify-compatibility.js matrix)" >> "$GITHUB_OUTPUT"
+      - name: Verify compatibility policy and range boundaries
+        run: node scripts/verify-compatibility.js policy
+      - name: Detect unreviewed releases inside the allowed range
+        run: node scripts/verify-compatibility.js registry
+      - name: Run focused unit suites with V8 coverage
+        run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:coverage
+      - name: Run real Pi extension-loader smoke
+        run: NODE_OPTIONS=--unhandled-rejections=strict npm run test:loader
+      - name: Type-check production and test TypeScript
+        run: npm run typecheck
+      - name: Verify packed manifest and contents
+        run: node scripts/verify-compatibility.js pack
+      - name: Verify unsupported peer diagnostics
+        run: node scripts/verify-compatibility.js unsupported
+      - name: Inspect package dry run
+        run: npm pack --dry-run --json
+
+  compatibility:
+    needs: policy
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pi-version: ${{ fromJSON(needs.policy.outputs.versions) }}
+    name: Pi ${{ matrix.pi-version }} compatibility
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pin npm resolver
+        run: npm install --global npm@${NPM_VERSION}
+      - name: Install and report exact Pi pair from the packed package
+        run: node scripts/run-compatibility-matrix.js "${{ matrix.pi-version }}"

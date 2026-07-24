@@ -1,37 +1,28 @@
-# Implementation Plan: Issue #64 authenticated OAuth model catalog
+# Implementation Plan — Issue #132: Built-in xAI network tools
 
-**Branch:** feature/issue-64-oauth-model-catalog
-**Date:** 2026-07-16
+**Branch:** `feat/132-builtin-xai-tools`
+**Issue:** https://github.com/BlockedPath/pi-xai-oauth/issues/132
+**Linear:** BLO-15
 
 ## Goal
-Replace the release-bound OAuth model advertisement with an authenticated, entitlement-aware `/models-v2` catalog while preserving a small safe fallback, bounded startup, existing routing/header/OIDC behavior, and model-specific compatibility.
 
-## Implementation
-- [x] Add a focused catalog module with defensive `/models-v2` normalization, pinned Responses-backend handling, hidden/API-key-only rejection, and exact replacement semantics for additions/removals.
-- [x] Add an atomic token-free last-known-good cache under pi's user cache directory.
-- [x] Use a 15-minute fresh TTL, an official-aligned bounded 5-second stale refresh, a 7-day stale-if-transient window, durable invalidation for auth/permanent failures, and forced no-stale refresh after successful login.
-- [x] Make the extension factory async so the selected catalog is registered before startup and `--list-models`; re-register immediately after login so `/model` sees new entitlements without `/reload`.
-- [x] Defer expired pi-owned token refresh to `session_start` through the bound model registry/credential lock.
-- [x] Keep direct helper metadata synchronized with the active catalog while preserving Grok 4.5, Build, Composer, 4.20, routing, headers/scopes, payload, and OIDC compatibility logic.
-- [x] Add fixture-based tests for additions, removals, malformed entries, duplicate/API-key-only/unsupported-backend filtering, reasoning metadata, fresh/stale cache, auth/network failures, and fallback choice.
-- [x] Update README, CHANGELOG, AGENTS.md, and scaffold state with refresh/login/reload/model-selection and cache policy.
+Support Pi's built-in `xai` SuperGrok/X Premium credentials for opt-in network tools and subscription usage without taking over Pi's built-in chat, catalog, stream, vision routing, or package-owned local Grok adapters.
 
-## Non-goals
-- Do not add API-key auth or expose API-key-only models.
-- Do not alter issue #63 credential-aware Responses/Images routing, issue #65 scopes/proxy headers, issue #67 OAuth state/OIDC validation, or issue #66 device login.
-- Do not call paid generation/search/image tools during validation.
-- Do not persist or log access/refresh/ID tokens or raw catalog payloads.
+## Phases
+
+1. [x] Read the task, GitHub/Linear context, required entrypoints, auth/tool/usage modules, tests, and Pi 0.81.1 provider/runtime behavior.
+2. [x] Add the narrow `xai-auth`/`xai` network-tool provider boundary.
+3. [x] Resolve both providers active-first with OAuth/API-key provenance and strict usage rejection.
+4. [x] Add network lifecycle, command, credential, usage, and non-takeover regressions.
+5. [x] Update README/changelog and persistent state.
+6. [ ] Run diagnostics, focused/full tests, typecheck, exact Pi boundaries, and independent review.
+7. [ ] Commit, push, open a PR closing #132, and update BLO-15.
 
 ## Validation Contract
-- [x] Changed-file LSP diagnostics pass.
-- [x] `npm test` passes.
-- [x] `npm run typecheck` passes.
-- [x] `git diff --check` passes.
-- [x] `npm pack --dry-run --json` contains required runtime/fixtures/docs and excludes credentials/cache/scaffold/subagent artifacts.
-- [x] Safe authenticated GET-only `/models-v2` smoke succeeds when credentials are available without printing credentials.
-- [x] Independent correctness, security, cache, and test reviews complete; accepted fixes are applied and revalidated.
 
-## Delivery
-- [x] Committed reviewed implementation as `70436d2`.
-- [x] Pushed `feature/issue-64-oauth-model-catalog`.
-- [x] Opened unmerged PR #73 against `main`, closing #64: https://github.com/BlockedPath/pi-xai-oauth/pull/73
+- Active `xai/grok-*` models can opt into and execute network-backed tools.
+- Built-in OAuth resolves as `oauth-session`; built-in API keys resolve as `api-key`.
+- Usage accepts Pi-managed OAuth only and rejects an active built-in API-key credential.
+- Switching to a non-xAI provider clears network opt-ins.
+- `xai-auth` remains the only package-registered/catalog/stream provider.
+- Automatic local Grok adapters and vision routing remain `xai-auth`-only.

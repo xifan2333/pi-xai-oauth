@@ -1,0 +1,32 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "model": "grok-4.5",
+      "api_backend": "responses",
+      "context_window": 500000,
+      "acceptsImages": false,
+      "inputModalities": ["text", "image"]
+    },
+    {
+      "model": "grok-composer-2.5-fast",
+      "api_backend": "responses",
+      "context_window": 200000
+    },
+    {
+      "model": "synthetic-modalities",
+      "api_backend": "responses",
+      "context_window": 100000,
+      "inputModalities": ["image", "text"]
+    },
+    {
+      "model": "synthetic-meta-accepts",
+      "api_backend": "responses",
+      "context_window": 100000,
+      "acceptsImages": "false",
+      "_meta": {
+        "acceptsImages": true
+      }
+    }
+  ]
+}

@@ -4,6 +4,7 @@ node_modules/
 *.log
 dist/
 build/
+coverage/
 .env
 .env.*
 .idea/
@@ -11,4 +12,8 @@ build/
 *.pem
 *.key
 auth.json
+CLAUDE.md
 *.local
+.agents/
+.claude/
+skills-lock.json

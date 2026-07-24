@@ -1,13 +1,15 @@
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { selectXaiModelCatalog, type XaiCatalogSelection } from "./xai/catalog";
-import { getGrokAuthCredentials, getStartupXaiCatalogAuth } from "./xai/auth";
+import { getGrokAuthCredentials, getStartupXaiCatalogAuth, resolveRegistryRequestAuth } from "./xai/auth";
 import { DEFAULT_XAI_MODEL, XAI_PROVIDER_ID } from "./xai/constants";
-import { CURATED_FALLBACK_MODELS, setXaiRuntimeModels, type XaiCatalogModel } from "./xai/models";
+import { CURATED_FALLBACK_MODELS, expandXaiCatalogWithAliases, setXaiRuntimeModels, type XaiCatalogModel } from "./xai/models";
 import { createXaiOAuth } from "./xai/oauth";
 import { streamSimpleXaiResponses } from "./xai/responses";
 import { resolveXaiRoute } from "./xai/routing";
 import { registerXaiTools, syncXaiToolsForModel } from "./xai/tools";
+import { registerXaiUsage } from "./xai/usage";
+import { createXaiVisionRoutingController } from "./xai/vision-routing";
 
 /** Register the xAI OAuth provider and its authenticated model catalog. */
 export default async function (pi: ExtensionAPI) {
@@ -20,9 +22,11 @@ export default async function (pi: ExtensionAPI) {
   let activeLoginRefreshes = 0;
   let refreshAbortController: AbortController | undefined;
   let oauth: ReturnType<typeof createXaiOAuth>;
+  const xaiUsage = registerXaiUsage(pi);
+  const visionRouting = createXaiVisionRoutingController();
 
   const providerModels = (models: readonly XaiCatalogModel[]) =>
-    models.map(({ apiBackend: _apiBackend, ...model }) => model);
+    models.map(({ apiBackend: _apiBackend, inputProvenance: _inputProvenance, ...model }) => model);
 
   const providerConfig = () => ({
     name: "xAI (OAuth)",
@@ -30,7 +34,8 @@ export default async function (pi: ExtensionAPI) {
     api: "xai-responses" as const,
     models: providerModels(currentModels),
     authHeader: true,
-    streamSimple: streamSimpleXaiResponses as any,
+    streamSimple: ((model: any, context: any, options: any) =>
+      streamSimpleXaiResponses(model, context, options, visionRouting)) as any,
     oauth: oauth as any,
   });
 
@@ -46,7 +51,10 @@ export default async function (pi: ExtensionAPI) {
   });
 
   const applyCatalog = (selection: XaiCatalogSelection, replaceExisting: boolean) => {
-    currentModels = selection.models;
+    visionRouting.replaceCatalog(selection.models);
+    // Cache/remote selection stays exact; advertise known aliases of entitled models
+    // so renamed settings patterns (e.g. Composer → Grok 4.5) keep matching.
+    currentModels = expandXaiCatalogWithAliases(selection.models);
     needsSessionRefresh = selection.needsAuthenticatedRefresh;
     setXaiRuntimeModels(currentModels);
     if (replaceExisting) pi.unregisterProvider(XAI_PROVIDER_ID);
@@ -86,6 +94,10 @@ export default async function (pi: ExtensionAPI) {
   oauth = createXaiOAuth({
     getExistingCredentials: getGrokAuthCredentials,
     onLoginCredentials: async (credentials: OAuthCredentials, callbacks: OAuthLoginCallbacks) => {
+      // A successful login can replace the account. Drop prior account-scoped
+      // session authorization before performing other authenticated work.
+      xaiUsage.reset();
+      visionRouting.reset();
       const loginGeneration = ++loginCatalogGeneration;
       activeLoginRefreshes++;
       try {
@@ -132,11 +144,11 @@ export default async function (pi: ExtensionAPI) {
     const lookupModel =
       ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, DEFAULT_XAI_MODEL) ||
       currentModels.map((model) => ctx?.modelRegistry?.find?.(XAI_PROVIDER_ID, model.id)).find(Boolean);
-    if (!lookupModel || typeof ctx?.modelRegistry?.getApiKeyAndHeaders !== "function") {
+    if (!lookupModel || !ctx?.modelRegistry) {
       deferredRetryAfter = Date.now() + 5_000;
       return;
     }
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(lookupModel);
+    const auth = await resolveRegistryRequestAuth(ctx.modelRegistry, lookupModel, ctx?.modelRuntime);
     const authorization = auth?.ok && typeof auth.headers?.Authorization === "string"
       ? auth.headers.Authorization
       : "";
@@ -165,16 +177,19 @@ export default async function (pi: ExtensionAPI) {
     }
   };
 
-  registerXaiTools(pi);
+  registerXaiTools(pi, visionRouting);
 
   if (typeof (pi as any).on === "function") {
     // Active-tool accessors belong to the ExtensionAPI (`pi`), while models
     // and pi-managed credentials are supplied by the event/context payload.
     (pi as any).on("session_start", async (_event: any, ctx: any) => {
+      xaiUsage.reset(ctx);
+      visionRouting.reset();
       await refreshDeferredCatalog(ctx);
       syncXaiToolsForModel(pi, ctx?.model, { resetNetworkTools: true });
     });
     (pi as any).on("input", async (_event: any, ctx: any) => {
+      xaiUsage.clearIfInactive(ctx);
       await refreshDeferredCatalog(ctx);
       const activeModel = ctx?.model;
       const entitled =
@@ -198,12 +213,18 @@ export default async function (pi: ExtensionAPI) {
       );
       return { action: "handled" };
     });
-    (pi as any).on("model_select", (event: any, ctx: any) =>
-      syncXaiToolsForModel(pi, event?.model ?? ctx?.model),
-    );
+    (pi as any).on("model_select", (event: any, ctx: any) => {
+      // Model changes invalidate account/model-scoped authorizations. Require
+      // explicit opt-in again even when switching between two xAI models.
+      xaiUsage.reset(ctx);
+      visionRouting.reset();
+      return syncXaiToolsForModel(pi, event?.model ?? ctx?.model);
+    });
     (pi as any).on("before_agent_start", async (_event: any, ctx: any) => {
+      xaiUsage.clearIfInactive(ctx);
       await refreshDeferredCatalog(ctx);
       let activeModel = ctx?.model;
+      if (activeModel?.provider !== XAI_PROVIDER_ID) visionRouting.reset();
       const entitled =
         typeof activeModel?.id === "string" &&
         currentModels.some((model) => model.id.toLowerCase() === activeModel.id.toLowerCase());
@@ -227,6 +248,15 @@ export default async function (pi: ExtensionAPI) {
         }
       }
       return syncXaiToolsForModel(pi, activeModel);
+    });
+    (pi as any).on("turn_end", (_event: any, ctx: any) => {
+      // Footer usage is cosmetic. Never delay pi's awaited turn lifecycle on
+      // credential resolution or two bounded network requests.
+      void xaiUsage.refreshStatus(ctx).catch(() => undefined);
+    });
+    (pi as any).on("session_shutdown", (_event: any, ctx: any) => {
+      xaiUsage.reset(ctx);
+      visionRouting.reset();
     });
   }
 }

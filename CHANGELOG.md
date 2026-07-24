@@ -6,24 +6,96 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 
 ## Unreleased
 
+### Changed
+
+- Setup no longer forces `defaultProvider: xai-auth`. When no provider is configured it seeds Pi's built-in `xai` chat provider, preserves any existing provider choice (including package-owned `xai-auth`), and still installs opt-in tools plus `/xai-usage` for both providers.
+
+## 1.4.0 - 2026-07-23
+
 ### Added
 
-- Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
-- Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
-- Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
+- Added disabled-by-default, session-scoped vision routing for exact authenticated text-only entitlements, with deterministic exact-catalog target selection, a bounded image-only description request, final image-free enforcement, lifecycle invalidation, and `/xai-tools` cost/privacy controls.
+- Added the listener-owned, versioned `pi-clickable-menu:xai-tools` bridge contract, covering its canonical channel, request shape, action timing, and honest result semantics.
+- Added disabled-by-default `xai_image_to_video` with pinned create/status polling, DNS-pinned unauthenticated MP4 download, bounded streamed private storage, and honest remote-job cancellation semantics.
+- Added ModelRuntime re-registration coverage, a store-backed models-store precedence regression (discard stale overlays when the local catalog is newer), and request-auth tests that prefer `ModelRuntime.getAuth` over the legacy `getApiKeyAndHeaders` projection.
+- Added opt-in network-tool and OAuth-only usage support for Pi's built-in `xai` provider, with active-provider credential preference, subscription/API-key provenance routing, and explicit isolation from package-owned catalog, stream, vision, and local-adapter behavior.
 
 ### Changed
 
+- Recorded the package-scope decision to keep provider-neutral goal/plan workflows, autonomous continuation, runtime plan management, and write-restriction policy out of `pi-xai-oauth`; see [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md).
+- Reviewed Pi 0.80.8 through 0.81.0 and adopted 0.81.0 as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum.
+- Reviewed Pi 0.81.1 and adopted it as the latest exact tested boundary after clean packed candidate validation, while preserving the 0.80.1 minimum and `>=0.80.1 <0.82.0` peer range.
+- Widened aligned Pi peers to `>=0.80.1 <0.82.0` and pinned development metadata exactly to 0.81.1.
+- Migrated extension request-auth resolution to prefer `ModelRuntime.getAuth` when the host exposes it, then the ModelRegistry `getApiKeyAndHeaders` / `getProviderAuth` projections for older supported boundaries.
+- Deferred adopting Pi's `refreshModels(context)` provider hook: account-bound `/models-v2` discovery still needs login-generation tracking, force-refresh after credential switch, and package-owned token-free cache TTL/stale policy that the generic hook does not replace.
+
+### Fixed
+
+- Fixed the `pi-clickable-menu:xai-tools` bridge so malformed action, tool, and command-context fields are rejected before dispatch and every request with a callable `done` receives exactly one result.
+- Fixed the `pi-clickable-menu:xai-tools` bridge so `status`, `enable`, and `disable` return the shared command handler's actual success or failure instead of acknowledging toast-only failures as successful.
+- Fixed the `pi-clickable-menu:xai-tools` bridge so `action: "open"` acknowledges `done` when the interactive picker is accepted for launch, instead of waiting until the picker closes (avoids the menu host's ~4s false timeout).
+- Consolidated duplicate `xai_web_search` and Grok-native `web_search` registrations into one collision-safe, opt-in `web_search` picker entry. The old `xai_web_search` command spelling remains an input-only compatibility alias, and the public name is still never registered globally.
+- Contained the direct Grok-native `read_file`, `search_replace`, and `list_dir` adapters to resolved workspace paths, safely limited missing-leaf creation to contained physical parents, and capped package-owned full text reads at 5,000,000 bytes. `run_terminal_command` remains an unrestricted delegation to pi `bash`, so this is direct-adapter defense-in-depth rather than a filesystem sandbox.
+- Restricted legacy local PNG/JPEG inputs across custom tools, Responses payload normalization, and vision routing to byte-bounded, byte-validated regular files inside the active workspace, with sanitized failures for traversal, outward symlinks, special files, MIME spoofing, oversized sources, and pixel bombs.
+- Fixed opt-in vision routing so enabled sessions advertise image input only to Pi's delegated Responses converter, retain truthful text-only metadata elsewhere, recursively strip nested historical image and screenshot shapes, reapply consumed-history pruning after caller payload hooks, route only current unconsumed user/tool images, and bind each request to its original reset-sensitive authorization grant.
+- Kept vision-routed images available across mid tool-loop turns so multi-step image work does not drop the original user/tool image after the first model hop.
+- Pinned managed credential lookup for network tools and `/xai-usage` to the active xAI-compatible provider (`xai` or `xai-auth`) instead of falling through to a sibling provider's stored credentials, and derived `catalogScope: "host"` from the credential's provider id.
+- Pinned public IPv4 resolution for dual-stack xAI video downloads so IPv6-only download hosts fail closed.
+- Handled empty web-search responses without treating a successful empty result set as a transport failure.
+
+## 1.3.6 - 2026-07-18
+
+### Added
+
+- Added encrypted reasoning replay on the pinned OAuth Responses route, including final `store:false` defaults, deduplicated encrypted-content requests, complete inline typed-item persistence/replay, exact provider/API/model isolation, and fixed redacted mismatch guidance.
+- Added a revision-pinned Grok Build wire-protocol matrix, ID-ownership policy, repeatable upstream review procedure, and an explicit encrypted-reasoning handoff to issue #79.
+- Added deterministic streaming/direct Responses, catalog, OAuth form, client-mode, media-boundary, reserved-header, bounded-error, and proxy version-gate request-shape coverage.
+- Added bounded authenticated `acceptsImages` / `inputModalities` normalization with explicit input-capability provenance and redacted schema fixtures.
+- Added focused typed Vitest regressions across provider/catalog routing, browser/device OAuth and OIDC, Responses payloads/streams/errors, images, network-tool lifecycle, custom tools, Cursor shims, and setup/settings.
+- Added the disabled-by-default `xai_edit_image` tool with exact singular/plural Imagine edit payloads, a distinct pinned `/images/edits` route, timeout/cancellation, and redacted errors.
+- Added reusable bounded media primitives for byte-validated PNG/JPEG data URLs and workspace files, source-backed compression, explicit request/response/output budgets, and atomic 0700/0600 Pi-session storage.
+- Added the explicit `/xai-usage` command with pinned authenticated `/user` identity resolution followed by the unofficial revision-pinned `/billing?format=credits` lookup.
+- Added an optional session-only compact usage status that is off by default, refreshes no more than once per minute after completed xAI turns, and clears on model, provider, account, and session changes.
+- Added fixture-based usage parser, transport, cancellation, redaction, command, bounds, and status-lifecycle coverage.
+- Added a small real Pi extension-loader smoke plus V8 text/JSON/LCOV coverage with measured regression floors.
+- Added a browser-first native login-method selector with device authorization for SSH, WSL, containers, remote workspaces/VMs, and human-operated headless sessions.
+- Added pinned, bounded, cancellable RFC 8628 polling with initial wait, server interval plus cumulative `slow_down`, denial/expiry handling, strict secret-safe schema validation, and deterministic timing tests.
+- Added authenticated OAuth-visible model discovery from the official CLI proxy `/models-v2` endpoint.
+- Added defensive model normalization plus an atomic, token-free last-known-good cache with a 15-minute fresh TTL, a 5-second bounded refresh, and a 7-day stale-if-transient window.
+- Added fixture-based coverage for catalog additions, removals, empty entitlements, malformed entries, API-key-only filtering, cache freshness, auth/network failures, and curated fallback selection.
+- Added packed-package compatibility validation at exact Pi 0.80.1 and 0.80.10 boundaries, with requested/resolved version reporting, range and registry-drift checks, packed-manifest inspection, and unsupported-peer install diagnostics.
+- Added PR/main CI that derives its exact compatibility matrix from the checked-in Pi version policy instead of reusing the development lockfile version.
+
+### Changed
+
+- Centralized xAI wire headers around pinned routes, truthful `pi-xai-oauth/<version>` attribution, package-controlled proxy versioning, and shared OAuth form metadata.
+- Migrated the normalized model cache to schema 2 while safely retaining schema-1 membership and rederiving legacy input as known/default rather than authenticated evidence.
+- Bounded the unofficial usage transport to pinned endpoints, rejected redirects, 15-second request timeouts, 64 KiB bodies, bounded JSON complexity/history, and conservative numeric/timestamp ranges.
+- Replaced the shared-state monolithic behavior verifiers with isolated per-domain suites and closure-local fixtures; production runtime behavior is unchanged.
+- Made the repository CI job run the full unit suite once under coverage and the loader smoke separately; packed compatibility jobs rerun unit, loader, and TypeScript checks at each exact Pi boundary.
 - Centralized xAI endpoint selection around explicit OAuth-session versus API-key credential provenance instead of model IDs.
 - Kept Grok Build and Composer payload, header, and tool compatibility separate from transport routing.
 - Updated fresh OAuth logins to request xAI's current eight-scope Grok client grant, including conversation read/write access, while leaving existing refresh grants compatible.
 - Derived the proxy client identifier and version from this package's own metadata instead of impersonating a stale Grok CLI release.
 - Made the authenticated account catalog authoritative for OAuth model additions and removals; known static metadata now enriches returned IDs without advertising unreturned models.
 - Made successful login force-refresh and immediately replace the model catalog, while `/reload` follows the documented cache TTL.
+- Kept browser authorization-code + PKCE as the desktop default while recommending device login in remote/headless selector copy without automatically changing the selected method.
+- Replaced wildcard Pi peers with the aligned, bounded `>=0.80.1 <0.81.0` range and pinned development metadata exactly to the latest tested boundary, 0.80.10.
+- Reviewed Pi 0.80.8 through 0.80.10 and adopted 0.80.10 after clean packed candidate validation, while preserving the 0.80.1 minimum and existing peer range.
+- Documented the deliberate candidate-test and review process required before widening support to another pre-1.0 Pi line.
 
 ### Fixed
 
-- Removed the unbound raw authorization-code fallback; pasted completions now require the matching OAuth state and raw-code users receive safe full-redirect-URL migration guidance while device authorization remains tracked separately.
+- Kept startup credential discovery compatible with Pi 0.80.1 and Pi 0.80.10 by using the new read-only `readStoredCredential()` API when available and a synchronous JSON-only fallback on older supported hosts, without creating credential storage.
+- Migrated the real Pi credential-persistence integration test to exercise `ModelRuntime` and `InMemoryCredentialStore` on current Pi while retaining the legacy boundary path.
+- Explicitly negotiated `text/event-stream` for streaming Responses while keeping direct Responses and media requests on JSON Accept semantics.
+- Scrubbed caller/model authorization, content negotiation, User-Agent, proxy metadata, generic delegate affinity IDs, unsupported IDs, and unknown `x-grok-*` headers before applying the approved route contract.
+- Rejected redirects for streaming/direct Responses and media POSTs before fetch can replay request bodies or metadata to another origin.
+- Replaced raw direct-response error reflection with bounded status/route classification and actionable, non-impersonating proxy version-gate guidance.
+- Prevented authenticated text-only entitlements from sending image-bearing Responses payloads, including payload-hook mutations and image-input custom tools, without changing image generation.
+- Canonicalized final Responses payloads before model and modality enforcement, detected computer screenshots, disabled unsafe delegated retries, and hardened wide-payload traversal so custom serializers cannot bypass authenticated text-only policy.
+- Made usage credential and identity resolution fail closed before billing, rejected stored/runtime API-key provenance, and prevented account identity, authenticated headers, raw response bodies, and transport details from being cached, persisted, logged, or reflected in errors.
+- Removed the unbound raw authorization-code fallback; pasted browser completions require matching OAuth state, and raw-code users are directed to device login or a complete state-bound redirect URL.
 - Pinned xAI OIDC discovery and JWKS policy and validated fresh-login ID-token ES256 signatures, signing keys, issuer, audience, expiry, and nonce before retaining credentials.
 - Stopped reflecting xAI token endpoint response bodies in authentication errors.
 - Routed normal streaming and separate Responses helpers for every `xai-auth` model through the official Grok CLI session-token proxy, matching the intended OAuth/session-token transport contract for Responses traffic.
@@ -31,6 +103,7 @@ Dates below are npm publication dates. The earliest rapid-release series is grou
 - Added the complete CLI-proxy authentication, client-mode, request, conversation, session, and model metadata to every OAuth Responses request, with required values protected from caller overrides.
 - Filtered hidden, malformed, unsupported-backend, secret-bearing, and known API-key-only entries such as `grok-build-0.1` from the OAuth provider catalog.
 - Invalidated stale entitlement data after authentication/permanent failures and prevented a forced post-login refresh from reusing another account's stale cache.
+- Prevented device authorization failures, denial, expiry, cancellation, malformed data, and missing access/refresh tokens from returning or replacing credentials; device ID tokens are not retained without browser nonce validation.
 
 ## 1.3.5 - 2026-07-15
 

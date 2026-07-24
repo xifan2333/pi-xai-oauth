@@ -1,6 +1,21 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveXaiCredential } from "../auth";
 import { DEFAULT_XAI_IMAGE_MODEL, DEFAULT_XAI_MODEL } from "../constants";
+import {
+  executeXaiImageEdit,
+  ImageEditOperationError,
+  validateXaiEditImageInput,
+} from "../image-edit";
+import {
+  executeXaiImageToVideo,
+  ImageToVideoOperationError,
+  validateXaiImageToVideoInput,
+} from "../image-to-video";
+import {
+  IMAGE_EDIT_MAX_PROMPT_CHARS,
+  IMAGE_EDIT_MAX_REFERENCES,
+  IMAGE_TO_VIDEO_MAX_PROMPT_CHARS,
+} from "../media/constants";
 import { normalizeXaiImageInput } from "../images";
 import { defaultXaiRuntimeModelId, grokSupportsReasoningEffort, normalizedXaiModelId } from "../models";
 import { createXaiResponse, postXaiJson } from "../responses";
@@ -10,8 +25,8 @@ import { xaiTextInput, xaiToolError } from "./common";
 import { activeXaiModel, isXaiNetworkToolActive, type XaiNetworkToolName } from "./model-scope";
 
 function activeModelForXaiTool(pi: ExtensionAPI, ctx: any, toolName: XaiNetworkToolName) {
+  if (!isXaiNetworkToolActive(pi, toolName)) return undefined;
   const model = activeXaiModel(ctx);
-  if (!model || !isXaiNetworkToolActive(pi, toolName)) return undefined;
   return model;
 }
 
@@ -19,6 +34,13 @@ function xaiToolDisabledError(toolName: XaiNetworkToolName, details: Record<stri
   return xaiToolError(
     `Error: ${toolName} is disabled. Select an xAI/Grok model, run /xai-tools to enable ${toolName}, and request it explicitly. No xAI request was sent.`,
     { error: true, ...details },
+  );
+}
+
+function invalidXaiImageInputError() {
+  return xaiToolError(
+    "Error: Invalid image input. Provide a valid image URL, data URL, or supported local workspace file. No xAI request was sent.",
+    { error: true },
   );
 }
 
@@ -49,13 +71,22 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
       execute: async (_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_generate_text");
         if (!activeModel) return xaiToolDisabledError("xai_generate_text", { prompt: params?.prompt });
+
+        const model = params.model || activeModel.id || defaultXaiRuntimeModelId() || DEFAULT_XAI_MODEL;
+        let imageUrl: string | undefined;
+        try {
+          const workspaceRoot = ctx?.cwd;
+          imageUrl = normalizeXaiImageInput(
+            params.image_url,
+            typeof workspaceRoot === "string" && workspaceRoot.trim() ? workspaceRoot : "",
+          );
+        } catch {
+          return invalidXaiImageInputError();
+        }
         const credential = await resolveXaiCredential(ctx);
         if (!credential) {
           return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { reasoning: "", response_id: "" });
         }
-
-        const model = params.model || activeModel.id || defaultXaiRuntimeModelId() || DEFAULT_XAI_MODEL;
-        const imageUrl = normalizeXaiImageInput(params.image_url);
         const input = imageUrl
           ? [
               {
@@ -166,41 +197,6 @@ export function registerCustomXaiTools(pi: ExtensionAPI) {
     } as any);
 
     // Agentic tools that leverage xAI's native server-side tools.
-    pi.registerTool({
-      name: "xai_web_search",
-      label: "xAI Web Search",
-      description: "Opt-in paid search using Grok's native web search. Enable via /xai-tools and call only when the user explicitly requests xAI web search.",
-      promptGuidelines: ["Call xai_web_search only when the user explicitly requests xAI web search."],
-      parameters: {
-        type: "object",
-        properties: { query: { type: "string", description: "Search query" } },
-        required: ["query"],
-      },
-      execute: async (_toolCallId: string, params: { query?: string }, _signal: any, _onUpdate: any, ctx: any) => {
-        const activeModel = activeModelForXaiTool(pi, ctx, "xai_web_search");
-        if (!activeModel) return xaiToolDisabledError("xai_web_search", { query: params?.query });
-        const credential = await resolveXaiCredential(ctx);
-        if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { query: params?.query });
-        }
-        const prompt = `Search the web for: ${params.query}. Summarize the top results with sources, key facts, dates, and recent developments. Prioritize authoritative sources.`;
-        let data: any;
-        try {
-          data = await createXaiResponse(credential, {
-            model: activeModel.id,
-            input: xaiTextInput(prompt),
-            reasoning: { effort: "medium" },
-            tools: [{ type: "web_search", enable_image_understanding: true }],
-          }, _signal);
-        } catch (error) {
-          const status = statusFromError(error);
-          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, query: params.query });
-        }
-        const text = extractResponsesText(data) || `No results for: ${params.query}`;
-        return { content: [{ type: "text", text }], details: { query: params.query } };
-      },
-    } as any);
-
     pi.registerTool({
       name: "xai_x_search",
       label: "xAI X Search",
@@ -354,6 +350,192 @@ Be specific and cite examples where helpful.`;
       },
     } as any);
 
+    pi.registerTool({
+      name: "xai_edit_image",
+      label: "xAI Edit Image",
+      description:
+        "Opt-in paid image editing through xAI Imagine using bounded PNG/JPEG workspace files or data URLs. Enable via /xai-tools and call only when the user explicitly requests an edit.",
+      promptGuidelines: [
+        "Call xai_edit_image only when the user explicitly asks to edit or transform supplied images with xAI.",
+        "Use only user-supplied workspace paths or PNG/JPEG data URLs; never invent paths or send remote URLs.",
+      ],
+      executionMode: "sequential",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            minLength: 1,
+            maxLength: IMAGE_EDIT_MAX_PROMPT_CHARS,
+            description: "Description of the requested edit or transformation",
+          },
+          image: {
+            type: "array",
+            minItems: 1,
+            maxItems: IMAGE_EDIT_MAX_REFERENCES,
+            description: "One to three bounded local workspace or data-URL references",
+            items: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: { path: { type: "string", description: "PNG/JPEG path inside the current workspace" } },
+                  required: ["path"],
+                  additionalProperties: false,
+                },
+                {
+                  type: "object",
+                  properties: { data_url: { type: "string", description: "Strict bounded PNG/JPEG base64 data URL" } },
+                  required: ["data_url"],
+                  additionalProperties: false,
+                },
+              ],
+            },
+          },
+          aspect_ratio: {
+            type: "string",
+            enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "2:1", "1:2", "19.5:9", "9:19.5", "20:9", "9:20", "auto"],
+            description: "Required for multiple references; omitted on the wire for one reference",
+          },
+        },
+        required: ["prompt", "image"],
+        additionalProperties: false,
+      },
+      execute: async (_toolCallId: string, params: any, signal: AbortSignal | undefined, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_edit_image")) {
+          return xaiToolDisabledError("xai_edit_image");
+        }
+
+        let input;
+        try {
+          input = validateXaiEditImageInput(params);
+        } catch (error) {
+          const message = error instanceof ImageEditOperationError ? error.message : "Image edit input is invalid.";
+          return xaiToolError(`Error: ${message}`, { error: true, code: "invalid_input" });
+        }
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", {
+            error: true,
+          });
+        }
+
+        try {
+          const output = await executeXaiImageEdit({
+            credential,
+            input,
+            workspaceRoot: ctx?.cwd,
+            sessionManager: ctx?.sessionManager,
+            signal,
+          });
+          return {
+            content: [{
+              type: "text",
+              text: `Edited image saved to ${output.path} (${output.mimeType}, ${output.width}x${output.height}, ${output.byteLength} bytes).`,
+            }],
+            details: output,
+          };
+        } catch (error) {
+          const operationError = error instanceof ImageEditOperationError ? error : undefined;
+          return xaiToolError(
+            `Error: ${operationError?.message ?? "xAI image edit failed safely."}`,
+            {
+              error: true,
+              code: operationError?.code ?? "output_failure",
+              ...(operationError?.status ? { status: operationError.status } : {}),
+            },
+          );
+        }
+      },
+    } as any);
+
+    pi.registerTool({
+      name: "xai_image_to_video",
+      label: "xAI Image to Video",
+      description:
+        "Opt-in high-cost image-to-video generation using one bounded PNG/JPEG workspace file or data URL. Enable via /xai-tools and call only when explicitly requested.",
+      promptGuidelines: [
+        "Call xai_image_to_video only when the user explicitly asks to animate or turn a supplied image into a video with xAI.",
+        "Use only a user-supplied workspace path or strict PNG/JPEG data URL; never invent paths or use remote source URLs.",
+        "Warn that generation may take up to five minutes and local cancellation does not cancel a submitted remote xAI job.",
+      ],
+      executionMode: "sequential",
+      parameters: {
+        type: "object",
+        properties: {
+          image: {
+            oneOf: [
+              {
+                type: "object",
+                properties: { path: { type: "string", description: "PNG/JPEG path inside the current workspace" } },
+                required: ["path"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: { data_url: { type: "string", description: "Strict bounded PNG/JPEG base64 data URL" } },
+                required: ["data_url"],
+                additionalProperties: false,
+              },
+            ],
+          },
+          prompt: {
+            type: "string",
+            minLength: 1,
+            maxLength: IMAGE_TO_VIDEO_MAX_PROMPT_CHARS,
+            description: "Optional motion or animation guidance",
+          },
+          duration: { type: "number", enum: [6, 10], default: 6 },
+          resolution: { type: "string", enum: ["480p", "720p"], default: "480p" },
+        },
+        required: ["image"],
+        additionalProperties: false,
+      },
+      execute: async (_toolCallId: string, params: unknown, signal: AbortSignal | undefined, _onUpdate: any, ctx: any) => {
+        if (!activeModelForXaiTool(pi, ctx, "xai_image_to_video")) {
+          return xaiToolDisabledError("xai_image_to_video");
+        }
+        let input;
+        try {
+          input = validateXaiImageToVideoInput(params);
+        } catch (error) {
+          const message = error instanceof ImageToVideoOperationError
+            ? error.message
+            : "Image-to-video input is invalid.";
+          return xaiToolError(`Error: ${message}`, { error: true, code: "invalid_input" });
+        }
+        const credential = await resolveXaiCredential(ctx);
+        if (!credential) {
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { error: true });
+        }
+        try {
+          const output = await executeXaiImageToVideo({
+            credential,
+            input,
+            workspaceRoot: ctx?.cwd,
+            sessionManager: ctx?.sessionManager,
+            signal,
+          });
+          return {
+            content: [{
+              type: "text",
+              text: `Video saved to ${output.path} (${output.mimeType}, ${output.duration}s, ${output.resolution}, ${output.byteLength} bytes).`,
+            }],
+            details: output,
+          };
+        } catch (error) {
+          const operationError = error instanceof ImageToVideoOperationError ? error : undefined;
+          return xaiToolError(
+            `Error: ${operationError?.message ?? "xAI image-to-video generation failed safely."}`,
+            {
+              error: true,
+              code: operationError?.code ?? "output_failure",
+              ...(operationError?.status ? { status: operationError.status } : {}),
+            },
+          );
+        }
+      },
+    } as any);
+
     // ====================== NEW TOOLS (OAuth-only) ======================
     pi.registerTool({
       name: "xai_critique",
@@ -406,20 +588,30 @@ Be specific and cite examples where helpful.`;
       },
       execute: async (_toolCallId: string, params: { image?: string; question?: string }, _signal: any, _onUpdate: any, ctx: any) => {
         const activeModel = activeModelForXaiTool(pi, ctx, "xai_analyze_image");
-        if (!activeModel) return xaiToolDisabledError("xai_analyze_image", { image: params?.image });
+        if (!activeModel) return xaiToolDisabledError("xai_analyze_image");
+        const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
+        let imageInput: string | undefined;
+        try {
+          const workspaceRoot = ctx?.cwd;
+          imageInput = normalizeXaiImageInput(
+            params.image,
+            typeof workspaceRoot === "string" && workspaceRoot.trim() ? workspaceRoot : "",
+          );
+        } catch {
+          return invalidXaiImageInputError();
+        }
+        if (!imageInput) return invalidXaiImageInputError();
         const credential = await resolveXaiCredential(ctx);
         if (!credential) {
-          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.", { image: params?.image });
+          return xaiToolError("Error: No xAI OAuth credentials found. Please run the OAuth login first.");
         }
-        const question = params.question || "Describe this image in detail, including objects, text, style, and any notable details.";
-        const imageInput = normalizeXaiImageInput(params.image) || params.image;
         const input = [{ role: "user", content: [{ type: "input_image", image_url: imageInput, detail: "high" }, { type: "input_text", text: question }] }];
         let data: any;
         try {
           data = await createXaiResponse(credential, { model: activeModel.id, input, reasoning: { effort: "medium" } }, _signal);
         } catch (error) {
           const status = statusFromError(error);
-          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status, image: params.image });
+          return xaiToolError(`xAI API Error${status ? ` ${status}` : ""}: ${messageFromError(error)}`, { error: true, status });
         }
         const text = extractResponsesText(data) || "Image analysis completed.";
         return { content: [{ type: "text", text }], details: { image: params.image, question } };

@@ -1,4 +1,5 @@
 node_modules/
+coverage/
 .git/
 .gitignore
 .DS_Store
@@ -10,9 +11,12 @@ node_modules/
 .omp/
 .pi-subagents/
 .scaffold/
+.claude/
+CLAUDE.md
 *.pem
 *.key
 auth.json
 *.local
 pi-session-*.html
 cat.svg
+.agent-task.md

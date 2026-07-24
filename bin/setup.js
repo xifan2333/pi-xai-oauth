@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * pi-xai-oauth — One-command installer for xAI (Grok) OAuth + Grok 4.5
+ * pi-xai-oauth — One-command installer for xAI tools/usage + optional OAuth catalog
  * Enhanced with --scaffold support for 2026 agent best practices
  */
 
@@ -12,6 +12,12 @@ const os = require("os");
 
 const PACKAGE_NAME = "pi-xai-oauth";
 const NPM_SPEC = `npm:${PACKAGE_NAME}`;
+/** Pi's built-in SuperGrok/X Premium provider used for normal chat. */
+const BUNDLED_XAI_PROVIDER = "xai";
+/** Package-owned OAuth catalog/stream provider (optional). */
+const PACKAGE_OAUTH_PROVIDER = "xai-auth";
+const DEFAULT_XAI_MODEL = "grok-4.5";
+const DEFAULT_THINKING_LEVEL = "high";
 const SETTINGS_PATH = path.join(os.homedir(), ".pi/agent/settings.json");
 
 // ANSI colors
@@ -29,8 +35,9 @@ function color(text, c) {
 }
 
 function printHeader() {
-  console.log(`\n${color("🚀  pi-xai-oauth", "cyan")} — ${color("xAI Grok + OAuth for pi", "bold")}\n`);
-  console.log("   One-command setup for Grok 4.5 plus your account's OAuth-visible xAI model catalog.\n");
+  console.log(`\n${color("🚀  pi-xai-oauth", "cyan")} — ${color("xAI tools + usage for pi", "bold")}\n`);
+  console.log("   Installs opt-in xAI tools and /xai-usage alongside Pi's built-in xAI chat.");
+  console.log(`   Optional package-owned catalog/stream remains available as ${PACKAGE_OAUTH_PROVIDER}.\n`);
 }
 
 function checkPi() {
@@ -170,22 +177,26 @@ function updateSettings(settingsPath = SETTINGS_PATH) {
     console.log(color(`   + Added ${NPM_SPEC} to packages`, "green"));
   }
 
-  if (settings.defaultProvider !== "xai-auth") {
-    settings.defaultProvider = "xai-auth";
+  // Prefer Pi's built-in xAI chat when no provider is configured. Never overwrite
+  // an existing choice — including package-owned xai-auth or any other provider.
+  if (typeof settings.defaultProvider !== "string" || !settings.defaultProvider.trim()) {
+    settings.defaultProvider = BUNDLED_XAI_PROVIDER;
     changed = true;
-    console.log(color("   + Set defaultProvider: xai-auth", "green"));
+    console.log(color(`   + Set defaultProvider: ${BUNDLED_XAI_PROVIDER}`, "green"));
+  } else if (settings.defaultProvider === PACKAGE_OAUTH_PROVIDER) {
+    console.log(color(`   (Keeping defaultProvider: ${PACKAGE_OAUTH_PROVIDER})`, "reset"));
   }
 
-  if (settings.defaultModel !== "grok-4.5") {
-    settings.defaultModel = "grok-4.5";
+  if (settings.defaultModel !== DEFAULT_XAI_MODEL) {
+    settings.defaultModel = DEFAULT_XAI_MODEL;
     changed = true;
-    console.log(color("   + Set defaultModel: grok-4.5", "green"));
+    console.log(color(`   + Set defaultModel: ${DEFAULT_XAI_MODEL}`, "green"));
   }
 
-  if (settings.defaultThinkingLevel !== "high") {
-    settings.defaultThinkingLevel = "high";
+  if (settings.defaultThinkingLevel !== DEFAULT_THINKING_LEVEL) {
+    settings.defaultThinkingLevel = DEFAULT_THINKING_LEVEL;
     changed = true;
-    console.log(color("   + Set defaultThinkingLevel: high", "green"));
+    console.log(color(`   + Set defaultThinkingLevel: ${DEFAULT_THINKING_LEVEL}`, "green"));
   }
 
   if (changed) {
@@ -207,22 +218,30 @@ function printNextSteps(nonInteractive = false) {
 
   if (!nonInteractive) {
     console.log("Next steps:\n");
-    console.log(`   ${color("1.", "bold")} Authenticate with xAI OAuth:`);
-    console.log(`      ${color("pi /login xai-auth", "cyan")}\n`);
-    console.log(`   ${color("2.", "bold")} Start chatting with Grok 4.5 (already set as default)`);
+    console.log(`   ${color("1.", "bold")} Authenticate for chat (Pi built-in xAI):`);
+    console.log(`      ${color("pi", "cyan")}`);
+    console.log("      Then run /login xai\n");
+    console.log(`   ${color("2.", "bold")} Optional package-owned OAuth catalog/stream:`);
+    console.log("      Run /login xai-auth only if you want this package's Responses catalog.");
+    console.log("      Prefer browser (default) or device code.\n");
+    console.log(`   ${color("3.", "bold")} Use package tools and subscription usage on either provider:`);
+    console.log("      /xai-tools   — opt-in network tools (web/X search, images, etc.)");
+    console.log("      /xai-usage   — SuperGrok subscription usage\n");
+    console.log(`   ${color("4.", "bold")} Start chatting with Grok 4.5 (default model)`);
     console.log(`      ${color("pi", "cyan")}\n`);
   } else {
-    console.log("Grok 4.5 plus your account's OAuth-visible xAI models are now configured and ready.\n");
+    console.log("Package tools and /xai-usage are installed. Chat defaults to Pi's built-in xAI provider when unset.\n");
   }
 
   console.log("You now have access to powerful reasoning, coding models, and long context!\n");
   console.log("Bonus tools available:");
   console.log("   • xai_generate_text     — Generate text with full reasoning");
   console.log("   • xai_multi_agent       — Multi-agent research with web/X tools");
-  console.log("   • xai_web_search        — Native xAI web search");
+  console.log("   • web_search            — Native xAI web search");
   console.log("   • xai_x_search          — Native X/Twitter search");
   console.log("   • xai_code_execution    — Native code interpreter");
   console.log("   • xai_generate_image    — Image generation");
+  console.log("   • xai_edit_image        — Bounded local PNG/JPEG image editing");
   console.log("   • xai_analyze_image     — Image analysis");
   console.log("   • xai_critique          — Structured critique");
   console.log("   • xai_deep_research     — Deep research with web/X tools\n");
@@ -381,9 +400,9 @@ See .scaffold/plan.md for current roadmap.`;
 }
 
 function printHelp() {
-  console.log(`\n${color("pi-xai-oauth", "cyan")} — CLI for xAI OAuth setup and agent scaffolding\n`);
+  console.log(`\n${color("pi-xai-oauth", "cyan")} — CLI for xAI tools/usage setup and agent scaffolding\n`);
   console.log("Usage:");
-  console.log("  npx pi-xai-oauth              Run interactive xAI OAuth + settings setup");
+  console.log("  npx pi-xai-oauth              Install package + seed native xAI chat defaults when unset");
   console.log("  npx pi-xai-oauth --scaffold   Generate .scaffold/ harness in current project");
   console.log("  npx pi-xai-oauth --yes        Non-interactive / automated mode");
   console.log("  npx pi-xai-oauth --help       Show this help\n");

@@ -33,11 +33,11 @@ pi --model grok-4.5:high "Review this architecture for failure modes"
 pi --model grok-4.5:low "Quick status check"   # fast mode
 ```
 
-This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom tools (`xai_generate_text`, `xai_web_search`, `xai_x_search`, etc.). Models such as Grok Build, Composer, Grok 4.3, and Grok 4.20 appear only when xAI returns them for the authenticated account.
+This package adds xAI's **account-specific OAuth model catalog** to pi, with **Grok 4.5** as the offline fallback/default, proper OAuth login, automatic token refresh, and a suite of custom xAI tools (`xai_generate_text`, `web_search`, `xai_x_search`, etc.). The normalized cache remains exact; registration may additionally expose narrowly verified compatibility routes such as Grok 4.3 and Composer only while their required authenticated entitlement source is present.
 
-> **Latest release:** `pi-xai-oauth` **1.3.5** keeps the highlighted `/xai-tools` row in place after toggling, so multiple tools can be configured without repeatedly navigating from the top. Version 1.3.4 made every network-backed xAI helper an explicit, session-scoped opt-in through `/xai-tools`, including paid image generation, and made disabled tools fail before OAuth credential lookup or network access. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
+> **Latest release:** `pi-xai-oauth` **1.4.0** adds opt-in vision routing, image-to-video generation, the `pi-clickable-menu:xai-tools` bridge, built-in SuperGrok network-tool/usage support, and Pi 0.81.1 compatibility, while hardening credential isolation, local media bounds, and Grok-native path containment. Existing npm installs should run `pi update npm:pi-xai-oauth`; local checkout installs should keep only one copy with `pi remove npm:pi-xai-oauth && pi install .`.
 >
-> **Compatibility note:** 1.2.4+ supports pi 0.79.8+'s OpenAI Responses API guard for Grok/xAI streaming.
+> **Compatibility:** 1.4.0 supports aligned `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions `>=0.80.1 <0.82.0`. The exact tested boundaries are 0.80.1 and 0.81.1.
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and fix history.
 
@@ -47,11 +47,14 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 
 - [✨ New: Grok 4.5](#-new-grok-45)
 - [Features](#features)
+- [Package Scope](#package-scope)
 - [Changelog](CHANGELOG.md)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
+- [Pi Compatibility](#pi-compatibility)
 - [Authentication](#authentication)
 - [Usage](#usage)
+  - [Subscription usage (unofficial)](#subscription-usage-unofficial)
   - [Switching Models](#switching-models)
   - [Reasoning / Thinking Levels](#reasoning--thinking-levels)
 - [Custom Tools](#custom-tools)
@@ -68,39 +71,46 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete version-by-version feature and
 ## Features
 
 - **Real OAuth login** — authenticates through xAI's official OAuth endpoint (same flow as the Grok CLI)
-- **Automatic browser open** — pi opens your default browser automatically; fall back to manual paste if needed
+- **Browser or device login** — browser authorization-code + PKCE stays the desktop default, with native device authorization for SSH, WSL, containers, and remote/headless sessions
+- **Automatic browser open** — browser login opens your default browser automatically and retains the matching-state full-redirect paste fallback
 - **Token refresh** — refresh tokens are stored and rotated automatically before expiry
 - **Reuses existing credentials** — auto-detects `~/.grok/auth.json` from the official Grok CLI
 - **Grok 4.5 flagship (default)** — xAI's newest model for coding, agentic tasks, and knowledge work; 500K context, text+image input, high reasoning by default
 - **Grok 4.5 fast mode** — same model with `low` reasoning effort (`/think low` or `grok-4.5:low`); not a separate model ID
-- **Long-context metadata when entitled** — known Grok 4.3 behavior is preserved when xAI returns it, with authenticated limits taking precedence
+- **Grok 4.3 OAuth compatibility** — advertises the independently verified `grok-4.3` request route only when `grok-4.5` is entitled, retaining authenticated input evidence and conservative limits
 - **Authenticated model catalog** — fetches the OAuth-visible `/models-v2` list from the official CLI proxy, so additions and removals track the signed-in account
-- **Coding models when entitled** — Grok Build, Composer, and other models appear only when xAI includes them in the account catalog
+- **Explicit subscription usage** — `/xai-usage` performs a bounded, identity-first lookup against the revision-pinned unofficial Grok billing surface without retaining account identity
+- **Coding models when entitled** — directly advertised Grok Build variants track the account catalog; the Composer compatibility alias appears only while its verified `grok-4.5` entitlement source is present
 - **Reasoning support** — parses supplied reasoning capability and thinking levels while preserving known model compatibility
 - **Bounded last-known-good cache** — avoids routine startup delay and falls back safely when discovery is offline or unavailable
 - **Custom xAI tools** — generate text, web search, X/Twitter search, multi-agent research, code analysis
-- **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint for every Grok model; the public `api.x.ai` Responses endpoint is reserved for a future explicit API-key path
+- **Credential-aware Responses routing** — OAuth/session traffic uses the official `https://cli-chat-proxy.grok.com/v1` endpoint; built-in `xai` API-key tool traffic uses the public `api.x.ai` Responses endpoint
+- **Revision-pinned wire contract** — route-specific headers, truthful package identity, protected request metadata, redirect rejection, and the upstream Grok Build review procedure are documented without impersonating the official client
 
-> **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `xai_web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
+> **✅ Verified (May 2026)**: All custom xAI tools (`xai_generate_text`, `xai_x_search`, `web_search`, `xai_code_execution`, `xai_critique`, `xai_multi_agent`, `xai_deep_research`, image tools, etc.) have been tested end-to-end after the OAuth + payload repair. The provider now correctly handles mixed-model requests and native xAI tool shapes.
+
+---
+
+## Package Scope
+
+`pi-xai-oauth` owns the xAI-specific integration needed to use entitled Grok models through pi: authentication and credentials, account-specific catalogs, transport and payload behavior, Grok-native compatibility adapters, opt-in network tools, and media integrations. It intentionally does not provide generic `/goal` or `/plan` commands, autonomous continuation, a runtime plan-file protocol, generic task/subagent orchestration, or plan-mode write restriction. See [ADR 0001](docs/decisions/0001-goal-plan-package-scope.md) for the decision and alternatives.
+
+Tool hiding, active-tool filtering, and shell-command filtering are workflow controls, not an enforced read-only boundary. Pi and its extensions run with the user's permissions; strong isolation requires an external sandbox, container, or VM that constrains every tool and extension involved.
+
+The optional [`--scaffold`](#agent-scaffolding) command is separate: it performs one-time generation of `AGENTS.md` and `.scaffold/*` guidance files in the current directory. It is not a runtime workflow controller, an authoritative plan-state protocol, or a security mechanism.
 
 ---
 
 ## How It Works
 
-`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you launch `pi` and run `/login xai-auth` in the TUI:
+`pi-xai-oauth` registers an OAuth provider called `xai-auth` in pi's provider registry. When you launch `pi` and run `/login xai-auth`, pi offers two native login methods:
 
-1. pi starts a local HTTP callback server on `127.0.0.1`
-2. It builds an xAI OAuth authorize URL with PKCE challenge
-3. **Your default browser opens automatically** to the xAI login page
-4. After you approve, xAI redirects to the local callback server
-5. pi verifies that the callback state matches the in-memory login attempt before exchanging the authorization code
-6. The returned ID token is verified against xAI's pinned OIDC issuer and first-party JWKS for ES256 signature, signing key, audience, expiry, and nonce
-7. Only then are access + refresh credentials persisted and refreshed automatically
-8. The extension performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, normalizes the OAuth-visible entries, filters unsafe/API-key-only entries, and immediately replaces the provider catalog
-9. All OAuth-backed Responses traffic—normal streaming and separate Responses helpers—uses xAI's session-token proxy (`https://cli-chat-proxy.grok.com/v1`) rather than the public Responses endpoint on `https://api.x.ai/v1`
-10. Proxy requests identify this client as `pi-xai-oauth` at the installed package version and include xAI's required auth, client-mode, request, conversation, session, and model metadata
+- **Browser login (default):** starts a loopback callback listener, opens xAI authorization with PKCE S256, requires matching state for HTTP or pasted full-redirect callbacks, and verifies the fresh ID token against the pinned issuer/JWKS, ES256 policy, audience, expiry, and nonce.
+- **Device code login:** requests a challenge from the pinned first-party device endpoint, shows the verification URL and user code through pi's device UI, and polls the pinned token endpoint only after the server interval. It handles pending/slow-down, denial, expiry, cancellation, malformed responses, and a bounded timeout without displaying the opaque device code or token responses.
 
-If localhost callbacks are blocked (VPN, Docker, remote dev), the TUI shows a text field where you can paste the **complete redirect URL** manually. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted.
+Only a completed selected login returns access + refresh credentials for pi to persist. It then performs a bounded authenticated `GET https://cli-chat-proxy.grok.com/v1/models-v2`, filters unsafe/API-key-only entries, and immediately replaces the provider catalog. All OAuth-backed Responses traffic uses xAI's session-token proxy; proxy requests truthfully identify `pi-xai-oauth`, protect internally owned metadata from caller overrides, and include the required auth, client-mode, request, conversation, session, and model fields. Streaming requests explicitly negotiate server-sent events; direct Responses requests remain JSON.
+
+Browser login still supports the **complete redirect URL** paste fallback when localhost is unreachable. The URL must contain the matching OAuth `state`; raw authorization codes are not accepted. Device login is the cleaner choice when the browser cannot reach the pi process.
 
 ---
 
@@ -114,9 +124,11 @@ npx pi-xai-oauth
 
 This runs the setup script which:
 1. Installs `npm:pi-xai-oauth` into pi
-2. Sets `xai-auth` as your default provider
+2. Seeds `defaultProvider: "xai"` only when no provider is configured (never overwrites an existing choice, including package-owned `xai-auth`)
 3. Sets `grok-4.5` as your default model
 4. Enables `high` thinking level by default
+
+Chat stays on Pi's built-in `xai` provider by default. This package still registers optional `xai-auth` for its account catalog/stream path, and both providers can use `/xai-tools` plus `/xai-usage`.
 
 ### Manual install
 
@@ -124,20 +136,22 @@ This runs the setup script which:
 pi install npm:pi-xai-oauth
 ```
 
-Then optionally configure it as default:
+Recommended settings for native SuperGrok chat plus this package's tools/usage:
 
 ```bash
 # In ~/.pi/agent/settings.json:
 {
-  "defaultProvider": "xai-auth",
+  "defaultProvider": "xai",
   "defaultModel": "grok-4.5",
   "defaultThinkingLevel": "high"
 }
 ```
 
+Authenticate with `/login xai`. Use `/login xai-auth` only when you want this package's OAuth Responses catalog instead of Pi's built-in xAI chat.
+
 > **⚠️ Important: install only one copy**
 >
-> `pi-xai-oauth` registers fixed tool names such as `xai_generate_text`, `xai_web_search`, and `xai_x_search`. If you install more than one copy — for example `npm:pi-xai-oauth` plus a local checkout, or two different local checkouts — pi will fail to start with `Tool "xai_generate_text" conflicts with ...` errors.
+> `pi-xai-oauth` registers fixed private tool names such as `xai_generate_text`, `xai_grok_web_search`, and `xai_x_search`. If you install more than one copy — for example `npm:pi-xai-oauth` plus a local checkout, or two different local checkouts — pi will fail to start with `Tool "xai_generate_text" conflicts with ...` errors.
 >
 > Check with:
 > ```bash
@@ -161,6 +175,33 @@ Then optionally configure it as default:
 
 ---
 
+## Pi Compatibility
+
+Both Pi runtime peers use the same bounded range:
+
+```text
+@earendil-works/pi-ai:            >=0.80.1 <0.82.0
+@earendil-works/pi-coding-agent:  >=0.80.1 <0.82.0
+```
+
+The lower boundary is **0.80.1**, the first published Pi 0.80 release. It provides the `@earendil-works/pi-ai/compat` transport used by this extension and the matching Pi 0.80 extension-loader contract. The packed package's complete test and typecheck suites run against exact 0.80.1 in CI. The other matrix boundary is exact **0.81.1**, the latest release inside the allowed line when this policy was reviewed. Pi 0.80.8 introduced the unified `ModelRuntime` credential API and replaced the exported `AuthStorage` surface with `readStoredCredential()` for one-off reads; this package supports both the 0.80.1 legacy surface and the 0.81.x ModelRegistry projection of `ModelRuntime.getAuth` through a bounded compatibility path.
+
+The exclusive `<0.82.0` upper bound is deliberate. Pi is pre-1.0, so a new minor line may contain breaking API or loader changes; this project does not claim support until that line passes the packed compatibility suite. npm therefore reports a peer-resolution warning or error during installation for older releases such as 0.79.10 and for the untested 0.82 line, rather than allowing a later runtime loader failure.
+
+Older `pi-xai-oauth` 1.2.4 builds supported Pi 0.79.8's then-current Responses guard. Current code uses the Pi 0.80 compat dispatcher after the 1.3.2 export migration and 1.3.3 loader-resolution fix, so that historical statement is not the current minimum.
+
+The xAI transport contract is tracked separately from Pi package compatibility. See [Grok Build wire-protocol compatibility](compatibility/grok-build-wire-protocol.md) for the pinned upstream revision, route/header matrix, identity and ID-ownership policy, encrypted-reasoning replay contract, safe errors, and repeatable review procedure.
+
+### Encrypted reasoning replay
+
+On the pinned OAuth Responses route, requests default an absent `store` to `false` and request `reasoning.encrypted_content`. Pi retains completed reasoning output items as opaque state and replays them inline only when the provider, API, and exact model still match. Switching targets drops that replay; compaction may intentionally replace older active context.
+
+`store: false` disables server-side response storage, but it does **not** mean no local sensitive state. Complete encrypted reasoning items are stored in ordinary Pi session JSONL under Pi's normal permissions and retention. This package does not separately encrypt that file, copy reasoning into another cache, or protect it from the user or trusted local extensions.
+
+If xAI reports that encrypted reasoning is incompatible with the selected model, the request is not retried automatically. Start a clean session or turn and keep the same xAI model for subsequent replay.
+
+---
+
 ## Authentication
 
 ```bash
@@ -175,11 +216,11 @@ Then, in the pi TUI:
 
 **What happens:**
 
-1. pi checks for existing Grok CLI credentials (`~/.grok/auth.json`). If found, it asks if you want to skip re-authentication.
-2. The xAI OAuth page opens in your **default browser**.
-3. Sign in with your xAI / Grok account and approve the authorization.
-4. The browser redirects back to pi's local server — you can close the browser tab.
-5. Tokens are stored and refreshed automatically.
+1. pi checks for existing Grok CLI credentials (`~/.grok/auth.json`). If found, it asks if you want to reuse them without modifying that file.
+2. If a fresh login is needed, choose **Browser login (default)** or **Device code login**.
+3. Browser login opens xAI in your default browser and completes through the state-bound loopback/full-redirect flow.
+4. Device login displays a clickable verification URL and user code. Open it on any browser-capable device, confirm the code, and leave pi open while it waits. Press Escape to cancel safely.
+5. Only successful access + refresh credentials are stored by pi and refreshed automatically.
 
 Fresh logins request xAI's current eight-scope Grok client grant, including `conversations:read` and `conversations:write`. Credentials created before those scopes were added remain refreshable: refresh preserves the existing grant and does not renegotiate scopes.
 
@@ -187,7 +228,7 @@ Fresh logins request xAI's current eight-scope Grok client grant, including `con
 >
 > **Choosing a different browser/profile?** The instructions in the TUI explain how. You can copy the shown authorization URL and open it manually in your preferred browser.
 >
-> **Remote/headless login:** If the browser cannot reach pi's loopback listener, paste the complete failed redirect URL from the browser address bar into pi. Do not paste only the authorization code: code-only input has no OAuth state and is rejected. A full device-code alternative remains separately tracked in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
+> **Which method should I choose?** Use **Browser login** on a normal desktop where the browser can reach pi's loopback listener. Use **Device code login** for SSH, WSL, Docker/dev containers, remote VMs/workspaces, or other human-operated headless sessions. Device login is not intended for unattended automation because a person must approve the displayed code. If you stay with browser login remotely, paste the complete failed redirect URL—not a raw code—so pi can verify state.
 
 ### Re-authenticating
 
@@ -221,18 +262,40 @@ Or use a specific model:
 pi --model grok-4.5 "Write a poem about Rust"
 ```
 
+### Subscription usage (unofficial)
+
+Run an explicit one-shot usage lookup from pi:
+
+```text
+/xai-usage
+```
+
+The command displays only validated fields that xAI actually returned, such as included usage percentage, legacy included-credit totals, current reset time, on-demand usage/cap, prepaid balance, and bounded history count. Missing optional fields stay omitted.
+
+The billing surface is **not a stable public xAI API**. This implementation is pinned to [`xai-org/grok-build@b189869`](https://github.com/xai-org/grok-build/blob/b189869b7755d2b482969acf6c92da3ecfeffd36/crates/codegen/xai-grok-shell/src/extensions/billing.rs): it first makes authenticated `GET /v1/user`, uses the returned validated `userId` only for the immediately following `GET /v1/billing?format=credits`, then discards it. The command accepts a current Pi-stored OAuth credential under this package's `xai-auth` provider or Pi's built-in `xai` SuperGrok/X Premium provider, and rejects stored, environment, or runtime API-key provenance. Account identity, bearer/authenticated headers, and raw response bodies are never logged, displayed, cached, or persisted. If identity cannot be resolved safely, billing is not requested.
+
+The compact footer status is off by default and requires a separate per-session opt-in while an `xai-auth` or built-in `xai` model is active with Pi-managed OAuth:
+
+```text
+/xai-usage status
+/xai-usage status on
+/xai-usage status off
+```
+
+Enabling status performs one immediate lookup. Later refreshes are event-driven after completed turns and occur no more than once per minute. The status disables and clears on model, provider, login, or session changes and on the next extension-handled event after stored OAuth removal; it never refreshes for non-xAI models. Status failures clear silently and never interfere with chat. Every request rejects redirects, has a 15-second timeout, reads at most 64 KiB, and applies bounded JSON depth, collection counts, history length, and numeric ranges.
+
 ### Switching Models
 
-`/model` shows the current authenticated account's xAI catalog. A successful refresh is authoritative: newly returned models appear, removed models disappear, hidden entries are omitted, and known API-key-only models such as `grok-build-0.1` are never advertised through `xai-auth`.
+`/model` shows the current authenticated account's xAI catalog plus narrowly scoped compatibility routes whose entitlement source is present. A successful refresh remains authoritative: newly returned entitlement sources appear, removed sources and their compatibility routes disappear, hidden entries are omitted, and known API-key-only models such as `grok-build-0.1` are never advertised through `xai-auth`.
 
 Common catalog entries include:
 
 | Model ID | Description |
 |----------|-------------|
 | `grok-4.5` | **Default and curated offline fallback.** xAI flagship; reasoning low (**fast**) / medium / high (default), 500K context, text+image. |
-| `grok-4.3` | When entitled: full reasoning, with limits taken from the authenticated catalog. |
-| `grok-build` | When entitled: Grok Build coding model with Cursor/Grok CLI tool compatibility. |
-| `grok-composer-2.5-fast` | When entitled: Composer coding model with Cursor/Grok CLI tool compatibility. |
+| `grok-4.3` | OAuth-compatible request model when `grok-4.5` is entitled; keeps authenticated input evidence and conservative catalog-derived limits. |
+| `grok-build` | When entitled: Grok Build coding model (same Grok-native tools as other xai-auth models). |
+| `grok-composer-2.5-fast` | Compatibility alias of entitled `grok-4.5`; uses the same Grok-native pi tool adapters and no Cursor-named shims. |
 | `grok-4.20-0309-reasoning` | When entitled: Grok 4.20 with automatic reasoning. |
 | `grok-4.20-0309-non-reasoning` | When entitled: Grok 4.20 non-reasoning variant. |
 | `grok-4.20-multi-agent-0309` | When entitled: Grok 4.20 multi-agent research model. |
@@ -252,11 +315,33 @@ From the command line:
 
 ```bash
 pi --model grok-4.5 "Your prompt here"
-pi --model grok-4.3 "Use the 1M-context model"
+pi --model grok-4.3 "Use Grok 4.3"
 pi --model grok-build "Implement this feature"
 pi --model grok-composer-2.5-fast "Refactor this module"
 pi --model grok-4.20-0309-non-reasoning "Quick answer"
 ```
+
+### Authenticated input capabilities
+
+When `/models-v2` supplies a valid `acceptsImages` boolean or bounded `inputModalities` array, that authenticated evidence overrides the package's known metadata for the returned model. `acceptsImages` takes precedence over `inputModalities`; entry fields take precedence over the matching `_meta` field. Missing or malformed evidence falls back to known metadata for known models and conservative text input for unknown models. Missing fields do **not** make Composer text-only.
+
+The normalized cache stores only the final modalities and bounded provenance, never the raw catalog fields. Legacy schema-1 caches are migrated in memory without treating their inferred input as authenticated evidence. If an authenticated entitlement explicitly becomes text-only, image-bearing Responses payloads fail locally after payload hooks and before any network request, including `xai_generate_text(image_url)` and `xai_analyze_image`. Image generation is a separate endpoint and is unaffected.
+
+See [Authenticated model input modalities](docs/model-input-modalities.md) for the redacted 2026-07-16 schema observation, pinned xAI source revision, exact precedence, malformed-field policy, and cache migration contract.
+
+#### Opt-in vision routing for explicit text-only entitlements
+
+If—and only if—the active model is an exact authenticated catalog member with validated text-only evidence, `/xai-tools enable vision-routing` can route current image input through a separate exact catalog model with validated text-and-image support. The vision model receives the images in one additional authenticated Responses request; the active model then receives a clearly labeled text description and no image data. Missing fields, curated metadata, aliases, compatibility slugs, and model names such as Composer never qualify either side.
+
+```text
+/xai-tools status
+/xai-tools enable vision-routing
+/xai-tools disable vision-routing
+```
+
+Eligible targets are ordered deterministically by normalized exact model ID. Routing is disabled by default, binds to the current source model, and resets on a new session, every model change, leaving xAI, login/account replacement, catalog replacement, or shutdown. Disabled or invalid routing retains the existing local text-only rejection and creates no additional request.
+
+Each routed turn may consume additional allowance, credits, and rate limits. Images are disclosed to the selected vision target, and its generated description becomes potentially sensitive session content supplied to the active model. The package creates no cross-request raw-image or description cache. Cancellation and catalog invalidation stop the remaining route; a failed description never falls back to sending or silently stripping the source image.
 
 ### Catalog refresh and cache policy
 
@@ -270,15 +355,15 @@ The normalized, token-free last-known-good catalog is stored at:
 - **Stale refresh:** after 15 minutes, startup performs one authenticated GET bounded to 5 seconds.
 - **Transient fallback:** network errors, timeouts, HTTP 408/429/5xx, or a malformed successful response may reuse a validated cache no older than 7 days. A forced/deferred refresh never reuses stale account data; it uses the curated fallback and remains retryable with a one-minute in-session backoff.
 - **Auth/permanent failure:** HTTP 401/403 or other permanent 4xx responses invalidate cached entitlements and use the curated `grok-4.5` fallback.
-- **Login:** every successful `/login xai-auth` forces a refresh with the newly returned credential, never reuses stale data, and updates `/model` immediately. If that refresh fails, login still succeeds and the curated fallback is used.
+- **Login:** every successful browser, device, or reused-credential `/login xai-auth` forces a refresh with the returned credential, never reuses stale data, and updates `/model` immediately. A failed/cancelled selected login leaves existing credentials and catalog state intact. If catalog refresh alone fails after authentication, login still succeeds and the curated fallback is used.
 - **`/reload`:** recreates the extension and follows the same 15-minute policy; it is not an unconditional network refresh.
 - **Selection:** if a refresh removes the active xAI model, the next turn switches to an entitled xAI replacement when available; otherwise it aborts before sending an unentitled request.
 
-The cache stores only normalized model definitions and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. If an exceptional filesystem error prevents replacing or deleting an old cache, a token-free `.invalidated` sidecar suppresses it until a later successful atomic write. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
+The cache stores only normalized model definitions, bounded input-capability provenance, and timestamps. It never stores access/refresh/ID tokens, auth headers, raw endpoint responses, endpoint fields, or account identity fields. Startup does not expose a previous account's fresh cache when no credential exists, and a credential-file modification newer than the cache forces discovery. If an exceptional filesystem error prevents replacing or deleting an old cache, a token-free `.invalidated` sidecar suppresses it until a later successful atomic write. A token-free cache still cannot distinguish an external account replacement that deliberately preserves the credential file's timestamp; in-product login always bypasses and replaces the cache.
 
 ### Reasoning / Thinking Levels
 
-Grok 4.5, and Grok 4.3 when returned with reasoning support, expose configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
+Grok 4.5 and the entitlement-gated Grok 4.3 compatibility route expose configurable thinking levels via pi's `/think` command or `model:effort` syntax. There is **no separate `grok-4.5-fast` model** — on Grok 4.5, “fast mode” is **`reasoning_effort: "low"`** on the same model ID.
 
 ```
 /think high
@@ -300,7 +385,7 @@ pi --model grok-4.5:low "What's the weather?"   # fast / latency-sensitive
 | **`medium`** | Balanced thinking vs latency | Analysis and longer-context work |
 | **`low`** (**fast mode**) | Some reasoning, still fast | Latency-sensitive agents and simple tool calling |
 
-`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model actually returned and selected through the OAuth-only `xai-auth` catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. When returned, Grok Build and Composer still receive their model-specific compatibility payloads, headers, and local tool shims. `grok-composer-2.5-fast` does not accept configurable reasoning effort. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
+`grok-4.5` defaults to **high** when no effort is specified; reasoning **cannot be disabled** (`/think off` is not supported for this model). Every model selected through the OAuth-only `xai-auth` runtime catalog sends Responses traffic through xAI's Grok CLI session endpoint using the same X account OAuth token. An entitled `grok-build` entry still receives its legacy Responses payload/header compatibility behavior, while every `xai-auth` model uses the same Grok-native local tool adapters. The Composer alias (`grok-composer-2.5-fast`) follows the Grok 4.5 payload path. `grok-4.20-0309-reasoning` reasons automatically and does not accept a configurable effort parameter. `grok-4.20-multi-agent-0309` uses `medium` for 4 agents and `high` for 16 agents.
 
 ### Grok 4.5 source notes
 
@@ -313,50 +398,54 @@ Official xAI sources used for this catalog update:
 
 No Grok 4.5-specific model card, label card, system card, paper, or official max-output-token limit was found in the xAI docs/news/data sources during this update. The package keeps the existing Grok Responses max-token ceiling as a placeholder until xAI publishes official model metadata for that field.
 
-### Composer / Grok Build Tool Compatibility
+### Grok-native tools
 
-Composer 2.5 and Grok Build are trained against Cursor/Grok CLI-style tool names. When either `grok-composer-2.5-fast` or `grok-build` is selected, this package automatically enables compatibility shims that map those tool calls onto pi's built-in tools:
+For every active `xai-auth` model, this package advertises Grok-native client names—using the same name-override idea as Grok's `ToolConfig::with_name()`—and maps them onto pi capabilities:
 
-| Cursor/Grok CLI tool | pi tool used underneath |
-|----------------------|-------------------------|
-| `Read` | `read` |
-| `Write` | `write` |
-| `StrReplace` / `Edit` | `edit` |
-| `Delete` | workspace-safe file delete |
-| `LS` | `ls` |
-| `Grep` | `grep` |
-| `Glob` | `find` |
-| `Shell` | `bash` |
-| `WebSearch` | xAI native web search |
+| Grok-native tool | pi capability used underneath |
+|------------------|-------------------------------|
+| `read_file` | `read` |
+| `search_replace` | strict exact-string replacement; `write` when `old_string` is empty |
+| `list_dir` | `ls` |
+| `grep` | bounded local content search |
+| `run_terminal_command` | `bash` |
+| `web_search` | xAI native web search (opt-in via `/xai-tools`) |
 
-The local filesystem and shell shims also normalize common Cursor argument names, such as `file_path`, `contents`, `old_string` / `new_string`, `query`, `include`, `glob_filter`, and `cmd`. They are enabled automatically for eligible Grok CLI models and disabled again when you switch back to models such as `grok-4.5` or `grok-4.3`. `WebSearch` is the exception: it sends an additional xAI request, so it remains inactive until you enable it through `/xai-tools`.
+The model-facing fields follow Grok's contract: `target_file` plus signed `offset`, unsigned `limit`, `pages`, and `format` for `read_file`; `file_path`, `old_string`, `new_string`, and optional `replace_all` for `search_replace`; `target_directory` for `list_dir`; Grok's path/glob/context fields for `grep`; and millisecond `timeout` plus `description`/`background` for `run_terminal_command`. Pi has no managed background-task lifecycle, so `background: true` is rejected explicitly rather than being silently run in the foreground. PDF page rendering is not available through pi's text reader, so PDF `read_file` calls fail with an explicit guidance error. The local `grep` adapter preserves Grok's bounded output and timeout behavior while using a conservative workspace-only matcher and file-type subset. `web_search` preserves the optional `allowed_domains` list exactly.
+
+The direct `read_file`, `search_replace`, `list_dir`, and `grep` adapters accept relative paths and absolute paths whose resolved target stays inside the active workspace. Escaping `..` traversal, outside absolute paths, and symlinks that resolve outside are rejected. `search_replace` may create a missing leaf only when its resolved physical parent remains inside the workspace. Package-owned full-file reads used for negative-offset `read_file` and exact `search_replace` are capped at 5,000,000 bytes.
+
+`run_terminal_command` is deliberately outside that direct-adapter containment policy: it delegates the command to pi's `bash` tool and may access paths outside the workspace. These checks are defense-in-depth for the direct file adapters, not a complete filesystem sandbox for the coding agent.
+
+Legacy Cursor names (`Read`, `Shell`, `WebSearch`, and similar) are no longer registered by this package. Local Grok-native adapters enable automatically only for `xai-auth` and clear when you leave that provider without mutating same-named public tools owned by other extensions. Internally they use collision-free `xai_grok_*` dispatcher names, then expose the official public names only in the current package-owned xAI request, so unrelated extensions can keep their own public tools. The network-backed `web_search` remains opt-in and also supports Pi's built-in `xai` models.
 
 ---
 
 ## Custom Tools
 
-This package registers OAuth-backed custom tools that make additional xAI API requests. They appear alongside your other agent tools in the pi TUI, but all of them are **inactive by default**.
+This package registers credential-backed custom tools that make additional xAI API requests. They appear alongside your other agent tools in the pi TUI, but all of them are **inactive by default**. For Pi's built-in `xai` provider, SuperGrok/X Premium OAuth uses the subscription session route while API-key provenance uses the public `api.x.ai` route.
 
-This opt-in boundary applies only to the extra tools below. Normal conversation with the selected `xai-auth` model works without enabling any of them.
+This opt-in boundary applies only to the extra tools below. Normal conversation continues through the selected provider: this package owns `xai-auth` chat/catalog/stream behavior and does not replace or intercept Pi's built-in `xai` transport.
 
 | Tool | Category | Additional usage / cost risk |
 |------|----------|------------------------------|
 | `xai_generate_text` | Generation | Separate model-token usage |
-| `xai_web_search` | Search | Model tokens plus native tool usage |
 | `xai_x_search` | Search | Model tokens plus native tool usage |
 | `xai_multi_agent` | Research | High/variable: 4 or 16 agents plus web/X tools |
 | `xai_deep_research` | Research | High/variable model and web/X tool usage |
 | `xai_code_execution` | Execution | Model tokens plus code-interpreter usage |
 | `xai_generate_image` | Image generation | Charged per generated image; supports 1-4 images |
+| `xai_edit_image` | Image editing | Imagine usage for one output conditioned on 1-3 local references |
+| `xai_image_to_video` | Video generation | High-cost, long-running 6- or 10-second video generation |
 | `xai_analyze_image` | Vision | Separate model-token and image-input usage |
 | `xai_critique` | Reasoning | Separate high-reasoning model-token usage |
-| `WebSearch` | Search | Grok Build/Composer model tokens plus native tool usage |
+| `web_search` | Search | Model tokens plus native tool usage |
 
-**How to use them:** Select an `xai-auth` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
+**How to use them:** Select an `xai-auth` model or Pi built-in `xai` model, enable only the tool you want through `/xai-tools`, then explicitly request that tool in your prompt or agent workflow. Credential lookup stays on the active xAI-compatible provider (`xai-auth` OAuth, or built-in `xai` OAuth/API keys) and the existing Grok CLI credential fallback; it does not silently borrow a sibling provider's stored credentials. Enabling a tool makes it available; it is not permission for the model to call it without user intent.
 
-Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. The Grok CLI local filesystem and shell shims are automatic because they do not create a separate xAI API request.
+Every new session resets all network-backed tools to inactive. Switching to a non-xAI model disables them immediately, and switching back does not restore them. Grok-native local filesystem and shell tools remain automatic only for `xai-auth`; built-in `xai` models receive no package-owned local adapters.
 
-In the pi TUI, select an `xai-auth` model and run:
+In the pi TUI, select an `xai-auth` or built-in `xai` model and run:
 
 ```text
 /xai-tools
@@ -366,12 +455,18 @@ The picker shows each tool's category and cost-risk context, warns that calls ma
 
 ```text
 /xai-tools status
-/xai-tools enable xai_web_search
-/xai-tools disable xai_web_search
+/xai-tools enable web_search
+/xai-tools disable web_search
 /xai-tools enable xai_generate_image
+/xai-tools enable xai_edit_image
+/xai-tools enable xai_image_to_video
+/xai-tools enable vision-routing
+/xai-tools disable vision-routing
 ```
 
-`WebSearch` appears in the picker only for Grok Build and Composer models. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
+`vision-routing` is transport policy rather than a callable model tool, so it never enters Pi's active-tool registry. It appears only when exact authenticated capability evidence supports a text-only source and a separate text-and-image target. `web_search` appears once in the picker for any active xAI model (still opt-in); the older `xai_web_search` spelling remains accepted only as a backward-compatible `/xai-tools enable` or `disable` argument. `/xai-tools` is owned by this package; it does not depend on pi's optional example `/tools` extension.
+
+Extension authors that drive `/xai-tools` through `pi.events` must follow the listener-owned [xAI tools menu bridge protocol v1](docs/bridge-xai-tools.md), including its early `open` launch acknowledgement and honest success/error results.
 
 > **Tip:** See the ⚠️ warning above about local vs published package conflicts.
 
@@ -397,12 +492,13 @@ Opt-in deep multi-agent research using Grok's multi-agent model plus native web 
 }
 ```
 
-### `xai_web_search`
-Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/xai-tools` first.
+### `web_search`
+Opt-in search using xAI's native `web_search` tool and the active xAI model. Enable it through `/xai-tools` first. The optional `allowed_domains` list is forwarded unchanged.
 
 ```json
 {
-  "query": "Rust vs Go performance 2026"
+  "query": "Rust vs Go performance 2026",
+  "allowed_domains": ["rust-lang.org", "go.dev"]
 }
 ```
 
@@ -435,14 +531,56 @@ Opt-in paid image generation with xAI's current image generation model. Enable i
 ```
 
 ### `xai_analyze_image`
-Opt-in analysis of an image URL, data URL, or local `.png` / `.jpg` path with Grok vision. Enable it through `/xai-tools` first.
+Opt-in analysis of an image URL, data URL, or bounded local `.png` / `.jpg` path with Grok vision. Local files must be inside the active workspace. Enable it through `/xai-tools` first.
 
 ```json
 {
-  "image": "/Users/me/Desktop/screenshot.png",
+  "image": "assets/screenshot.png",
   "question": "What error is visible?"
 }
 ```
+
+Legacy local image inputs are limited to byte-validated PNG/JPEG regular files inside the
+active workspace. Paths are resolved through realpath, so traversal and outward symlinks are
+rejected; reads are capped at 8 MiB and 12 million decoded pixels before base64 encoding.
+Absolute paths and `file://` URLs remain compatible only when their resolved file is inside
+that workspace.
+
+### `xai_edit_image`
+
+Opt-in paid image editing through xAI Imagine. Enable it through `/xai-tools` first, then explicitly request the edit. Supply one to three references. One reference preserves its input aspect ratio; a supported `aspect_ratio` may be supplied but is omitted from the wire. Multiple references require a supported `aspect_ratio`.
+
+```json
+{
+  "prompt": "Keep the subject, replace the background with a clean studio gradient",
+  "image": [{ "path": "assets/reference.png" }]
+}
+```
+
+References are limited to 1-3 byte-validated PNG/JPEG files inside the current workspace or strict bounded `data:image/png;base64,...` / `data:image/jpeg;base64,...` values. Paths are resolved through realpath, so `..` escapes and symlinks leaving the workspace are rejected. HTTPS URLs, `file://` URLs, current-turn attachment tokens, arbitrary outside paths, SVG, WebP, GIF, and HEIC are intentionally unsupported.
+
+Reference handling uses the pinned Grok Build policy as its starting point: sources are capped at 8 MiB and 12 million decoded pixels; compatible references up to 400 KiB pass through after decode verification; larger references are re-encoded under 400 KiB with a 768 px maximum side, a 256 px compression floor, and reviewed quality steps. The package separately limits aggregate reference bytes to 1,200 KiB and caps reference count, request JSON, response JSON, output base64, decoded output bytes, output pixels, and output dimensions.
+
+Exactly one verified PNG/JPEG output is saved atomically with a collision-resistant name under Pi's session directory at `pi-xai-oauth/<session-hash>/image-edits/`. Directories use mode `0700`, files use `0600`, and the tool returns path/dimension/size metadata instead of raw base64. Prompts, source paths, data URLs, image bytes, credentials, headers, and raw authenticated error bodies are never included in image-edit errors.
+
+Image editing can consume xAI Imagine allowances, credits, or rate limits. Exact pricing and quota behavior are controlled by xAI; see [xAI pricing](https://docs.x.ai/developers/pricing) before enabling the tool.
+
+### `xai_image_to_video`
+
+Opt-in high-cost image-to-video generation through `grok-imagine-video-1.5-preview`. Enable it explicitly, then provide exactly one bounded workspace PNG/JPEG or strict PNG/JPEG data URL. Remote source URLs and multi-reference video generation are intentionally unsupported.
+
+```json
+{
+  "image": { "path": "assets/reference.png" },
+  "prompt": "Slow camera push-in with subtle ambient motion",
+  "duration": 6,
+  "resolution": "480p"
+}
+```
+
+Duration is `6` or `10` seconds (default `6`); resolution is `480p` or `720p` (default `480p`). The client waits five seconds before its first status request, polls every five seconds, and stops local tracking after five minutes. Video generation can be expensive and rate-limited. Cancelling Pi stops local waiting, requests, download, and partial-file writes, but the submitted remote xAI job is **not cancelled** and may continue consuming usage or credits.
+
+Completed MP4s are downloaded without OAuth headers through an HTTPS-only, no-redirect, resolve-once public-IPv4 DNS/IP-pinned transport; IPv6-only download hosts fail closed. Downloads accept only MP4 MIME, are streamed under a 256 MiB limit, require bounded `ftyp` evidence, and are atomically saved under `pi-xai-oauth/<session-hash>/videos/` with private `0700` directories and `0600` files. Signed URLs, request IDs, source data, prompts, credentials, and raw authenticated bodies are not returned or logged.
 
 ### `xai_critique`
 Opt-in structured critique for code, designs, writing, or ideas. Enable it through `/xai-tools` first.
@@ -464,7 +602,7 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 }
 ```
 
-> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. Responses-based helpers use the OAuth session proxy. Image generation is the intentional exception: matching official Grok Build behavior, it sends the OAuth bearer directly to `https://api.x.ai/v1/images/generations` and is charged per generated image. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
+> **Note:** Every tool in this section makes a separate xAI request and can consume subscription allowances, credits, or rate limits. OAuth-backed Responses helpers use the session proxy; built-in `xai` API-key helpers use the public API. Image generation and image editing are intentional OAuth transport exceptions: matching official Grok Build behavior, they send the OAuth bearer directly to the pinned public Images routes at `https://api.x.ai/v1/images/generations` and `https://api.x.ai/v1/images/edits`. See [xAI pricing](https://docs.x.ai/developers/pricing) for current rates.
 
 ---
 
@@ -475,12 +613,15 @@ Opt-in research using the active xAI model plus native web and X search tools. E
 | Install | `pi install npm:pi-xai-oauth` |
 | One-command setup | `npx pi-xai-oauth` |
 | Try ephemeral | `pi -e npm:pi-xai-oauth` |
-| Authenticate | Launch `pi`, then run `/login xai-auth` in the TUI |
+| Authenticate (chat default) | Launch `pi`, run `/login xai` |
+| Authenticate (optional package catalog) | Launch `pi`, run `/login xai-auth`, then choose browser (default) or device code |
 | Update | `pi update npm:pi-xai-oauth` |
 | Remove | `pi remove npm:pi-xai-oauth` |
 | List packages | `pi list` |
 | Set default model | `/model grok-4.5` (in TUI) |
 | Set thinking level | `/think high` (in TUI) |
+| Show subscription usage | `/xai-usage` (unofficial, explicit request) |
+| Manage optional usage status | `/xai-usage status on\|off` (off by default) |
 | Manage outbound xAI tools | `/xai-tools` (in TUI) |
 | Recreate extension/catalog state | `/reload` (respects the 15-minute cache TTL) |
 
@@ -504,7 +645,11 @@ If localhost is blocked (VPN, Docker, remote SSH, WSL):
 3. **Paste it into the TUI's input field** that says "Paste redirect URL below."
 4. pi verifies the state, exchanges the bound code with PKCE, validates the returned OIDC ID token, and then completes login.
 
-Raw authorization-code-only input is intentionally rejected because it cannot prove which browser login attempt produced the code. If you already pasted a raw code, run `/login xai-auth` again before pasting the complete redirect URL. If your environment cannot preserve that URL, use the loopback flow from a reachable browser for now; standardized device-code support is tracked separately in [issue #66](https://github.com/BlockedPath/pi-xai-oauth/issues/66).
+Raw authorization-code-only input is intentionally rejected because it cannot prove which browser login attempt produced the code. If you already pasted a raw code, run `/login xai-auth` again and either choose **Device code login** or choose browser login and paste the complete redirect URL.
+
+### "Device authorization expired or was denied"
+
+Run `/login xai-auth` again and choose device login to request a new code. Codes are short-lived and polling stops at the server expiry (with a 15-minute hard cap). Pressing Escape cancels the wait; denial, expiry, cancellation, network failure, or malformed server data returns no new credential and does not remove the previous one.
 
 ### "Cannot find provider xai-auth"
 
@@ -518,7 +663,7 @@ Then run `pi /list-providers` — you should see `xai-auth` listed.
 
 ### `422 "Failed to deserialize ... ModelInput"` with images
 
-This means xAI rejected a multimodal Responses `input` shape. Use the latest package version and restart pi or run `/reload`. The provider normalizes local `.png`/`.jpg` paths into `data:image/...;base64,...` URLs, adds image `detail`, moves system/developer text to top-level `instructions`, and rewrites image-bearing tool results so `function_call_output.output` stays text-only (xAI rejects arrays there).
+This means xAI rejected a multimodal Responses `input` shape. Use the latest package version and restart pi or run `/reload`. The provider normalizes validated, bounded workspace-local `.png`/`.jpg` paths into `data:image/...;base64,...` URLs, adds image `detail`, moves system/developer text to top-level `instructions`, and rewrites image-bearing tool results so `function_call_output.output` stays text-only (xAI rejects arrays there).
 
 > **Fixed in repair**: Requests from other providers (DeepSeek, OpenAI Codex, etc.) no longer get mutated by the xAI sanitation hook.
 
@@ -526,7 +671,7 @@ If you call `xai_generate_text` directly, `image_url` may be either:
 
 - an `http(s)://...` URL
 - a `data:image/png;base64,...` or `data:image/jpeg;base64,...` URL
-- a local `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `/Users/me/My\\ Image.png`
+- a workspace-contained `.png`, `.jpg`, or `.jpeg` path, including shell-escaped paths like `assets/My\\ Image.png` and in-workspace absolute or `file://` paths
 
 ### `500 "Auth context expired"` after screenshots
 
@@ -552,15 +697,15 @@ This re-runs the full OAuth flow and replaces your stored tokens.
 
 ### "Does this need an xAI API key?"
 
-**No.** This uses OAuth — the same authentication as the official Grok CLI and chat interface. You sign in with your xAI / Grok account credentials. No API key required. Responses requests use the OAuth session proxy; this package does not fall back to `XAI_API_KEY` or expose an API-key provider.
+**Not for the package-owned `xai-auth` provider.** It uses OAuth—the same authentication family as the official Grok CLI and chat interface—and does not expose an API-key chat provider. Responses requests for `xai-auth` use the OAuth session proxy.
 
-The paid `xai_generate_image` helper is a deliberate transport exception: the official Grok Build client sends both OAuth and BYOK Imagine requests directly to the public Images endpoint. This does not change normal chat or Responses-helper routing.
+The opt-in network tools can also run while Pi's built-in `xai` provider is active. Built-in SuperGrok/X Premium OAuth is tagged as a subscription session; a built-in xAI API key is tagged as `api-key` and sent only to the public `api.x.ai` route. `/xai-usage` remains OAuth-only and rejects API-key provenance.
 
 If you have the official Grok CLI installed and authenticated (`~/.grok/auth.json`), this package detects and reuses those credentials automatically.
 
 ### "Why is a model missing or still cached?"
 
-The xAI model list is entitlement-aware. If a model is missing, the authenticated `/models-v2` response did not include a usable OAuth Responses entry, or discovery fell back to the curated offline catalog. Run `/login xai-auth` to force an account-bound refresh. `/reload` reloads the extension but intentionally reuses a cache younger than 15 minutes; after the TTL it performs a bounded refresh.
+The xAI model list is entitlement-aware. If a model is missing, the authenticated `/models-v2` response did not include a usable OAuth Responses entry or a required entitlement source, or discovery fell back to the curated offline catalog. Run `/login xai-auth` to force an account-bound refresh. `/reload` reloads the extension but intentionally reuses a cache younger than 15 minutes; after the TTL it performs a bounded refresh. Known renames such as `grok-composer-2.5-fast` and `grok-build-latest` are advertised only as aliases of an already-entitled canonical model. The distinct `grok-4.3` request route is likewise advertised only when its independently verified OAuth entitlement source (`grok-4.5`) is present; none of these compatibility entries are persisted into the exact catalog cache.
 
 A one-shot `pi --list-models` cannot refresh an already-expired pi-stored OAuth token before the model registry is bound. It can still use a fresh official Grok CLI bearer when available; otherwise it uses fresh cache or the curated fallback. Starting a normal session lets pi refresh its stored credential under the credential-store lock and then revalidate the catalog.
 
@@ -613,7 +758,7 @@ pi update npm:pi-xai-oauth
 
 This pulls the latest version from npm and updates your installed extension.
 
-pi 0.79.8+ enforces an OpenAI Responses API guard. `pi-xai-oauth` 1.2.4+ handles that guard for Grok/xAI streaming; 1.3.3 fixes Responses transport resolution under pi 0.80's extension loader and includes Grok 4.5 as the default model. Version 1.3.4 makes all network-backed xAI helpers explicit opt-ins through `/xai-tools`, and **1.3.5** preserves the highlighted row while tools are toggled. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
+Version 1.4.0 requires aligned Pi runtime packages in `>=0.80.1 <0.82.0`, with exact packed-package validation at 0.80.1 and 0.81.1. It adds opt-in vision routing, image-to-video generation, the menu bridge, built-in SuperGrok tool/usage support, and further transport and entitlement hardening on top of authenticated model discovery, device OAuth, encrypted reasoning replay, Grok-native tools, bounded image editing, and explicit subscription usage. See [CHANGELOG.md](CHANGELOG.md) for the complete release notes. If you installed the published npm package, update with the command above. If you are testing a local checkout instead, reinstall the checkout:
 
 ```bash
 pi remove npm:pi-xai-oauth && pi install .
@@ -673,11 +818,31 @@ cd pi-xai-oauth
 # Install deps
 npm install
 
-# Type-check
+# Full deterministic gate: policy, focused Vitest suites, and real Pi loader smoke
+npm test
+
+# Focused development commands
+npm run test:unit -- tests/oauth/browser-login.test.ts
+npm run test:unit -- -t "rejects raw codes"
+npm run test:watch
+
+# V8 coverage (text, JSON summary, and LCOV)
+npm run test:coverage
+
+# Run only the real Pi extension-loader integration smoke
+npm run test:loader
+
+# Type-check production, tests, fixtures, and Vitest config with TypeScript 7
 npm run typecheck
 
-# Run verification tests
-npm test
+# Strict asynchronous error validation
+NODE_OPTIONS=--unhandled-rejections=strict npm test
+
+# Verify source/lock/range/registry/packed metadata and unsupported peers
+npm run compatibility:check
+
+# Repack, install, report, test, and typecheck both exact Pi boundaries
+npm run compatibility:boundaries
 
 # Install local version in pi
 pi install .
@@ -731,16 +896,37 @@ pi-xai-oauth/
 │       ├── catalog.ts        # Authenticated /models-v2 normalization + atomic LKG cache
 │       ├── constants.ts      # URLs, OAuth constants, catalog bounds, defaults
 │       ├── models.ts         # Curated fallback/known metadata + compatibility helpers
-│       ├── oauth.ts          # OAuth login/refresh/callback transaction helpers
-│       ├── oidc.ts           # Pinned discovery/JWKS + ID-token validation
+│       ├── oauth.ts          # Browser/device selection, PKCE login, refresh, callbacks
+│       ├── device-auth.ts    # Pinned device initiation + bounded cancellable polling
+│       ├── oidc.ts           # Pinned browser discovery/JWKS + ID-token validation
 │       ├── payload.ts        # xAI Responses payload normalization
 │       ├── responses.ts      # xAI request + streaming helpers
 │       ├── routing.ts        # Credential-aware Responses and Images endpoints
-│       └── tools/            # Custom xAI tools + Cursor/Grok CLI shims
+│       ├── wire.ts           # Route-aware headers, scrubbing, identity, safe errors
+│       ├── image-edit.ts     # Bounded edit request/response orchestration
+│       ├── media/            # Reusable strict media parsing, compression, paths, and storage
+│       └── tools/            # Custom xAI tools + Grok-native tool adapters
 ├── bin/
 │   └── setup.js              # One-command setup (npx pi-xai-oauth)
+├── compatibility/
+│   ├── pi-versions.json      # Peer range plus exact minimum/latest CI policy
+│   └── grok-build-wire-protocol.md # Pinned xAI route/header review
+├── tests/                     # Focused typed Vitest domain suites
+│   ├── fixtures/              # Isolated ExtensionAPI, OAuth, fetch, model, and temp fixtures
+│   ├── catalog/               # Normalization, authenticated fetch, and cache policy
+│   ├── oauth/                 # Browser/device/OIDC/refresh/cancellation/AuthStorage
+│   ├── provider/              # Registration, routing, credentials, lifecycle, and races
+│   ├── responses/             # Payload, stream, error, routing, and image transport
+│   ├── images/                # Codec budgets and Images tool behavior
+│   ├── media/                 # Strict media/path/compression/storage primitives
+│   ├── tools/                 # Network lifecycle, commands, custom tools, and Grok-native adapters
+│   └── setup/                 # Installer/settings behavior
 ├── scripts/
-│   └── verify-extension.js   # npm test
+│   ├── run-compatibility-matrix.js # Clean packed exact-version test/typecheck runner
+│   ├── verify-compatibility.js # Range/lock/registry/pack/unsupported-peer checks
+│   └── verify-extension-loader.mjs # Small real Pi loader integration smoke
+├── vitest.config.ts           # Node isolation and measured V8 coverage floors
+├── .github/workflows/ci.yml  # PR/main policy and exact Pi boundary matrix
 ├── .scaffold/                # Persistent agent state (plan, progress, etc.)
 ├── AGENTS.md                 # AI agent operations manual
 ├── package.json
@@ -748,11 +934,28 @@ pi-xai-oauth/
 └── README.md
 ```
 
-### Publishing
+### Compatibility updates and publishing
+
+`compatibility/pi-versions.json` is the single policy source for the peer range and exact CI endpoints. Normal development stays pinned exactly to the checked-in `latest` release; the minimum is tested only in a clean extracted tarball so the repository lock cannot mask version drift.
+
+When a new Pi patch appears inside the current range:
+
+1. Review both Pi package release notes.
+2. Evaluate it without changing the published claim: `node scripts/run-compatibility-matrix.js X.Y.Z --candidate`.
+3. If it passes, update `latest`, both exact Pi dev dependencies, and the lockfile together.
+4. Run `npm run compatibility:check` and `npm run compatibility:boundaries`, then record the result in CHANGELOG.
+
+For a new pre-1.0 minor line, keep the existing upper bound while running the candidate command. Widen the upper bound only after both Pi packages at that exact release pass the packed tests/typecheck and independent review. If raising the minimum, move the older sentinel to the immediately previous published release and document the support break. Never widen based only on Dependabot, typecheck, or a lockfile refresh.
+
+Before publishing, first bump `package.json` and `package-lock.json` together and finalize CHANGELOG. Then validate the exact release tree:
 
 ```bash
-# Bump version in package.json
-# Then:
+npm test
+npm run typecheck
+npm run compatibility:check
+npm run compatibility:boundaries
+npm pack --dry-run --json
+git diff --check
 npm publish
 
 # Users update with:
